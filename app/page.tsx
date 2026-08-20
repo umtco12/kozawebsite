@@ -22,9 +22,17 @@ const writers = [
 ];
 
 export default function Home() {
+  const currentDate = new Intl.DateTimeFormat("tr-TR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    weekday: "long",
+    timeZone: "Europe/Istanbul",
+  }).format(new Date());
+
   return (
     <main>
-      <div className="topbar"><div className="wrap topbar-inner"><span>20 Ağustos 2026, Perşembe</span><LiveData /><div className="social">f&nbsp;&nbsp;𝕏&nbsp;&nbsp;▶&nbsp;&nbsp;◎</div></div></div>
+      <div className="topbar"><div className="wrap topbar-inner"><span>{currentDate}</span><LiveData /><div className="social">f&nbsp;&nbsp;𝕏&nbsp;&nbsp;▶&nbsp;&nbsp;◎</div></div></div>
       <header>
         <div className="wrap masthead">
           <Link className="brand" href="/"><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></Link>
