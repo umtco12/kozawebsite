@@ -16,6 +16,11 @@ process.env.KOZA_DB_PATH = join(
   tmpdir(),
   `koza-content-test-${process.pid}-${Date.now()}.sqlite`,
 );
+process.env.KOZA_MEDIA_PATH = join(
+  tmpdir(),
+  `koza-media-test-${process.pid}-${Date.now()}`,
+);
+process.env.KOZA_MEDIA_QUOTA_BYTES = "100";
 const port = 32000 + (process.pid % 10000);
 const baseUrl = `http://127.0.0.1:${port}`;
 let productionServer;
@@ -84,6 +89,7 @@ test("ana sayfa Koza TV haber deneyimini sunar", async () => {
   assert.match(body, /href="\/haber\/turkiyenin-gundemi-koza-tv-haber-merkezinde"/);
   assert.match(body, /href="\/canli"/);
   assert.match(body, /href="\/yazarlar"/);
+  assert.match(body, /href="\/kategori\/ekonomi"/);
   assert.doesNotMatch(body, /Your site is taking shape|Building your site/i);
 });
 
@@ -135,6 +141,8 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(body, /Tüm Haberler/);
   assert.match(body, /Yeni Haber/);
   assert.match(body, /Kaynak Merkezi/);
+  assert.match(body, /Kategoriler/);
+  assert.match(body, /Medya Kütüphanesi/);
   assert.match(body, /AI HABER MASASI/);
   assert.match(body, /Yayın Yönetmeni/);
 });
@@ -194,6 +202,66 @@ test("kimlik doğrulama tamamlanana kadar dış haber ve kaynak yazma istekleri 
   const blockedSource = await request("/api/sources", { method: "POST", headers: externalHeaders, body: "{}" });
   assert.equal(blockedArticle.status, 403);
   assert.equal(blockedSource.status, 403);
+});
+
+test("kategoriler admin API üzerinden oluşturulur, sıralanır ve menüden gizlenir", async () => {
+  const initial = await request("/api/categories");
+  assert.equal(initial.status, 200);
+  const initialBody = await initial.json();
+  assert.ok(initialBody.categories.length >= 9);
+  assert.equal(initialBody.categories[0].name, "Gündem");
+
+  const created = await request("/api/categories", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Sağlık", description: "Sağlık dünyasından doğrulanmış gelişmeler.", color: "#227755", navOrder: 15, isVisible: 1 }) });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  assert.equal(createdBody.category.slug, "saglik");
+
+  const visibleHome = await html("/");
+  assert.match(visibleHome, /href="\/kategori\/saglik"/);
+
+  const hidden = await request("/api/categories", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...createdBody.category, isVisible: 0 }) });
+  assert.equal(hidden.status, 200);
+  const hiddenHome = await html("/");
+  assert.doesNotMatch(hiddenHome, /href="\/kategori\/saglik"/);
+  assert.match(await html("/kategori/saglik"), /Kategori bulunamadı/);
+
+  const duplicate = await request("/api/categories", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Gündem" }) });
+  assert.equal(duplicate.status, 409);
+  const external = await request("/api/categories", { method: "POST", headers: { "content-type": "application/json", host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" }, body: "{}" });
+  assert.equal(external.status, 403);
+});
+
+test("görseller kalıcı medya alanına doğrulanarak yüklenir ve yeniden sunulur", async () => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nksAAAAASUVORK5CYII=", "base64");
+  const form = new FormData();
+  form.set("file", new Blob([png], { type: "image/png" }), "koza-test.png");
+  form.set("altText", "Koza TV test görseli");
+  form.set("credit", "Koza TV");
+  const uploaded = await request("/api/media", { method: "POST", body: form });
+  assert.equal(uploaded.status, 201);
+  const uploadedBody = await uploaded.json();
+  assert.match(uploadedBody.media.publicUrl, /^\/media\/\d{4}\/\d{2}\/[a-f0-9]{32}\.png$/);
+  assert.equal(uploadedBody.media.altText, "Koza TV test görseli");
+  const served = await request(uploadedBody.media.publicUrl);
+  assert.equal(served.status, 200);
+  assert.equal(served.headers.get("content-type"), "image/png");
+  assert.deepEqual(Buffer.from(await served.arrayBuffer()), png);
+
+  const invalidForm = new FormData();
+  invalidForm.set("file", new Blob(["zararlı içerik"], { type: "image/png" }), "sahte.png");
+  const invalid = await request("/api/media", { method: "POST", body: invalidForm });
+  assert.equal(invalid.status, 400);
+  const library = await request("/api/media");
+  const libraryBody = await library.json();
+  assert.equal(libraryBody.stats.total, 1);
+  assert.equal(libraryBody.stats.totalBytes, png.length);
+  assert.equal(libraryBody.stats.quotaBytes, 100);
+  const quotaForm = new FormData();
+  quotaForm.set("file", new Blob([png], { type: "image/png" }), "ikinci.png");
+  const quotaExceeded = await request("/api/media", { method: "POST", body: quotaForm });
+  assert.equal(quotaExceeded.status, 507);
+  const external = await request("/api/media", { method: "POST", headers: { host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" } });
+  assert.equal(external.status, 403);
 });
 
 test("haber detay, kategori, sitemap, robots ve RSS keşfedilebilirlik yüzeyleri çalışır", async () => {
@@ -385,12 +453,16 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve admin koruması sağlar
   assert.match(service, /User=kozatv/);
   assert.match(service, /HOST=127\.0\.0\.1/);
   assert.match(service, /KOZA_DB_PATH=\/srv\/kozatv\/data\/koza\.sqlite/);
+  assert.match(service, /KOZA_MEDIA_PATH=\/srv\/kozatv\/data\/media/);
+  assert.match(service, /KOZA_MEDIA_QUOTA_BYTES=10737418240/);
   assert.match(service, /NoNewPrivileges=true/);
   assert.match(caddy, /kozatv\.com\.tr, www\.kozatv\.com\.tr/);
   assert.match(caddy, /@admin path \/admin\*/);
   assert.match(caddy, /respond @content_write 403/);
   assert.match(caddy, /\/api\/articles\*/);
   assert.match(caddy, /\/api\/sources\*/);
+  assert.match(caddy, /\/api\/categories\*/);
+  assert.match(caddy, /\/api\/media\*/);
   assert.doesNotMatch(deploymentNotes, /WUg%|Elma258020/);
   assert.match(workflow, /branches: \[main\]/);
   assert.match(workflow, /actions\/checkout@v7/);

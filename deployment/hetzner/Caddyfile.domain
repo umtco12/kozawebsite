@@ -14,7 +14,7 @@ kozatv.com.tr, www.kozatv.com.tr {
 	respond @admin 404
 
 	@content_write {
-		path /api/content /api/articles* /api/sources*
+		path /api/content /api/articles* /api/sources* /api/categories* /api/media*
 		method PATCH POST PUT DELETE
 	}
 	respond @content_write 403

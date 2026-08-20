@@ -271,7 +271,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 
 - [x] Tasarım token'ları ve ziyaretçi/admin görsel sistemi
 - [x] Üretim SQLite şeması ve tekrar çalıştırılabilir seed verisi
-- [ ] Haber, kategori, etiket, yazar ve medya okuma API'leri
+- [ ] Haber, kategori, etiket, yazar ve medya okuma API'leri (haber, kategori ve medya tamamlandı)
 - [x] Gerçek verili ana sayfa, haber detayı ve kategori sayfası
 
 **Çıkış kriteri:** Ziyaretçi sitesi prototip sabitlerinden değil kalıcı veritabanından çalışır.
@@ -279,7 +279,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 ### Faz 2 — Güvenli admin ve yayın akışı
 
 - [ ] Kimlik doğrulama, roller ve sunucu tarafı izinler
-- [ ] Haber editörü, nesne depolama medya yükleme ve önizleme (editör/URL önizleme tamamlandı)
+- [ ] Haber editörü, nesne depolama medya yükleme ve önizleme (kalıcı Hetzner medya kütüphanesi ve önizleme tamamlandı; nesne depolama geçişi bekliyor)
 - [x] Taslak, inceleme, onay, zamanlama ve yayın durumları
 - [ ] Revizyon geçmişi ve audit log (audit log temeli tamamlandı)
 
@@ -289,7 +289,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 
 - [ ] Haber metadata/schema, sitemap, News sitemap ve RSS
 - [ ] Eski URL 301 haritası ve içerik taşıma aracı
-- [ ] Nesne depolama medya hattı, görsel türevleri, telif ve alt metin kontrolleri
+- [ ] Nesne depolama medya hattı, görsel türevleri, telif ve alt metin kontrolleri (alt metin, kredi, dosya doğrulama ve disk kotası tamamlandı)
 - [ ] Arama, yazar, video/program ve kurumsal sayfalar
 
 **Çıkış kriteri:** İçerik kaybı olmadan indekslenebilir, hızlı ve eksiksiz yayın deneyimi.

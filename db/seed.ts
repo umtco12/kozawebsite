@@ -14,3 +14,15 @@ export const seedSources = [
   { name: "AFAD", url: "https://www.afad.gov.tr/", type: "official" },
   { name: "TCMB", url: "https://www.tcmb.gov.tr/", type: "official" },
 ];
+
+export const seedCategories = [
+  { name: "Gündem", slug: "gundem", description: "Türkiye'nin gündemindeki son gelişmeler ve özel haberler.", color: "#c92721", navOrder: 10 },
+  { name: "Siyaset", slug: "siyaset", description: "Siyaset, Meclis ve karar merkezlerinden doğrulanmış haberler.", color: "#a3212a", navOrder: 20 },
+  { name: "Ekonomi", slug: "ekonomi", description: "Piyasalar, iş dünyası ve kişisel ekonomiye dair gelişmeler.", color: "#18715b", navOrder: 30 },
+  { name: "Spor", slug: "spor", description: "Futbol ve tüm spor branşlarından güncel haberler.", color: "#1d6b43", navOrder: 40 },
+  { name: "Dünya", slug: "dunya", description: "Dünyadan diplomasi, güvenlik ve yaşam haberleri.", color: "#365c9d", navOrder: 50 },
+  { name: "Yaşam", slug: "yasam", description: "Sağlık, çevre, kültür ve günlük yaşama dair haberler.", color: "#7a4d9b", navOrder: 60 },
+  { name: "Kültür-Sanat", slug: "kultur-sanat", description: "Kültür, sanat, sinema, müzik ve etkinlik gündemi.", color: "#9b5c21", navOrder: 70 },
+  { name: "Teknoloji", slug: "teknoloji", description: "Teknoloji, bilim ve dijital dünyadaki yenilikler.", color: "#246b8f", navOrder: 80 },
+  { name: "Video", slug: "video", description: "Koza TV programları, röportajlar ve özel videolar.", color: "#c92721", navOrder: 90 },
+] as const;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listPublishedArticles } from "../db";
+import { listCategories, listPublishedArticles } from "../db";
 import { LiveData, LeadSlider, MobileMenu } from "./site-client";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ function articleTime(value: number | null) {
 export default async function Home() {
   const currentDate = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric", weekday: "long", timeZone: "Europe/Istanbul" }).format(new Date());
   const articles = listPublishedArticles(20);
+  const categories = listCategories(true);
   const featured = articles.filter((article) => article.isFeatured).slice(0, 3);
   const leads = (featured.length >= 3 ? featured : articles.slice(0, 3)).map((article) => ({ category: article.category, title: article.title, summary: article.spot, image: article.heroImage, href: `/haber/${article.slug}` }));
   const latest = articles.slice(0, 6);
@@ -34,9 +35,9 @@ export default async function Home() {
           <Link className="brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></Link>
           <div className="masthead-claim"><span>TÜRKİYE&apos;NİN HABER MERKEZİ</span><strong>Doğru haber. Güçlü yorum.</strong></div>
           <div className="ad-space"><span>REKLAM</span><strong>970 × 90</strong></div>
-          <Link className="live-button" href="/canli"><i /> CANLI YAYIN</Link><MobileMenu />
+          <Link className="live-button" href="/canli"><i /> CANLI YAYIN</Link><MobileMenu categories={categories.map(({ name, slug }) => ({ name, slug }))} />
         </div>
-        <nav className="nav" aria-label="Ana menü"><div className="wrap nav-inner"><Link href="/">Ana Sayfa</Link><Link href="#sondakika">Son Dakika</Link><Link href="#gundem">Gündem</Link><Link href="#siyaset">Siyaset</Link><Link href="#ekonomi">Ekonomi</Link><Link href="#spor">Spor</Link><Link href="#dunya">Dünya</Link><Link href="#kultur">Kültür-Sanat</Link><Link href="#video">Video</Link><Link href="/yazarlar">Yazarlar</Link><button aria-label="Haberlerde ara">⌕</button></div></nav>
+        <nav className="nav" aria-label="Ana menü"><div className="wrap nav-inner"><Link href="/">Ana Sayfa</Link><Link href="#sondakika">Son Dakika</Link>{categories.map((category) => <Link href={`/kategori/${category.slug}`} key={category.id}>{category.name}</Link>)}<Link href="/yazarlar">Yazarlar</Link><button aria-label="Haberlerde ara">⌕</button></div></nav>
       </header>
 
       <section className="breaking" id="sondakika" aria-label="Son dakika"><div className="wrap breaking-inner"><strong><i /> SON DAKİKA</strong><time>{articleTime(breaking?.publishedAt ?? null)}</time><p>{breaking?.title}</p><Link href={breaking ? `/haber/${breaking.slug}` : "#gundem"}>Habere git <span>→</span></Link></div></section>
@@ -70,7 +71,7 @@ export default async function Home() {
 
       <section className="video-section" id="video"><div className="wrap"><div className="section-head light"><div><span>KOZA TV</span><h2>İzle</h2></div><Link href="#video">Tüm Videolar →</Link></div><div className="video-grid"><article className="video-main"><img src="/news/studio.jpg" alt="Koza TV stüdyosu" /><button aria-label="Videoyu oynat">▶</button><div><span>ANA HABER</span><h3>Günün öne çıkan gelişmeleri Koza TV Ana Haber&apos;de</h3></div></article><div className="video-list">{news.slice(0, 3).map((article) => <article key={article.id}><div><img src={article.heroImage} alt={article.imageAlt} /><i>▶</i></div><p><span>{article.category}</span>{article.title}</p></article>)}</div></div></div></section>
 
-      <footer><div className="wrap footer-grid"><div><Link className="brand footer-brand" href="/"><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></Link><p>Türkiye&apos;nin gündemi, güvenilir haber ve güçlü yorumla Koza TV&apos;de.</p></div><div><strong>Kategoriler</strong><Link href="#gundem">Gündem</Link><Link href="#siyaset">Siyaset</Link><Link href="#ekonomi">Ekonomi</Link><Link href="#spor">Spor</Link></div><div><strong>Koza TV</strong><span>Hakkımızda</span><span>Künye</span><span>Yayın İlkeleri</span><span>İletişim</span></div><div><strong>Yayın Bilgileri</strong><p>Türksat 3A • 12685 V<br />Digitürk 614 • D-Smart 108</p></div></div><div className="wrap copyright">© 2026 Koza TV. Tüm hakları saklıdır. <span>KVKK · Gizlilik · Çerez Politikası</span></div></footer>
+      <footer><div className="wrap footer-grid"><div><Link className="brand footer-brand" href="/"><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></Link><p>Türkiye&apos;nin gündemi, güvenilir haber ve güçlü yorumla Koza TV&apos;de.</p></div><div><strong>Kategoriler</strong>{categories.slice(0, 6).map((category) => <Link href={`/kategori/${category.slug}`} key={category.id}>{category.name}</Link>)}</div><div><strong>Koza TV</strong><span>Hakkımızda</span><span>Künye</span><span>Yayın İlkeleri</span><span>İletişim</span></div><div><strong>Yayın Bilgileri</strong><p>Türksat 3A • 12685 V<br />Digitürk 614 • D-Smart 108</p></div></div><div className="wrap copyright">© 2026 Koza TV. Tüm hakları saklıdır. <span>KVKK · Gizlilik · Çerez Politikası</span></div></footer>
     </main>
   );
 }

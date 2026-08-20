@@ -2,13 +2,16 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { slugify } from "./article-model.mjs";
-import { seedArticles, seedSources } from "./seed";
+import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
 export type ArticleStatus = "draft" | "review" | "scheduled" | "published";
 export type ArticleRecord = { id: number; slug: string; title: string; spot: string; body: string; category: string; status: ArticleStatus; heroImage: string; imageAlt: string; videoUrl: string; author: string; sourceName: string; sourceUrl: string; seoTitle: string; seoDescription: string; isBreaking: number; isFeatured: number; publishedAt: number | null; scheduledAt: number | null; createdAt: number; updatedAt: number };
 export type ArticleInput = Omit<ArticleRecord, "id" | "createdAt" | "updatedAt" | "publishedAt" | "scheduledAt"> & { id?: number; publishedAt?: number | string | null; scheduledAt?: number | string | null };
 export type NewsSource = { id: number; name: string; url: string; type: string; active: number; lastCheckedAt: number | null; createdAt: number };
+export type CategoryRecord = { id: number; name: string; slug: string; description: string; seoTitle: string; seoDescription: string; color: string; navOrder: number; isVisible: number; articleCount: number; createdAt: number; updatedAt: number };
+export type CategoryInput = { id?: number; name: string; slug?: string; description?: string; seoTitle?: string; seoDescription?: string; color?: string; navOrder?: number; isVisible?: number | boolean };
+export type MediaRecord = { id: number; storageKey: string; publicUrl: string; originalName: string; mimeType: string; sizeBytes: number; altText: string; credit: string; createdAt: number };
 
 let database: InstanceType<typeof Database> | undefined;
 function databasePath() { return resolve(process.env.KOZA_DB_PATH ?? resolve(process.cwd(), "data/koza.sqlite")); }
@@ -24,10 +27,14 @@ function ensureSchema(db: InstanceType<typeof Database>) {
       is_breaking INTEGER NOT NULL DEFAULT 0 CHECK (is_breaking IN (0,1)), is_featured INTEGER NOT NULL DEFAULT 0 CHECK (is_featured IN (0,1)), published_at INTEGER, scheduled_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS news_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, type TEXT NOT NULL DEFAULT 'website', active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)), last_checked_at INTEGER, created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, slug TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '', seo_title TEXT NOT NULL DEFAULT '', seo_description TEXT NOT NULL DEFAULT '', color TEXT NOT NULL DEFAULT '#c92721', nav_order INTEGER NOT NULL DEFAULT 100, is_visible INTEGER NOT NULL DEFAULT 1 CHECK (is_visible IN (0,1)), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS media_assets (id INTEGER PRIMARY KEY AUTOINCREMENT, storage_key TEXT NOT NULL UNIQUE, public_url TEXT NOT NULL UNIQUE, original_name TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL CHECK (size_bytes > 0), alt_text TEXT NOT NULL DEFAULT '', credit TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_articles_status_published ON articles(status, published_at DESC);
     CREATE INDEX IF NOT EXISTS idx_articles_category_status ON articles(category, status, published_at DESC);
     CREATE INDEX IF NOT EXISTS idx_articles_featured ON articles(is_featured, status, published_at DESC) WHERE is_featured = 1;
+    CREATE INDEX IF NOT EXISTS idx_categories_visible_order ON categories(is_visible, nav_order, name);
+    CREATE INDEX IF NOT EXISTS idx_media_assets_created ON media_assets(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id, created_at DESC);
   `);
   const articleCount = Number((db.prepare("SELECT COUNT(*) AS count FROM articles").get() as { count: number }).count);
@@ -38,6 +45,8 @@ function ensureSchema(db: InstanceType<typeof Database>) {
   }
   const sourceCount = Number((db.prepare("SELECT COUNT(*) AS count FROM news_sources").get() as { count: number }).count);
   if (sourceCount === 0) { const insert = db.prepare("INSERT INTO news_sources (name,url,type,active,last_checked_at,created_at) VALUES (?,?,?,1,NULL,?)"); db.transaction(() => { for (const source of seedSources) insert.run(source.name, source.url, source.type, Date.now()); })(); }
+  const categoryCount = Number((db.prepare("SELECT COUNT(*) AS count FROM categories").get() as { count: number }).count);
+  if (categoryCount === 0) { const insert = db.prepare("INSERT INTO categories (name,slug,description,seo_title,seo_description,color,nav_order,is_visible,created_at,updated_at) VALUES (@name,@slug,@description,@name,@description,@color,@navOrder,1,@now,@now)"); db.transaction(() => { for (const category of seedCategories) insert.run({ ...category, now: Date.now() }); })(); }
   db.pragma("optimize");
 }
 
@@ -59,3 +68,17 @@ export function saveArticle(input: ArticleInput, actor = "Yayın Yönetmeni") {
 export function listNewsSources() { return getDb().prepare("SELECT id,name,url,type,active,last_checked_at AS lastCheckedAt,created_at AS createdAt FROM news_sources ORDER BY active DESC,name").all() as NewsSource[]; }
 export function addNewsSource(input: { name: string; url: string; type?: string }) { const result = getDb().prepare("INSERT INTO news_sources (name,url,type,active,last_checked_at,created_at) VALUES (?,?,?,1,NULL,?)").run(input.name.trim(), input.url.trim(), input.type || "website", Date.now()); return Number(result.lastInsertRowid); }
 export function getArticleStats() { return getDb().prepare("SELECT COUNT(*) AS total,SUM(status='published') AS published,SUM(status='draft') AS draft,SUM(status='review') AS review,SUM(status='scheduled') AS scheduled FROM articles").get() as { total: number; published: number; draft: number; review: number; scheduled: number }; }
+
+function mapCategory(row: Record<string, unknown>): CategoryRecord { return { id: Number(row.id), name: String(row.name), slug: String(row.slug), description: String(row.description), seoTitle: String(row.seo_title), seoDescription: String(row.seo_description), color: String(row.color), navOrder: Number(row.nav_order), isVisible: Number(row.is_visible), articleCount: Number(row.article_count ?? 0), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) }; }
+export function listCategories(visibleOnly = false) { const rows = getDb().prepare(`SELECT c.*,COUNT(a.id) AS article_count FROM categories c LEFT JOIN articles a ON a.category=c.name ${visibleOnly ? "WHERE c.is_visible=1" : ""} GROUP BY c.id ORDER BY c.nav_order,c.name`).all() as Record<string, unknown>[]; return rows.map(mapCategory); }
+export function getCategoryBySlug(slug: string) { const row = getDb().prepare("SELECT c.*,COUNT(a.id) AS article_count FROM categories c LEFT JOIN articles a ON a.category=c.name WHERE c.slug=? AND c.is_visible=1 GROUP BY c.id").get(slug) as Record<string, unknown> | undefined; return row ? mapCategory(row) : null; }
+export function saveCategory(input: CategoryInput, actor = "Yayın Yönetmeni") {
+  const db = getDb(); const now = Date.now(); const values = { ...input, name: input.name.trim(), slug: slugify(input.slug || input.name), description: input.description?.trim() || "", seoTitle: input.seoTitle?.trim() || input.name.trim(), seoDescription: input.seoDescription?.trim() || input.description?.trim() || "", color: /^#[0-9a-f]{6}$/i.test(input.color || "") ? input.color : "#c92721", navOrder: Number.isFinite(Number(input.navOrder)) ? Number(input.navOrder) : 100, isVisible: input.isVisible === false || Number(input.isVisible) === 0 ? 0 : 1, now };
+  const transaction = db.transaction(() => { let id = input.id; if (id) { const current = db.prepare("SELECT name FROM categories WHERE id=?").get(id) as { name: string } | undefined; if (!current) throw new Error("Kategori bulunamadı"); db.prepare("UPDATE categories SET name=@name,slug=@slug,description=@description,seo_title=@seoTitle,seo_description=@seoDescription,color=@color,nav_order=@navOrder,is_visible=@isVisible,updated_at=@now WHERE id=@id").run(values); if (current.name !== values.name) db.prepare("UPDATE articles SET category=?,updated_at=? WHERE category=?").run(values.name, now, current.name); } else id = Number(db.prepare("INSERT INTO categories (name,slug,description,seo_title,seo_description,color,nav_order,is_visible,created_at,updated_at) VALUES (@name,@slug,@description,@seoTitle,@seoDescription,@color,@navOrder,@isVisible,@now,@now)").run(values).lastInsertRowid); db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('category',?,?,?,?,?)").run(id, input.id ? "update" : "create", actor, JSON.stringify({ name: values.name, visible: values.isVisible }), now); return id!; });
+  const id = transaction(); return mapCategory(db.prepare("SELECT c.*,COUNT(a.id) AS article_count FROM categories c LEFT JOIN articles a ON a.category=c.name WHERE c.id=? GROUP BY c.id").get(id) as Record<string, unknown>);
+}
+
+function mapMedia(row: Record<string, unknown>): MediaRecord { return { id: Number(row.id), storageKey: String(row.storage_key), publicUrl: String(row.public_url), originalName: String(row.original_name), mimeType: String(row.mime_type), sizeBytes: Number(row.size_bytes), altText: String(row.alt_text), credit: String(row.credit), createdAt: Number(row.created_at) }; }
+export function saveMediaAsset(input: Omit<MediaRecord, "id" | "createdAt">, actor = "Yayın Yönetmeni") { const db = getDb(); const now = Date.now(); const result = db.prepare("INSERT INTO media_assets (storage_key,public_url,original_name,mime_type,size_bytes,alt_text,credit,created_at) VALUES (@storageKey,@publicUrl,@originalName,@mimeType,@sizeBytes,@altText,@credit,@now) ON CONFLICT(storage_key) DO UPDATE SET alt_text=excluded.alt_text,credit=excluded.credit RETURNING id").get({ ...input, now }) as { id: number }; db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('media',?,?,?,?,?)").run(result.id, "upload", actor, JSON.stringify({ name: input.originalName, size: input.sizeBytes }), now); return mapMedia(db.prepare("SELECT * FROM media_assets WHERE id=?").get(result.id) as Record<string, unknown>); }
+export function listMediaAssets(limit = 80) { return (getDb().prepare("SELECT * FROM media_assets ORDER BY created_at DESC LIMIT ?").all(Math.min(Math.max(limit, 1), 200)) as Record<string, unknown>[]).map(mapMedia); }
+export function getMediaStats() { const row = getDb().prepare("SELECT COUNT(*) AS total,COALESCE(SUM(size_bytes),0) AS totalBytes FROM media_assets").get() as { total: number; totalBytes: number }; return row; }

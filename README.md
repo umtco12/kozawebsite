@@ -23,9 +23,13 @@ Başlıca yüzeyler:
 - `/kategori/[slug]`: kategori arşivi
 - `/admin`: editör masası, haber editörü ve kaynak merkezi (yalnız yerelde; staging'de kimlik doğrulama tamamlanana kadar kapalı)
 - `/api/articles` ve `/api/sources`: doğrulamalı içerik/kaynak API'leri
+- `/api/categories`: menü sırası, görünürlük ve kategori SEO yönetimi
+- `/api/media` ve `/media/*`: kalıcı medya kütüphanesi ve görsel sunumu
 - `/sitemap.xml`, `/robots.txt` ve `/rss.xml`: arama motoru ve dağıtım yüzeyleri
 
 Yerel SQLite dosyası varsayılan olarak `data/koza.sqlite` konumunda oluşturulur ve ilk çalıştırmada örnek haber/kaynak verisiyle hazırlanır. Farklı bir konum için `KOZA_DB_PATH` kullanılabilir.
+
+Yüklenen görseller yerelde `data/media/`, Hetzner'de `/srv/kozatv/data/media/` altında yıl/ay ve içerik özetiyle adlandırılarak saklanır. Bu dizin sürüm klasörlerinin dışındadır; yeni dağıtım ve geri dönüşlerde silinmez. SQLite yalnız dosya yolu, MIME türü, boyut, alt metin ve fotoğraf kredisini tutar. JPG, PNG, WebP ve GIF dosyaları içerik imzasıyla doğrulanır ve dosya başına 12 MB sınırı uygulanır. Hetzner medya alanı varsayılan 10 GB kotayla çalışır ve dosya sistemi üzerinde en az 1 GB boş alan bırakılır. Büyük video dosyaları sunucu diskine yüklenmez; mevcut editörde video URL'si kullanılır ve üretim ölçeğinde S3 uyumlu nesne depolamaya taşınacaktır.
 
 ## Doğrulama
 
@@ -40,7 +44,7 @@ npm run lint
 
 ```bash
 npm run build
-HOST=127.0.0.1 PORT=8201 KOZA_DB_PATH=/srv/kozatv/data/koza.sqlite \
+HOST=127.0.0.1 PORT=8201 KOZA_DB_PATH=/srv/kozatv/data/koza.sqlite KOZA_MEDIA_PATH=/srv/kozatv/data/media \
   node dist/standalone/server.js
 ```
 

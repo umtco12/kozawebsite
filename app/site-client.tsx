@@ -97,20 +97,9 @@ export function LeadSlider({ items }: { items: Lead[] }) {
   );
 }
 
-const mobileLinks = [
-  ["Ana Sayfa", "/"],
-  ["Son Dakika", "/#sondakika"],
-  ["Gündem", "/#gundem"],
-  ["Siyaset", "/#siyaset"],
-  ["Ekonomi", "/#ekonomi"],
-  ["Spor", "/#spor"],
-  ["Dünya", "/#dunya"],
-  ["Video", "/#video"],
-  ["Yazarlar", "/yazarlar"],
-];
-
-export function MobileMenu() {
+export function MobileMenu({ categories }: { categories: { name: string; slug: string }[] }) {
   const [open, setOpen] = useState(false);
+  const mobileLinks = [["Ana Sayfa", "/"], ["Son Dakika", "/#sondakika"], ...categories.map((category) => [category.name, `/kategori/${category.slug}`]), ["Yazarlar", "/yazarlar"]];
 
   return (
     <>
