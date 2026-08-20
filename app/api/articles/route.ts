@@ -32,6 +32,8 @@ async function persist(request: Request) {
     return Response.json({ ok: true, article: saveArticle(payload as ArticleInput, auth.user!.fullName) }, { status: payload.id ? 200 : 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
+    if (message.includes("EDIT_CONFLICT")) return Response.json({ error: "Haber başka bir editör tarafından güncellendi. Son sürümü açıp değişikliklerinizi karşılaştırın.", code: "EDIT_CONFLICT" }, { status: 409 });
+    if (message.includes("WORKFLOW_APPROVAL_REQUIRED")) return Response.json({ error: "Haber yayın yönetmeni onayı olmadan yayınlanamaz veya planlanamaz.", code: "WORKFLOW_APPROVAL_REQUIRED" }, { status: 409 });
     if (message.includes("UNIQUE constraint failed")) return Response.json({ error: "Bu başlık veya URL adıyla bir haber zaten var" }, { status: 409 });
     return Response.json({ error: "Haber kaydedilemedi" }, { status: 503 });
   }

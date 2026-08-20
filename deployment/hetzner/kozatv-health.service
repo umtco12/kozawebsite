@@ -1,0 +1,10 @@
+[Unit]
+Description=Koza TV servis, disk ve veritabani kontrolu
+OnFailure=kozatv-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/kozatv-health
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true

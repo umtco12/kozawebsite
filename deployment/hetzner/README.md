@@ -40,11 +40,19 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 - Veritabanı dosyası deploy dizininden ayrı olduğu için kod sürümü değişse de korunur.
 - Her migration öncesi SQLite yedeği alınır; migration ile kod aynı sürümde yayınlanır.
 
+## Yedekleme, geri yükleme ve alarm
+
+- `kozatv-backup.timer` her gece WAL uyumlu SQLite snapshot'ı ve medya arşivi üretir; SHA-256 doğrulaması yapar.
+- Günlük kopyalar 7 gün, haftalık kopyalar 35 gün, aylık kopyalar 370 gün tutulur.
+- `KOZA_BACKUP_REMOTE` tanımlanırsa yedek ağacı `rsync` ile ikinci hedefe aktarılır.
+- `kozatv-restore /srv/kozatv/backups/daily/TARIH` doğrulama, işlem öncesi snapshot, geri yükleme ve uygulama sağlık kontrolünü tek komutta yürütür.
+- Aylık geri yüklenebilirlik testi; beş dakikalık disk, servis ve SQLite sağlık kontrolü systemd timer'larıyla çalışır.
+- Hatalar systemd günlüğüne yazılır; `/etc/kozatv/alerts.env` içinde `KOZA_ALERT_WEBHOOK` verilirse webhook'a da gönderilir.
+- Stage sunucusunda UFW yalnız 22, 80 ve 443 TCP portlarını açar. SSH parola ve root girişi kapalıdır; operasyon erişimi yalnız anahtarlı `koza-admin` hesabıyla yapılır.
+
 ## Canlıya çıkmadan önce kalan güvenlik işleri
 
 - Çok faktörlü giriş, IP tabanlı giriş hız sınırı ve şüpheli giriş alarmı
-- Hetzner Firewall üzerinde yalnızca 22, 80 ve 443 girişleri
-- SSH root girişinin kapatılması ve ayrı deploy kullanıcısı
-- Otomatik Hetzner backup veya harici şifreli günlük yedek
+- Harici yedek hedefinin ve alarm webhook'unun müşteri hesabıyla tanımlanması
 - Alan adı DNS geçişi ve HTTPS doğrulaması
 - Uptime, disk, bellek, servis ve sertifika alarmları

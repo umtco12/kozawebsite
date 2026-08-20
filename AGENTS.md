@@ -224,6 +224,14 @@ Bir iş ancak aşağıdakiler tamamlandığında bitmiş kabul edilir:
 
 ### Yeni günlük kaydı şablonu
 
+### 2026-08-20 — Güvenli yayın stüdyosu, yedekleme ve editoryal onay
+
+- İstek: Stage ortamının canlı alan adı gibi ele alınmaması; SQLite/medya yedeği ve güvenlik; profesyonel blok editörü; muhabirden yayın yönetmenine tam onay akışı.
+- Yapılanlar: Blok tabanlı haber editörü, dört saniyelik otomatik taslak kaydı, masaüstü/mobil ön izleme, çoklu görsel, video ve sosyal bağlantı blokları, revizyon geri yükleme, ekip yorumları, görev atama ve eşzamanlı düzenleme sürüm kontrolü eklendi. Muhabir → editör → yayın yönetmeni akışı; değişiklik talebi, ret gerekçesi, yayın onayı, planlama, yayın, yayından kaldırma, düzeltme notu, manşet sırası, son dakika ve 30 günlük operasyon özeti veritabanı/API/UI düzeyinde kuruldu. Yayın öncesi başlık, spot, gövde, görsel alt metni ve kaynak kontrolü sunucuda zorunlu hale getirildi. SQLite ve medya için doğrulamalı günlük/haftalık/aylık yedek, tek komut geri yükleme, aylık geri yükleme testi, disk/servis/veritabanı sağlık timer'ı ve opsiyonel webhook alarmı hazırlandı. Stage sunucusunda anahtarlı `koza-admin` hesabı doğrulandı; root/parola SSH girişi kapatıldı ve UFW yalnız 22/80/443 portlarına indirildi.
+- Değişen ana dosyalar: `db/index.ts`, `app/api/editorial/route.ts`, `app/api/articles/route.ts`, `app/admin/panel.tsx`, `app/admin/workflow-studio.tsx`, `app/haber/[slug]/*`, `app/globals.css`, `deployment/hetzner/kozatv-*`, `deployment/hetzner/README.md`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: `npm test` production build'i tamamladı; editoryal onay, onaysız yayın engeli, revizyon/yorum/işlem geçmişi, yetkisiz erişim ve gerçek yedek doğrulaması dahil **26 test geçti, 0 başarısız, 0 atlandı**. `npx tsc --noEmit` başarılı; `npm run lint` **0 hata**, mevcut ham `<img>` yüzeyleri için 23 performans uyarısıyla tamamlandı. Sunucuda backup, health ve restore-test servisleri elle çalıştırılıp başarılı sonuç verdi; üç timer etkin. Yeni `koza-admin` oturumu/sudo doğrulandı, root SSH bağlantısı reddedildi ve UFW kuralları 22/80/443 olarak kontrol edildi.
+- Kalan karar veya risk: Stage IP adresi HTTP olduğu için yalnız test hesapları kullanılmalıdır; alan adı canlıya alınırken HTTPS zorunlu kapı olacaktır. Harici yedek hedefi ve alarm webhook'u için müşteri hesabı/URL'si henüz verilmedi. Yedekler şu an aynı sunucuda tutulur; gerçek felaket kurtarma için ikinci lokasyon zorunludur.
+
 Her yeni işte aşağıdaki biçimi kullan:
 
 ```md

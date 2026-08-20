@@ -1,0 +1,9 @@
+[Unit]
+Description=Koza TV operasyon alarmi (%i)
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/kozatv/alerts.env
+ExecStart=/usr/local/sbin/kozatv-alert %i
+NoNewPrivileges=true
+PrivateTmp=true

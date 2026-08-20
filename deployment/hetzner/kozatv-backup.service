@@ -1,0 +1,14 @@
+[Unit]
+Description=Koza TV SQLite ve medya yedegi
+After=kozatv.service
+OnFailure=kozatv-alert@%n.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/kozatv-backup
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+ProtectHome=true
+NoNewPrivileges=true

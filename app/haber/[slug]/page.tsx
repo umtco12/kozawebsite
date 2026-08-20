@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getArticleBySlug, listPublishedArticles } from "../../../db";
 import { slugify } from "../../../db/article-model.mjs";
+import { ArticleBlocks } from "./article-blocks";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function ArticlePage({ params }: Props) {
       <span className="article-category">{article.category}</span><h1>{article.title}</h1><p className="article-spot">{article.spot}</p>
       <div className="article-meta"><div className="author-badge">{article.author.split(" ").map((word) => word[0]).join("").slice(0, 2)}</div><div><strong>{article.author}</strong><time>{published}</time></div><div className="share-buttons"><button aria-label="Haberi paylaş">↗</button><button aria-label="Haberi kaydet">☆</button></div></div>
       <figure><img src={article.heroImage} alt={article.imageAlt} /><figcaption>{article.imageAlt} · Fotoğraf: {article.sourceName}</figcaption></figure>
-      <div className="article-layout"><aside className="article-share"><span>PAYLAŞ</span><button>f</button><button>𝕏</button><button>◎</button></aside><div className="article-body">{article.body.split(/\n\n+/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}{article.sourceName && <div className="source-box"><span>KAYNAK</span><strong>{article.sourceName}</strong>{article.sourceUrl && <a href={article.sourceUrl} target="_blank" rel="noreferrer nofollow">Orijinal kaynağı görüntüle →</a>}</div>}</div><aside className="article-ad"><span>REKLAM</span><strong>300 × 250</strong></aside></div>
+      <div className="article-layout"><aside className="article-share"><span>PAYLAŞ</span><button>f</button><button>𝕏</button><button>◎</button></aside><div className="article-body">{article.correctionNote && <div className="correction-note"><strong>DÜZELTME NOTU</strong><p>{article.correctionNote}</p></div>}<ArticleBlocks blocks={article.blocks} />{article.sourceName && <div className="source-box"><span>KAYNAK</span><strong>{article.sourceName}</strong>{article.sourceUrl && <a href={article.sourceUrl} target="_blank" rel="noreferrer nofollow">Orijinal kaynağı görüntüle →</a>}</div>}</div><aside className="article-ad"><span>REKLAM</span><strong>300 × 250</strong></aside></div>
       {related.length > 0 && <section className="related"><div className="section-head"><div><span>DEVAMINI OKU</span><h2>İlgili Haberler</h2></div></div><div>{related.map((item) => <Link href={`/haber/${item.slug}`} key={item.id}><img src={item.heroImage} alt={item.imageAlt} /><span>{item.category}</span><h3>{item.title}</h3></Link>)}</div></section>}
     </article>
     <footer className="article-footer"><div className="wrap"><img src="/koza-logo.png" alt="Koza TV" /><p>Doğru haber. Güçlü yorum. Konuşma zamanı.</p><Link href="/">Ana sayfaya dön →</Link></div></footer>

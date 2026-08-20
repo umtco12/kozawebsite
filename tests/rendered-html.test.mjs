@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import test, { after, before } from "node:test";
 import {
   defaultContent,
@@ -13,6 +14,7 @@ import { slugify, validateArticleInput } from "../db/article-model.mjs";
 import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
+const execFileAsync = promisify(execFile);
 process.env.KOZA_DB_PATH = join(
   tmpdir(),
   `koza-content-test-${process.pid}-${Date.now()}.sqlite`,
@@ -162,6 +164,7 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(body, /AI HABER MASASI/);
   assert.match(body, /Koza Test Yöneticisi/);
   assert.match(body, /Kullanıcılar/);
+  assert.match(body, /Yayın Stüdyosu/);
 });
 
 test("admin girişi güvenli oturum çerezi üretir ve yetkisiz sayfayı yönlendirir", async () => {
@@ -237,9 +240,14 @@ test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı
   const hidden = await html(`/haber/${createdBody.article.slug}`);
   assert.match(hidden, /Haber bulunamadı/);
 
-  const published = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...createdBody.article, status: "published" }) });
-  assert.equal(published.status, 200);
-  const publishedBody = await published.json();
+  const directPublish = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...createdBody.article, status: "published" }) });
+  assert.equal(directPublish.status, 409, "Onaysız haber doğrudan yayınlanamamalı");
+  for (const action of ["submit_review", "approve", "publish"]) {
+    const transition = await request("/api/editorial", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "workflow", articleId: createdBody.article.id, action }) });
+    assert.equal(transition.status, 200, `${action} geçişi tamamlanmalı`);
+  }
+  const published = await request(`/api/articles?limit=100`);
+  const publishedBody = { article: (await published.json()).articles.find((item) => item.id === createdBody.article.id) };
   assert.equal(publishedBody.article.status, "published");
   assert.ok(publishedBody.article.publishedAt);
 
@@ -247,6 +255,22 @@ test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı
   assert.match(publicPage, /Koza TV otomatik yayın akışı test haberi/);
   assert.match(publicPage, /"@type":"NewsArticle"/);
   assert.match(publicPage, /Test Editörü/);
+});
+
+test("profesyonel editoryal akış revizyon, yorum ve işlem geçmişi tutar", async () => {
+  const articles = await request("/api/articles?limit=100");
+  const article = (await articles.json()).articles[0];
+  const comment = await request("/api/editorial", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "comment", articleId: article.id, note: "Kapak görselinin kaynağı doğrulandı." }) });
+  assert.equal(comment.status, 201);
+  const timeline = await request(`/api/editorial?articleId=${article.id}`);
+  assert.equal(timeline.status, 200);
+  const data = await timeline.json();
+  assert.ok(data.revisions.length >= 1);
+  assert.ok(data.comments.some((item) => item.body.includes("kaynağı doğrulandı")));
+  assert.ok(Array.isArray(data.events));
+  assert.ok(Array.isArray(data.report));
+  const blocked = await anonymousRequest("/api/editorial?articleId=1");
+  assert.equal(blocked.status, 401);
 });
 
 test("haber API geçersiz içerik ve kaynak adreslerini reddeder", async () => {
@@ -545,4 +569,18 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güve
   );
   assert.doesNotMatch(deploySudoers, /ALL=\(ALL(?::ALL)?\) NOPASSWD: ALL/);
   assert.match(deploymentNotes, /yalnız `kozatv` grubuna üyedir/);
+});
+
+test("SQLite ve medya yedeği üretilir, checksum ve geri yükleme ön kontrolünden geçer", async () => {
+  const root = await mkdtemp(join(tmpdir(), "koza-backup-test-"));
+  const data = join(root, "data"); const backups = join(root, "backups");
+  await mkdir(join(data, "media"), { recursive: true });
+  await writeFile(join(data, "media", "sample.txt"), "Koza medya yedek testi");
+  await execFileAsync("sqlite3", [join(data, "koza.sqlite"), "CREATE TABLE news(id INTEGER PRIMARY KEY,title TEXT); INSERT INTO news(title) VALUES('Koza test');"]);
+  await execFileAsync("bash", [new URL("deployment/hetzner/kozatv-backup.sh", projectRoot).pathname], { env: { ...process.env, KOZA_DATA_DIR: data, KOZA_BACKUP_DIR: backups } });
+  const [stamp] = await readdir(join(backups, "daily")); const snapshot = join(backups, "daily", stamp);
+  assert.equal((await stat(join(snapshot, "koza.sqlite"))).isFile(), true);
+  assert.equal((await stat(join(snapshot, "media.tar.gz"))).isFile(), true);
+  const verified = await execFileAsync("bash", [new URL("deployment/hetzner/kozatv-restore.sh", projectRoot).pathname, snapshot], { env: { ...process.env, KOZA_RESTORE_VERIFY_ONLY: "1" } });
+  assert.match(verified.stdout, /geri yüklemeye hazır/);
 });

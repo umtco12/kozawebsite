@@ -1,0 +1,10 @@
+[Unit]
+Description=Koza TV her gece yedekleme
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 Europe/Istanbul
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target
