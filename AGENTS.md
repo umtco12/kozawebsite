@@ -42,7 +42,7 @@ Bu dosya Koza TV projesinin ortak çalışma hafızasıdır. İnsan veya yapay z
 
 - Aktif uygulama kodu yalnızca bu GitHub projesinde tutulur.
 - `report/`, `backup/`, müşteri teklifleri, PDF'ler ve eski HTML tasarımları aktif repoya eklenmez.
-- Haber sitesi kodu `app/`, statik medya `public/`, veri şeması `db/` ve `drizzle/`, Worker kodu `worker/` altında tutulur.
+- Haber sitesi kodu `app/`, statik medya `public/`, veri erişimi `db/` ve Hetzner yayın dosyaları `deployment/hetzner/` altında tutulur.
 - Şifre, API anahtarı, erişim anahtarı veya kişisel veri Git'e yazılmaz.
 - Derleme çıktıları ve yerel bağımlılıklar commit edilmez.
 
@@ -78,6 +78,15 @@ Bu dosya Koza TV projesinin ortak çalışma hafızasıdır. İnsan veya yapay z
 - Bir commit yalnızca ilgili işin dosyalarını içermelidir.
 - Push öncesinde diff, build sonucu ve çalışma günlüğü tekrar kontrol edilir.
 - Başka kişilerin değişiklikleri izinsiz geri alınmaz veya yeniden yazılmaz.
+
+## 7.1 Hetzner üretim altyapısı
+
+- Üretim hedefi Debian 13 üzerinde Node.js 22 standalone servisidir.
+- Uygulama `kozatv` sistem kullanıcısı ile yalnızca `127.0.0.1:8201` adresinde çalışır; dış trafik Caddy üzerinden gelir.
+- Kalıcı SQLite verisi kod sürümlerinden ayrı `/srv/kozatv/data/` dizininde tutulur.
+- Admin kimlik doğrulaması tamamlanıncaya kadar `/admin` ve içerik yazma istekleri Caddy katmanında dış erişime kapalı kalır.
+- Sunucu, hesap, SSH, veritabanı veya üçüncü taraf servis parolaları hiçbir dosyaya ya da Git geçmişine yazılmaz.
+- DNS geçişi tamamlanmadan eski alan adı yayınının kapandığı varsayılmaz; IP ve alan adı ayrı ayrı test edilir.
 
 ## 8. Koza TV zorunlu test matrisi
 
@@ -172,6 +181,22 @@ Bir iş ancak aşağıdakiler tamamlandığında bitmiş kabul edilir:
 - Değişen ana dosyalar: `YAPILACAKLAR.md`, `AGENTS.md`, `tests/rendered-html.test.mjs`.
 - Doğrulama: `npm test` içinde üretim derlemesi ve **12 test geçti; 0 başarısız, 0 atlandı**. `npm run lint` **0 hata** ile tamamlandı; optimize edilecek ham `<img>` kullanımları için mevcut **9 performans uyarısı** devam ediyor. Yol haritasındaki kritik ürün alanlarının ve veri güvenliği ilkelerinin korunmasını kontrol eden regresyon testi eklendi.
 - Kalan karar veya risk: Repoda doğrulanmış Jenkins/GitHub Actions hattı bulunmuyor. Kimlik sağlayıcısı, canlı yayın kaynağı, eski CMS erişimi, medya saklama politikası ve CI/CD sağlayıcısı ilgili fazlardan önce netleştirilmelidir.
+
+### 2026-08-20 — Hetzner Debian taşıma temeli
+
+- İstek: Koza TV'yi mevcut Hetzner Debian sunucusuna taşımak, kalıcı veri katmanını hazırlamak, yapılanları belgelemek ve sunucudaki eski Parsel Kontrol yayınını kaldırmak.
+- Yapılanlar: Hetzner'deki Debian 13 sunucu kaynakları ve mevcut servisler incelendi. Node.js 22 kuruldu. Uygulama Cloudflare D1/Worker bağımlılığından çıkarılarak standalone Node.js ve WAL modlu SQLite'a geçirildi. Ayrı `kozatv` kullanıcısı, sürüm dizini, kalıcı veri dizini ve sıkılaştırılmış systemd servisi kuruldu. Caddy IP trafiğini Koza TV'ye yönlendirdi; admin ve içerik yazma istekleri gerçek kimlik doğrulama tamamlanana kadar dışarıya kapatıldı. Parsel Kontrol web servisi ve üç zamanlayıcısı durdurulup devre dışı bırakıldı.
+- Değişen ana dosyalar: `db/index.ts`, `app/api/content/route.ts`, `next.config.ts`, `vite.config.ts`, `package.json`, `package-lock.json`, `deployment/hetzner/*`, `README.md`, `YAPILACAKLAR.md`, `tests/rendered-html.test.mjs`, `.gitignore`, `AGENTS.md`.
+- Doğrulama: Yerel ve Debian sunucuda standalone build başarılı oldu; **14 test geçti, 0 başarısız, 0 atlandı**. Lint **0 hata** ile tamamlandı ve mevcut 9 görsel performans uyarısı kaydedildi. Dış IP üzerinden `/`, `/canli`, `/yazarlar` ve `/api/content` HTTP 200; `/admin` HTTP 404 ve yetkisiz içerik yazma isteği HTTP 403 döndürdü. `kozatv` ve Caddy servisleri aktif doğrulandı.
+- Kalan karar veya risk: `kozatv.com.tr` DNS kayıtları halen eski sunucuya yöneliyor ve DNS yönetimi Krihost nameserver'larında. HTTPS ancak DNS geçişinden sonra açılabilir. Hetzner Firewall ve otomatik backup kapalı. Parsel Kontrol servisleri durmuş olsa da dosya, sistem kullanıcısı, günlük ve unit dosyalarının kalıcı silinmesi ayrıca açık kapsam onayı bekliyor. Repodaki bağımlılık denetimi mevcut transitif paketlerde güvenlik bulguları bildiriyor; canlı admin açılmadan önce ele alınmalıdır.
+
+### 2026-08-20 — Main branch'ten Hetzner staging CI/CD
+
+- İstek: `main` branch'ine gelen her commit sonrasında testlerden geçen sürümün `http://46.225.169.52/` staging ortamına otomatik aktarılması.
+- Yapılanlar: GitHub Actions üzerinde temiz kurulum, production bağımlılık denetimi, test/build, lint, sabit SSH host anahtarı doğrulaması, sınırlı yetkili `koza-deploy` hesabı, atomik sürüm bağlantısı, iç/dış sağlık kontrolleri ve hata halinde önceki sürüme dönüş akışı hazırlandı. Sunucuda deploy kullanıcısı, root sahipli deploy betiği ve yalnız bu betiğe izin veren dar sudo kuralı kuruldu.
+- Değişen ana dosyalar: `.github/workflows/staging.yml`, `deployment/hetzner/deploy.sh`, `deployment/hetzner/known_hosts`, `deployment/hetzner/kozatv-deploy.sudoers`, `deployment/hetzner/README.md`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: `npm test` ile standalone build ve **14 test geçti; 0 başarısız, 0 atlandı**. `npm run lint` **0 hata** ve mevcut **9 görsel performans uyarısı** ile tamamlandı. `npm audit --omit=dev` **0 production açığı** bildirdi. Workflow YAML ayrıştırıldı; deploy kullanıcısının SSH erişimi, incoming dizinine yazması, geçersiz SHA'yı reddetmesi ve genel sudo komutlarını çalıştıramaması doğrulandı.
+- Kalan karar veya risk: GitHub repository secret'ına özel staging SSH anahtarı `HETZNER_SSH_KEY` adıyla kaydedildi. Hazırlanan değişikliklerin stage/commit/push edilmesi kullanıcı onayı bekliyor. İlk gerçek Actions çalışması ve dış staging smoke testi push sonrasında izlenecek.
 
 ### Yeni günlük kaydı şablonu
 

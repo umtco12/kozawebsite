@@ -1,0 +1,37 @@
+[Unit]
+Description=Koza TV web uygulamasi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kozatv
+Group=kozatv
+WorkingDirectory=/srv/kozatv/current
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8201
+Environment=KOZA_DB_PATH=/srv/kozatv/data/koza.sqlite
+ExecStart=/usr/bin/node /srv/kozatv/current/dist/standalone/server.js
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/kozatv/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=1G
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kozatv
+
+[Install]
+WantedBy=multi-user.target

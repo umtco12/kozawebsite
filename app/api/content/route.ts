@@ -1,6 +1,4 @@
-import { eq } from "drizzle-orm";
-import { getDb } from "../../../db";
-import { contentItems } from "../../../db/schema";
+import { getContentRows, upsertContentItem } from "../../../db";
 import {
   defaultContent,
   isValidContentUpdate,
@@ -11,7 +9,7 @@ type ContentKey = "leads" | "writers";
 
 export async function GET() {
   try {
-    const rows = await getDb().select().from(contentItems);
+    const rows = getContentRows();
     return Response.json(mergeContentRows(rows));
   } catch {
     return Response.json(defaultContent);
@@ -29,22 +27,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const db = getDb();
-    const existing = await db
-      .select()
-      .from(contentItems)
-      .where(eq(contentItems.key, payload.key!))
-      .limit(1);
-    const value = JSON.stringify(payload.value);
-
-    if (existing.length) {
-      await db
-        .update(contentItems)
-        .set({ value, updatedAt: new Date() })
-        .where(eq(contentItems.key, payload.key!));
-    } else {
-      await db.insert(contentItems).values({ key: payload.key!, value });
-    }
+    upsertContentItem(payload.key!, payload.value);
 
     return Response.json({ ok: true });
   } catch {

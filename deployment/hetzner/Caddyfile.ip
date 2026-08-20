@@ -1,0 +1,22 @@
+:80 {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+	}
+
+	@admin path /admin*
+	respond @admin 404
+
+	@content_write {
+		path /api/content
+		method PATCH POST PUT DELETE
+	}
+	respond @content_write 403
+
+	reverse_proxy 127.0.0.1:8201
+}

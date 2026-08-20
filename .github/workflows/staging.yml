@@ -1,0 +1,76 @@
+name: Koza TV Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: kozatv-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-deploy:
+    name: Test ve Hetzner staging dağıtımı
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: http://46.225.169.52/
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 hazırla
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Bağımlılıkları temiz kur
+        run: npm ci
+
+      - name: Üretim bağımlılıklarını denetle
+        run: npm audit --omit=dev
+
+      - name: Test ve standalone build
+        run: npm test
+
+      - name: Kod kalitesini kontrol et
+        run: npm run lint
+
+      - name: SSH anahtarını hazırla
+        env:
+          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$HETZNER_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          cp deployment/hetzner/known_hosts ~/.ssh/known_hosts
+          chmod 0644 ~/.ssh/known_hosts
+
+      - name: Kaynak kodu staging sunucusuna aktar
+        run: |
+          ssh koza-deploy@46.225.169.52 "install -d -m 0750 /srv/kozatv/incoming/${GITHUB_SHA}"
+          rsync -az --delete \
+            --exclude=.git \
+            --exclude=node_modules \
+            --exclude=dist \
+            --exclude=.next \
+            --exclude=.wrangler \
+            --exclude=data \
+            ./ "koza-deploy@46.225.169.52:/srv/kozatv/incoming/${GITHUB_SHA}/"
+
+      - name: Atomik staging dağıtımını çalıştır
+        run: ssh koza-deploy@46.225.169.52 "sudo /usr/local/sbin/kozatv-deploy ${GITHUB_SHA}"
+
+      - name: Dışarıdan smoke test
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://46.225.169.52/ >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://46.225.169.52/canli >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://46.225.169.52/yazarlar >/dev/null
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://46.225.169.52/admin)" = "404"

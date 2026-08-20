@@ -26,7 +26,8 @@ Başarı ölçütleri:
 - [x] Canlı yayın ve yazarlar sayfası için ilk arayüzler
 - [x] Admin içerik merkezi için ilk arayüz
 - [x] Temel SEO, Open Graph ve X/Twitter metadata
-- [x] D1 ve Drizzle için başlangıç bağlantısı ve ilk `content_items` migration'ı
+- [x] Hetzner standalone Node.js servisi ve kalıcı SQLite `content_items` tablosu
+- [x] Ayrı `kozatv` sistem kullanıcısı, systemd servisi ve Caddy reverse proxy temeli
 - [x] Build, HTML regresyonu, erişilebilirlik ve temel içerik modeli testleri
 - [x] Ortak çalışma ve zorunlu test kuralları
 
@@ -44,18 +45,18 @@ Başarı ölçütleri:
 
 ## 3. Hedef teknik mimari
 
-İlk üretim sürümünde mevcut Cloudflare uyumlu yapı korunacaktır:
+İlk üretim sürümü mevcut Hetzner Debian sunucusunda çalışacaktır:
 
 - **Uygulama:** React 19 + Vinext + TypeScript
-- **Çalışma ortamı:** Cloudflare Worker uyumlu sunucu çıktısı
-- **İlişkisel veri:** Cloudflare D1 + Drizzle ORM
-- **Medya:** Cloudflare R2; D1 yalnızca medya metadata'sını tutar
+- **Çalışma ortamı:** Node.js 22 standalone sunucu + systemd
+- **İlişkisel veri:** İlk aşamada WAL modlu SQLite; trafik ve yazma hacmi gerektiğinde PostgreSQL'e kontrollü geçiş
+- **Medya:** S3 uyumlu nesne depolama; SQLite yalnızca medya metadata'sını tutar
 - **Önbellek:** CDN ve doğru `Cache-Control`; içerik güncellenince kontrollü temizleme
-- **Arama:** İlk sürümde D1 üzerinde indeksli arama; hacim arttığında ayrı arama servisine geçiş için soyutlanmış arama katmanı
+- **Arama:** İlk sürümde SQLite FTS/indeksli arama; hacim arttığında ayrı arama servisine geçiş için soyutlanmış arama katmanı
 - **Canlı yayın:** Yayın sağlayıcısının HLS oynatıcısı, kesinti ekranı ve alternatif yayın kaynağı
 - **Gözlemleme:** Uygulama hataları, performans metrikleri, yayın başarısızlıkları ve kaynak çekme görevleri için merkezi kayıt ve alarm
 
-Kalıcı kullanıcı ve içerik verileri tarayıcı hafızasında tutulmaz. D1 yapılandırılmış verinin, R2 ise görsel/video/dosya baytlarının asıl kaynağıdır.
+Kalıcı kullanıcı ve içerik verileri tarayıcı hafızasında tutulmaz. SQLite/PostgreSQL yapılandırılmış verinin, S3 uyumlu nesne depolama ise görsel/video/dosya baytlarının asıl kaynağıdır.
 
 ## 4. Veritabanı ve veri sahipliği
 
@@ -72,7 +73,7 @@ Mevcut genel `content_items` tablosu prototip içindir. Üretim şeması ilişki
 | `categories`, `article_categories` | Ana ve alt kategori ilişkileri |
 | `tags`, `article_tags` | Etiketleme ve konu sayfaları |
 | `authors`, `article_authors` | Yazar profili ve çoklu imza desteği |
-| `media_assets` | R2 anahtarı, tür, boyut, oran, alt metin, telif ve sahibi |
+| `media_assets` | Nesne depolama anahtarı, tür, boyut, oran, alt metin, telif ve sahibi |
 | `article_media` | Haber içi kapak, galeri ve video sıralaması |
 | `breaking_news` | Son dakika metni, bağlantısı, başlangıç/bitiş zamanı ve önceliği |
 | `live_streams` | HLS kaynağı, yayın durumu, yedek kaynak ve program bilgisi |
@@ -183,7 +184,7 @@ AI sistemi otomatik yayıncı değil, editör yardımcısı olacaktır.
 
 ## 8. Medya, video ve canlı yayın
 
-- R2 aktifleştirilerek orijinal dosya ve türevler ayrı anahtarlarla saklanacaktır.
+- S3 uyumlu nesne depolama aktifleştirilerek orijinal dosya ve türevler ayrı anahtarlarla saklanacaktır.
 - Görsel yüklemede dosya türü, gerçek MIME, boyut, çözünürlük ve zararlı içerik kontrolü yapılacaktır.
 - WebP/AVIF türevleri, responsive boyutlar, düşük kaliteli önizleme ve odak noktası üretilecektir.
 - Her medya için alt metin, açıklama, fotoğrafçı/ajans, lisans ve kullanım bitiş tarihi tutulacaktır.
@@ -226,13 +227,13 @@ SEO başlığı üretmek tek başına yeterli değildir. Yayın hızı, özgünl
 Her özellik için test senaryosu iş ile birlikte yazılır. Canlıya çıkış kapıları:
 
 - Unit test: veri doğrulama, slug, izin, tarih, SEO ve AI karar kuralları
-- Integration test: D1 sorguları, migration, R2 metadata, görev kuyruğu ve API yetkileri
+- Integration test: SQLite/PostgreSQL sorguları, migration, medya metadata, görev kuyruğu ve API yetkileri
 - E2E test: giriş, taslak, onay, zamanlama, yayın, geri çekme ve medya yükleme
 - Görsel test: ana sayfa, haber, kategori, canlı ve admin; masaüstü/tablet/mobil
 - Erişilebilirlik: klavye, odak, landmark, form etiketi, kontrast ve ekran okuyucu akışı
 - Performans: Web Vitals, yoğun ana sayfa, görsel yükü ve yavaş ağ
 - Güvenlik: yetki atlama, XSS, CSRF, dosya sahteciliği, rate limit ve veri sızıntısı
-- Dayanıklılık: kaynak kesintisi, D1/R2 hatası, canlı yayın kesintisi ve tekrar deneme
+- Dayanıklılık: veritabanı/nesne depolama hatası, kaynak ve canlı yayın kesintisi, tekrar deneme
 - SEO regresyonu: metadata, canonical, schema, sitemap, RSS, robots ve yönlendirmeler
 
 `main` branch'i için asgari otomatik kapı: temiz kurulum, lint, test, build ve migration doğrulaması. Bu kontroller geçmeden canlı dağıtım yapılmamalıdır.
@@ -240,7 +241,7 @@ Her özellik için test senaryosu iş ile birlikte yazılır. Canlıya çıkış
 ## 12. Ortamlar ve yayınlama
 
 - **Yerel:** Geliştirici verisi; gerçek kullanıcı veya canlı anahtar içermez.
-- **Staging:** Üretime benzer D1/R2, test alan adı ve yalnızca ekip erişimi.
+- **Staging:** Üretime benzer veritabanı/medya depolama, test alan adı ve yalnızca ekip erişimi.
 - **Production:** Canlı alan adı, ayrı veri kaynakları, sıkı erişim ve alarm kuralları.
 
 Kurulacak dağıtım hattı:
@@ -269,11 +270,11 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 ### Faz 1 — Tasarım sistemi ve gerçek içerik modeli
 
 - [ ] Tasarım token'ları ve ortak bileşen kütüphanesi
-- [ ] Üretim D1 şeması, migration ve seed verisi
+- [ ] Üretim SQLite şeması, migration ve seed verisi
 - [ ] Haber, kategori, etiket, yazar ve medya okuma API'leri
 - [ ] Gerçek verili ana sayfa, haber detayı ve kategori sayfası
 
-**Çıkış kriteri:** Ziyaretçi sitesi prototip sabitlerinden değil D1 verisinden çalışır.
+**Çıkış kriteri:** Ziyaretçi sitesi prototip sabitlerinden değil kalıcı veritabanından çalışır.
 
 ### Faz 2 — Güvenli admin ve yayın akışı
 
@@ -288,7 +289,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 
 - [ ] Haber metadata/schema, sitemap, News sitemap ve RSS
 - [ ] Eski URL 301 haritası ve içerik taşıma aracı
-- [ ] R2 medya hattı, görsel türevleri, telif ve alt metin kontrolleri
+- [ ] Nesne depolama medya hattı, görsel türevleri, telif ve alt metin kontrolleri
 - [ ] Arama, yazar, video/program ve kurumsal sayfalar
 
 **Çıkış kriteri:** İçerik kaybı olmadan indekslenebilir, hızlı ve eksiksiz yayın deneyimi.
@@ -318,7 +319,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 3. Haber durumu/rol/yetki kurallarını kod seviyesinde tanımlamak.
 4. Haber detay, kategori ve yazar detay rotalarını gerçek veriye bağlamak.
 5. Admin girişini ve ilk taslak → inceleme → yayın akışını tamamlamak.
-6. R2 medya binding'ini açıp güvenli görsel yükleme dikey dilimini yapmak.
+6. Nesne depolamayı açıp güvenli görsel yükleme dikey dilimini yapmak.
 7. Haber detay SEO/schema, sitemap ve RSS altyapısını eklemek.
 8. Eski Koza TV URL ve içerik envanterini çıkarıp taşıma tablosunu hazırlamak.
 9. Kaynak toplama için tek bir izinli kaynakla AI haber masası pilotu yapmak.
@@ -331,7 +332,7 @@ Aşağıdaki kararlar uygulama başlamadan veya ilgili faza girerken netleştiri
 - Yönetim paneli için kullanılacak gerçek kimlik sağlayıcısı ve MFA yöntemi
 - Haber kaynaklarının kullanım/telif izinleri ve saklanacak orijinal içerik kapsamı
 - Canlı yayın sağlayıcısı, HLS adresi ve yedek yayın yöntemi
-- R2 medya saklama, arşivleme ve silme süreleri
+- Medya saklama, arşivleme ve silme süreleri
 - Reklam ağı, rıza yönetimi ve ölçüm araçları
 - Eski CMS/veritabanına erişim ve içerik taşıma formatı
 - Jenkins kullanılacaksa job/webhook bilgileri; kullanılmayacaksa alternatif CI/CD sağlayıcısı
