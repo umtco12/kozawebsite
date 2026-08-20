@@ -73,4 +73,6 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-delay 2 http://46.225.169.52/ >/dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 2 http://46.225.169.52/canli >/dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 2 http://46.225.169.52/yazarlar >/dev/null
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://46.225.169.52/admin)" = "404"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://46.225.169.52/admin/giris)" = "200"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://46.225.169.52/admin)" = "307"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://46.225.169.52/api/auth/me)" = "401"

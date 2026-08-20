@@ -536,6 +536,9 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güve
   assert.match(deployScript, /\^\[0-9a-f\]\{40\}\$/);
   assert.match(deployScript, /trap rollback ERR/);
   assert.match(deployScript, /systemctl restart kozatv\.service/);
+  assert.match(deployScript, /api\/auth\/me/);
+  assert.match(workflow, /admin\/giris/);
+  assert.match(workflow, /api\/auth\/me/);
   assert.match(
     deploySudoers,
     /^koza-deploy ALL=\(root\) NOPASSWD: \/usr\/local\/sbin\/kozatv-deploy \*$/m,

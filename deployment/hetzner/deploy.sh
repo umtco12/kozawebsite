@@ -45,7 +45,8 @@ systemctl restart kozatv.service
 
 for attempt in {1..20}; do
   if curl --fail --silent --show-error http://127.0.0.1:8201/ >/dev/null \
-    && curl --fail --silent --show-error http://127.0.0.1:8201/api/content >/dev/null; then
+    && [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8201/api/auth/me)" == "401" ]] \
+    && [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8201/admin)" =~ ^30[2378]$ ]]; then
     trap - ERR
     echo "Koza TV staging sürümü aktif: $release_id"
     exit 0
