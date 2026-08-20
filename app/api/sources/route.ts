@@ -1,13 +1,13 @@
 import { addNewsSource, listNewsSources } from "../../../db";
-import { rejectExternalWrite } from "../write-access";
+import { authorizeAdmin } from "../write-access";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() { return Response.json({ sources: listNewsSources() }); }
+export async function GET(request: Request) { const auth = authorizeAdmin(request, ["admin", "publisher", "editor", "reporter", "viewer"]); if (auth.response) return auth.response; return Response.json({ sources: listNewsSources() }); }
 
 export async function POST(request: Request) {
-  const blocked = rejectExternalWrite(request);
-  if (blocked) return blocked;
+  const auth = authorizeAdmin(request, ["admin", "publisher"]);
+  if (auth.response) return auth.response;
   const payload = await request.json() as { name?: string; url?: string; type?: string };
   if (!payload.name?.trim() || !payload.url?.trim()) return Response.json({ error: "Kaynak adı ve URL zorunlu" }, { status: 400 });
   try {

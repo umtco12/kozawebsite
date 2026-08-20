@@ -10,6 +10,7 @@ import {
   mergeContentRows,
 } from "../app/api/content/content-model.mjs";
 import { slugify, validateArticleInput } from "../db/article-model.mjs";
+import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 process.env.KOZA_DB_PATH = join(
@@ -21,9 +22,14 @@ process.env.KOZA_MEDIA_PATH = join(
   `koza-media-test-${process.pid}-${Date.now()}`,
 );
 process.env.KOZA_MEDIA_QUOTA_BYTES = "100";
+process.env.KOZA_BOOTSTRAP_ADMIN_EMAIL = "admin@koza.test";
+process.env.KOZA_BOOTSTRAP_ADMIN_PASSWORD = "Koza!Test2026Secure";
+process.env.KOZA_BOOTSTRAP_ADMIN_NAME = "Koza Test Yöneticisi";
+process.env.KOZA_BOOTSTRAP_ADMIN_FORCE_CHANGE = "0";
 const port = 32000 + (process.pid % 10000);
 const baseUrl = `http://127.0.0.1:${port}`;
 let productionServer;
+let adminCookie = "";
 
 before(async () => {
   productionServer = spawn(
@@ -44,7 +50,13 @@ before(async () => {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
       const response = await fetch(`${baseUrl}/`);
-      if (response.ok) return;
+      if (response.ok) {
+        const login = await fetch(`${baseUrl}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: process.env.KOZA_BOOTSTRAP_ADMIN_EMAIL, password: process.env.KOZA_BOOTSTRAP_ADMIN_PASSWORD }) });
+        assert.equal(login.status, 200);
+        adminCookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
+        assert.ok(adminCookie.startsWith("koza_admin_session="));
+        return;
+      }
     } catch (error) {
       lastError = error;
     }
@@ -59,8 +71,12 @@ after(() => {
 });
 
 function request(path, init = {}) {
-  return fetch(`${baseUrl}${path}`, init);
+  const headers = new Headers(init.headers);
+  if (adminCookie && !headers.has("cookie")) headers.set("cookie", adminCookie);
+  return fetch(`${baseUrl}${path}`, { ...init, headers });
 }
+
+function anonymousRequest(path, init = {}) { return fetch(`${baseUrl}${path}`, init); }
 
 async function html(path) {
   const response = await request(path, {
@@ -144,7 +160,56 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(body, /Kategoriler/);
   assert.match(body, /Medya Kütüphanesi/);
   assert.match(body, /AI HABER MASASI/);
-  assert.match(body, /Yayın Yönetmeni/);
+  assert.match(body, /Koza Test Yöneticisi/);
+  assert.match(body, /Kullanıcılar/);
+});
+
+test("admin girişi güvenli oturum çerezi üretir ve yetkisiz sayfayı yönlendirir", async () => {
+  const blocked = await anonymousRequest("/admin", { redirect: "manual" });
+  assert.ok([302, 303, 307, 308].includes(blocked.status));
+  assert.equal(blocked.headers.get("location"), "/admin/giris");
+  const loginPage = await anonymousRequest("/admin/giris");
+  assert.equal(loginPage.status, 200);
+  assert.match(await loginPage.text(), /Güvenli giriş yap/);
+  const invalid = await anonymousRequest("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "admin@koza.test", password: "yanlis" }) });
+  assert.equal(invalid.status, 401);
+  const valid = await anonymousRequest("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: process.env.KOZA_BOOTSTRAP_ADMIN_EMAIL, password: process.env.KOZA_BOOTSTRAP_ADMIN_PASSWORD }) });
+  assert.equal(valid.status, 200);
+  const cookie = valid.headers.get("set-cookie") ?? "";
+  assert.match(cookie, /HttpOnly/i);
+  assert.match(cookie, /SameSite=Lax/i);
+  const me = await request("/api/auth/me");
+  assert.equal(me.status, 200);
+  assert.equal((await me.json()).user.role, "admin");
+});
+
+test("parolalar scrypt ile özetlenir ve güçlü parola kuralı uygulanır", () => {
+  assert.match(validatePassword("kisa") ?? "", /12 karakter/);
+  assert.match(validatePassword("yalnizcauzunmetin") ?? "", /büyük harf/);
+  assert.equal(validatePassword("Koza!Guvenli2026"), null);
+  const encoded = hashPassword("Koza!Guvenli2026");
+  assert.match(encoded, /^scrypt\$/);
+  assert.equal(verifyPassword("Koza!Guvenli2026", encoded), true);
+  assert.equal(verifyPassword("Koza!Yanlis2026", encoded), false);
+});
+
+test("rol sistemi ilk parola değişimini zorunlu tutar ve viewer yazma işlemini reddeder", async () => {
+  const temporaryPassword = "Koza!Viewer2026Temp";
+  const nextPassword = "Koza!Viewer2026Kalici";
+  const created = await request("/api/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fullName: "Test Görüntüleyici", email: "viewer@koza.test", role: "viewer", password: temporaryPassword }) });
+  assert.equal(created.status, 201);
+  const login = await anonymousRequest("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "viewer@koza.test", password: temporaryPassword }) });
+  assert.equal(login.status, 200);
+  const viewerCookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
+  const forced = await anonymousRequest("/api/categories", { method: "POST", headers: { "content-type": "application/json", cookie: viewerCookie }, body: JSON.stringify({ name: "Yetkisiz" }) });
+  assert.equal(forced.status, 403);
+  assert.equal((await forced.json()).code, "PASSWORD_CHANGE_REQUIRED");
+  const changed = await anonymousRequest("/api/auth/password", { method: "POST", headers: { "content-type": "application/json", cookie: viewerCookie }, body: JSON.stringify({ currentPassword: temporaryPassword, nextPassword }) });
+  assert.equal(changed.status, 200);
+  const relogin = await anonymousRequest("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "viewer@koza.test", password: nextPassword }) });
+  const permanentCookie = relogin.headers.get("set-cookie")?.split(";")[0] ?? "";
+  const forbidden = await anonymousRequest("/api/categories", { method: "POST", headers: { "content-type": "application/json", cookie: permanentCookie }, body: JSON.stringify({ name: "Yetkisiz" }) });
+  assert.equal(forbidden.status, 403);
 });
 
 test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını doğrular", () => {
@@ -196,12 +261,12 @@ test("haber API geçersiz içerik ve kaynak adreslerini reddeder", async () => {
   assert.equal(source.status, 201);
 });
 
-test("kimlik doğrulama tamamlanana kadar dış haber ve kaynak yazma istekleri kapalıdır", async () => {
+test("oturumsuz haber ve kaynak yazma istekleri kapalıdır", async () => {
   const externalHeaders = { "content-type": "application/json", host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" };
-  const blockedArticle = await request("/api/articles", { method: "POST", headers: externalHeaders, body: "{}" });
-  const blockedSource = await request("/api/sources", { method: "POST", headers: externalHeaders, body: "{}" });
-  assert.equal(blockedArticle.status, 403);
-  assert.equal(blockedSource.status, 403);
+  const blockedArticle = await anonymousRequest("/api/articles", { method: "POST", headers: externalHeaders, body: "{}" });
+  const blockedSource = await anonymousRequest("/api/sources", { method: "POST", headers: externalHeaders, body: "{}" });
+  assert.equal(blockedArticle.status, 401);
+  assert.equal(blockedSource.status, 401);
 });
 
 test("kategoriler admin API üzerinden oluşturulur, sıralanır ve menüden gizlenir", async () => {
@@ -227,8 +292,8 @@ test("kategoriler admin API üzerinden oluşturulur, sıralanır ve menüden giz
 
   const duplicate = await request("/api/categories", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Gündem" }) });
   assert.equal(duplicate.status, 409);
-  const external = await request("/api/categories", { method: "POST", headers: { "content-type": "application/json", host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" }, body: "{}" });
-  assert.equal(external.status, 403);
+  const external = await anonymousRequest("/api/categories", { method: "POST", headers: { "content-type": "application/json", host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" }, body: "{}" });
+  assert.equal(external.status, 401);
 });
 
 test("görseller kalıcı medya alanına doğrulanarak yüklenir ve yeniden sunulur", async () => {
@@ -260,8 +325,8 @@ test("görseller kalıcı medya alanına doğrulanarak yüklenir ve yeniden sunu
   quotaForm.set("file", new Blob([png], { type: "image/png" }), "ikinci.png");
   const quotaExceeded = await request("/api/media", { method: "POST", body: quotaForm });
   assert.equal(quotaExceeded.status, 507);
-  const external = await request("/api/media", { method: "POST", headers: { host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" } });
-  assert.equal(external.status, 403);
+  const external = await anonymousRequest("/api/media", { method: "POST", headers: { host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" } });
+  assert.equal(external.status, 401);
 });
 
 test("haber detay, kategori, sitemap, robots ve RSS keşfedilebilirlik yüzeyleri çalışır", async () => {
@@ -422,7 +487,7 @@ test("canlı haber platformu yol haritası kritik ürün alanlarını kapsar", a
   assert.match(roadmap, /geri yükleme testi/i);
 });
 
-test("Hetzner dağıtım dosyaları servis izolasyonu ve admin koruması sağlar", async () => {
+test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güvenliği sağlar", async () => {
   const [service, caddy, deploymentNotes, workflow, deployScript, deploySudoers] = await Promise.all([
     readFile(
       new URL("deployment/hetzner/kozatv.service", projectRoot),
@@ -457,12 +522,9 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve admin koruması sağlar
   assert.match(service, /KOZA_MEDIA_QUOTA_BYTES=10737418240/);
   assert.match(service, /NoNewPrivileges=true/);
   assert.match(caddy, /kozatv\.com\.tr, www\.kozatv\.com\.tr/);
-  assert.match(caddy, /@admin path \/admin\*/);
-  assert.match(caddy, /respond @content_write 403/);
-  assert.match(caddy, /\/api\/articles\*/);
-  assert.match(caddy, /\/api\/sources\*/);
-  assert.match(caddy, /\/api\/categories\*/);
-  assert.match(caddy, /\/api\/media\*/);
+  assert.match(caddy, /reverse_proxy 127\.0\.0\.1:8201/);
+  assert.doesNotMatch(caddy, /respond @admin 404/);
+  assert.doesNotMatch(caddy, /respond @content_write 403/);
   assert.doesNotMatch(deploymentNotes, /WUg%|Elma258020/);
   assert.match(workflow, /branches: \[main\]/);
   assert.match(workflow, /actions\/checkout@v7/);

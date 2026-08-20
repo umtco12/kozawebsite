@@ -34,7 +34,7 @@ Başarı ölçütleri:
 ### Üretime çıkmadan önce tamamlanması gereken ana boşluklar
 
 - [ ] Gerçek haber veri modeli ve içerik detay rotaları
-- [ ] Güvenli giriş, kullanıcı yönetimi ve rol bazlı yetkilendirme
+- [x] Güvenli giriş, kullanıcı oluşturma ve rol bazlı yetkilendirme
 - [ ] Tam editoryal iş akışı, revizyon geçmişi ve denetim kaydı
 - [ ] Görsel/video yükleme, işleme ve kalıcı medya depolama
 - [ ] Yapay zekâ destekli kaynak toplama ve editör onay kuyruğu
@@ -125,11 +125,12 @@ Mevcut genel `content_items` tablosu prototip içindir. Üretim şeması ilişki
 
 ### Güvenlik ve roller
 
-- [ ] Güvenli kimlik doğrulama sağlayıcısının seçimi ve staging entegrasyonu
-- [ ] Sunucu tarafında oturum ve her API için rol/yetki kontrolü
+- [x] Uygulamaya ait güvenli kimlik doğrulama ve staging entegrasyonu
+- [x] Sunucu tarafında oturum ve her yönetim API'si için rol/yetki kontrolü
+- [x] Yönetici, yayın yönetmeni, editör, muhabir ve görüntüleyici yetki matrisi
 - [ ] Yönetici, yayın yönetmeni, editör, muhabir ve görüntüleyici yetki matrisi
 - [ ] Çok faktörlü giriş, oturum sonlandırma ve şüpheli giriş alarmı
-- [ ] Kullanıcı davet etme, pasife alma ve yetki değişikliği kaydı
+- [ ] Kullanıcı davet etme, pasife alma ve yetki değişikliği kaydı (yönetici tarafından hesap oluşturma tamamlandı)
 
 ### Haber üretim akışı
 
@@ -278,7 +279,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 
 ### Faz 2 — Güvenli admin ve yayın akışı
 
-- [ ] Kimlik doğrulama, roller ve sunucu tarafı izinler
+- [x] Kimlik doğrulama, roller ve sunucu tarafı izinler
 - [ ] Haber editörü, nesne depolama medya yükleme ve önizleme (kalıcı Hetzner medya kütüphanesi ve önizleme tamamlandı; nesne depolama geçişi bekliyor)
 - [x] Taslak, inceleme, onay, zamanlama ve yayın durumları
 - [ ] Revizyon geçmişi ve audit log (audit log temeli tamamlandı)

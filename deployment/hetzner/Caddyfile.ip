@@ -9,14 +9,5 @@
 		-Server
 	}
 
-	@admin path /admin*
-	respond @admin 404
-
-	@content_write {
-		path /api/content /api/articles* /api/sources* /api/categories* /api/media*
-		method PATCH POST PUT DELETE
-	}
-	respond @content_write 403
-
 	reverse_proxy 127.0.0.1:8201
 }

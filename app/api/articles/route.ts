@@ -1,10 +1,12 @@
 import { getArticleStats, listArticles, saveArticle, type ArticleInput, type ArticleStatus } from "../../../db";
 import { validateArticleInput } from "../../../db/article-model.mjs";
-import { rejectExternalWrite } from "../write-access";
+import { authorizeAdmin } from "../write-access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const auth = authorizeAdmin(request, ["admin", "publisher", "editor", "reporter", "viewer"]);
+  if (auth.response) return auth.response;
   const url = new URL(request.url);
   const status = url.searchParams.get("status") as ArticleStatus | null;
   const category = url.searchParams.get("category") || undefined;
@@ -19,14 +21,15 @@ export async function GET(request: Request) {
 }
 
 async function persist(request: Request) {
-  const blocked = rejectExternalWrite(request);
-  if (blocked) return blocked;
   const payload = await request.json();
+  const roles = payload.status === "published" ? ["admin", "publisher"] as const : ["admin", "publisher", "editor", "reporter"] as const;
+  const auth = authorizeAdmin(request, roles);
+  if (auth.response) return auth.response;
   const validation = validateArticleInput(payload);
   if (!validation.valid) return Response.json({ error: "Haber alanlarını kontrol edin", fields: validation.errors }, { status: 400 });
 
   try {
-    return Response.json({ ok: true, article: saveArticle(payload as ArticleInput) }, { status: payload.id ? 200 : 201 });
+    return Response.json({ ok: true, article: saveArticle(payload as ArticleInput, auth.user!.fullName) }, { status: payload.id ? 200 : 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("UNIQUE constraint failed")) return Response.json({ error: "Bu başlık veya URL adıyla bir haber zaten var" }, { status: 409 });

@@ -9,7 +9,7 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 - Kalıcı SQLite verisi `/srv/kozatv/data/koza.sqlite` altında tutulur.
 - Uygulama kodu `/srv/kozatv/current` altında bulunur.
 - `kozatv.service` uygulamayı ayrı ve yetkisiz `kozatv` kullanıcısıyla çalıştırır.
-- Admin kimlik doğrulaması tamamlanıncaya kadar `/admin` ve içerik yazma istekleri Caddy tarafından dışarıya kapatılır.
+- Caddy güvenlik başlıklarını uygular; `/admin` ve yönetim API'leri uygulamanın süreli oturum ve rol kontrolleriyle korunur.
 
 ## Güvenli yayın sırası
 
@@ -17,7 +17,7 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 2. Sunucuda temiz bağımlılık kurulumu, test ve standalone build çalıştır.
 3. `kozatv.service` dosyasını yükle ve yalnızca yerel porttan sağlık kontrolü yap.
 4. Geçici IP Caddy yapılandırmasını doğrula ve etkinleştir.
-5. Ana sayfa, canlı, yazarlar, API ve kapalı admin rotalarını test et.
+5. Ana sayfa, canlı, yazarlar, yetkisiz admin yönlendirmesi, giriş ve rol kontrollerini test et.
 6. DNS `A` kayıtlarını yeni sunucuya yönlendir.
 7. DNS yayıldığında alan adı Caddy yapılandırmasına geç; HTTPS sertifikasını doğrula.
 8. Son canlı kontroller geçtikten sonra eski yayın altyapısını kapat.
@@ -42,7 +42,7 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 
 ## Canlıya çıkmadan önce kalan güvenlik işleri
 
-- Gerçek admin kimlik doğrulaması ve rol bazlı yetkilendirme
+- Çok faktörlü giriş, IP tabanlı giriş hız sınırı ve şüpheli giriş alarmı
 - Hetzner Firewall üzerinde yalnızca 22, 80 ve 443 girişleri
 - SSH root girişinin kapatılması ve ayrı deploy kullanıcısı
 - Otomatik Hetzner backup veya harici şifreli günlük yedek

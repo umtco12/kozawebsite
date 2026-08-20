@@ -214,6 +214,14 @@ Bir iş ancak aşağıdakiler tamamlandığında bitmiş kabul edilir:
 - Doğrulama: `npm test` içinde production build ve **21 test geçti; 0 başarısız, 0 atlandı**. Kategori ekleme/gizleme/sıralama, tekrarlı kategori, dış yazma koruması, geçerli/sahte görsel, medya yeniden sunumu, metadata ve kota sınırı test edildi. `npm run lint` **0 hata** ile tamamlandı. Tarayıcıda kategori merkezi ve medya kütüphanesi masaüstünde; kategori merkezi 390 px mobilde yatay taşma ve kırık görsel olmadan doğrulandı; mobil yönetim menüsünün kaydırma çubuğu gizlendi.
 - Kalan karar veya risk: Admin kimlik doğrulaması tamamlanana kadar staging'de `/admin` ve yazma rotaları dışarıya kapalıdır. İlk aşamada görseller aynı Hetzner sunucusundaki kalıcı veri diskindedir; trafik ve medya hacmi büyüdüğünde aynı metadata modeli korunarak S3 uyumlu nesne depolama/CDN'e taşınmalıdır. Video dosyaları mevcut sunucu diskine yüklenmemelidir.
 
+### 2026-08-20 — Güvenli admin girişi ve rol sistemi
+
+- İstek: Yönetim panelini kullanıcı girişi ve rol sistemiyle güvenli açmak; proje sahibine yönetici rolü tanımlamak.
+- Yapılanlar: Scrypt parola özeti, 12 saatlik hash'lenmiş oturum, `HttpOnly`/`SameSite` çerezi, beş hatalı denemede 15 dakikalık hesap kilidi ve ilk girişte zorunlu parola değişimi eklendi. Yönetici, yayın yönetmeni, editör, muhabir ve görüntüleyici rolleri tüm yönetim API'lerinde sunucu tarafında uygulanır hale getirildi. Yetkisiz `/admin` erişimi girişe yönlendirildi; giriş, parola yenileme ve yöneticiye özel kullanıcı/rol ekranları tasarlandı. İlk yönetici hesabını açık parolayı repoya yazmadan sunucuda oluşturacak araç hazırlandı; Caddy'nin eski toplu engelleri uygulama katmanı yetkilendirmesiyle değiştirildi.
+- Değişen ana dosyalar: `db/index.ts`, `db/auth-model.mjs`, `app/api/auth/*`, `app/api/users/*`, `app/api/write-access.ts`, yönetim API rotaları, `app/admin/*`, `app/globals.css`, `scripts/create-admin.mjs`, `deployment/hetzner/Caddyfile.*`, `tests/rendered-html.test.mjs`, `README.md`, `YAPILACAKLAR.md`, `AGENTS.md`.
+- Doğrulama: `npm test` içinde production build ve **24 test geçti; 0 başarısız, 0 atlandı**. Güvenli çerez, hatalı giriş, zorunlu parola değişimi, viewer yazma engeli, oturumsuz API erişimi ve admin yönlendirmesi test edildi. `npm run lint` **0 hata**, mevcut ham görseller için **21 performans uyarısı** ile tamamlandı. Giriş ekranı 1440, 768 ve 390 px genişliklerde yatay taşma olmadan; iki etiketli giriş alanı ve görünür klavye odağıyla doğrulandı, konsolda hata görülmedi.
+- Kalan karar veya risk: MFA, IP tabanlı rate limit, hesap pasife alma/rol değiştirme, parola sıfırlama e-postası ve şüpheli giriş alarmı sonraki güvenlik adımlarıdır. Staging IP adresi HTTP çalıştığı için `Secure` çerezi alan adı HTTPS geçişinde etkinleşecektir.
+
 ### Yeni günlük kaydı şablonu
 
 Her yeni işte aşağıdaki biçimi kullan:
