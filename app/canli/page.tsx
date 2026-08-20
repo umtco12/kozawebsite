@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function Live(){return <main className="subpage live-page"><div className="subpage-inner"><Link className="back" href="/">← KOZA TV ANA SAYFA</Link><h1>Koza TV Canlı Yayın</h1><p>Konuşma Zamanı — kesintisiz canlı yayın.</p><div className="live-frame"><button aria-label="Canlı yayını başlat">▶</button></div><p>Türksat 3A • 12685 V • Digitürk 614 • D-Smart 108</p></div></main>}
