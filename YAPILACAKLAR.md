@@ -260,8 +260,8 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 
 ### Faz 0 — Temeli güvenceye alma
 
-- [ ] CI/CD sağlayıcısını seç ve `main` kalite kapılarını kur
-- [ ] Staging/canlı ortam ayrımını ve alan adlarını tanımla
+- [x] CI/CD sağlayıcısını seç ve `main` kalite kapılarını kur
+- [x] Staging/canlı ortam ayrımını ve alan adlarını tanımla
 - [ ] Hata izleme, uptime kontrolü ve secret yönetimini kur
 - [ ] Mevcut eski site URL/içerik/medya envanterini çıkar
 
@@ -269,19 +269,19 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 
 ### Faz 1 — Tasarım sistemi ve gerçek içerik modeli
 
-- [ ] Tasarım token'ları ve ortak bileşen kütüphanesi
-- [ ] Üretim SQLite şeması, migration ve seed verisi
+- [x] Tasarım token'ları ve ziyaretçi/admin görsel sistemi
+- [x] Üretim SQLite şeması ve tekrar çalıştırılabilir seed verisi
 - [ ] Haber, kategori, etiket, yazar ve medya okuma API'leri
-- [ ] Gerçek verili ana sayfa, haber detayı ve kategori sayfası
+- [x] Gerçek verili ana sayfa, haber detayı ve kategori sayfası
 
 **Çıkış kriteri:** Ziyaretçi sitesi prototip sabitlerinden değil kalıcı veritabanından çalışır.
 
 ### Faz 2 — Güvenli admin ve yayın akışı
 
 - [ ] Kimlik doğrulama, roller ve sunucu tarafı izinler
-- [ ] Haber editörü, medya yükleme ve önizleme
-- [ ] Taslak, inceleme, onay, zamanlama ve yayın durumları
-- [ ] Revizyon geçmişi ve audit log
+- [ ] Haber editörü, nesne depolama medya yükleme ve önizleme (editör/URL önizleme tamamlandı)
+- [x] Taslak, inceleme, onay, zamanlama ve yayın durumları
+- [ ] Revizyon geçmişi ve audit log (audit log temeli tamamlandı)
 
 **Çıkış kriteri:** Yetkili bir editör haberi güvenle hazırlayıp kontrollü biçimde yayımlayabilir.
 

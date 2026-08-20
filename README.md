@@ -16,6 +16,17 @@ npm run dev
 
 Varsayılan yerel adres `http://localhost:3000` olur.
 
+Başlıca yüzeyler:
+
+- `/`: veritabanından beslenen haber ana sayfası
+- `/haber/[slug]`: NewsArticle yapılandırılmış verili haber detayı
+- `/kategori/[slug]`: kategori arşivi
+- `/admin`: editör masası, haber editörü ve kaynak merkezi (yalnız yerelde; staging'de kimlik doğrulama tamamlanana kadar kapalı)
+- `/api/articles` ve `/api/sources`: doğrulamalı içerik/kaynak API'leri
+- `/sitemap.xml`, `/robots.txt` ve `/rss.xml`: arama motoru ve dağıtım yüzeyleri
+
+Yerel SQLite dosyası varsayılan olarak `data/koza.sqlite` konumunda oluşturulur ve ilk çalıştırmada örnek haber/kaynak verisiyle hazırlanır. Farklı bir konum için `KOZA_DB_PATH` kullanılabilir.
+
 ## Doğrulama
 
 ```bash

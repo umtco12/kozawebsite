@@ -42,18 +42,12 @@ type Lead = {
   title: string;
   summary: string;
   image: string;
+  href?: string;
 };
 
 export function LeadSlider({ items }: { items: Lead[] }) {
-  const [slides, setSlides] = useState(items);
+  const [slides] = useState(items);
   const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    fetch("/api/content")
-      .then((response) => response.json())
-      .then((data) => data.leads?.length && setSlides(data.leads))
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     const id = setInterval(
@@ -71,7 +65,7 @@ export function LeadSlider({ items }: { items: Lead[] }) {
       <div className="lead-shade" />
       <div className="lead-copy">
         <span>{item.category}</span>
-        <h1>{item.title}</h1>
+        <h1><Link href={item.href ?? "#gundem"}>{item.title}</Link></h1>
         <p>{item.summary}</p>
         <time>20 Ağustos 2026 • 14:20</time>
       </div>

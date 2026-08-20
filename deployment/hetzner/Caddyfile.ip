@@ -13,7 +13,7 @@
 	respond @admin 404
 
 	@content_write {
-		path /api/content
+		path /api/content /api/articles* /api/sources*
 		method PATCH POST PUT DELETE
 	}
 	respond @content_write 403

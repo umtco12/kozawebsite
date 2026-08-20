@@ -9,6 +9,7 @@ import {
   isValidContentUpdate,
   mergeContentRows,
 } from "../app/api/content/content-model.mjs";
+import { slugify, validateArticleInput } from "../db/article-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 process.env.KOZA_DB_PATH = join(
@@ -75,9 +76,12 @@ test("ana sayfa Koza TV haber deneyimini sunar", async () => {
   assert.match(body, /<html lang="tr">/i);
   assert.match(body, /<title>Koza TV \| Konuşma Zamanı<\/title>/i);
   assert.match(body, /SON DAKİKA/);
+  assert.match(body, /Günün Akışı/);
+  assert.match(body, /Öne Çıkanlar/);
   assert.match(body, /KÖŞE/);
   assert.match(body, /Gündem/);
   assert.match(body, /Koza TV Ana Haber/);
+  assert.match(body, /href="\/haber\/turkiyenin-gundemi-koza-tv-haber-merkezinde"/);
   assert.match(body, /href="\/canli"/);
   assert.match(body, /href="\/yazarlar"/);
   assert.doesNotMatch(body, /Your site is taking shape|Building your site/i);
@@ -126,12 +130,82 @@ test("yazarlar sayfası yazar listesini ve ana sayfa dönüşünü sunar", async
 test("admin içerik merkezinin temel yayın araçları görünür", async () => {
   const body = await html("/admin");
 
-  assert.match(body, /YÖNETİM PANELİ/);
-  assert.match(body, /İçerik Merkezi/);
-  assert.match(body, /Manşet Slider/);
-  assert.match(body, /Köşe Yazıları/);
-  assert.match(body, /Değişiklikleri Yayınla/);
+  assert.match(body, /İÇERİK MERKEZİ/);
+  assert.match(body, /Haber Masası/);
+  assert.match(body, /Tüm Haberler/);
+  assert.match(body, /Yeni Haber/);
+  assert.match(body, /Kaynak Merkezi/);
+  assert.match(body, /AI HABER MASASI/);
   assert.match(body, /Yayın Yönetmeni/);
+});
+
+test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını doğrular", () => {
+  assert.equal(slugify("İstanbul'da Önemli Gelişme!"), "istanbul-da-onemli-gelisme");
+  const valid = validateArticleInput({ title: "Test için yeterince uzun haber başlığı", spot: "Bu test için yeterince açıklayıcı bir haber spotudur.", body: "Bu haber metni doğrulama sınırını geçmek için yeterince uzun hazırlanmıştır. İkinci cümle içerik alanını tamamlar.", category: "Gündem", status: "draft", sourceUrl: "https://example.com/haber" });
+  assert.equal(valid.valid, true);
+  const invalid = validateArticleInput({ title: "Kısa", spot: "Kısa", body: "Kısa", category: "", status: "published", sourceUrl: "javascript:alert(1)" });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.title);
+  assert.ok(invalid.errors.body);
+});
+
+test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı tutar", async () => {
+  const article = {
+    slug: "", title: "Koza TV otomatik yayın akışı test haberi", spot: "Editör kontrolündeki yayın akışını doğrulayan ayrıntılı test spotu.",
+    body: "Bu içerik önce taslak olarak kaydedilir. Ardından editör tarafından kontrol edilerek yayına alınır. Böylece ziyaretçi sayfası yalnızca onaylanan haberi gösterir.",
+    category: "Teknoloji", status: "draft", heroImage: "/news/studio.jpg", imageAlt: "Koza TV test haber masası", videoUrl: "", author: "Test Editörü", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0,
+  };
+  const created = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(article) });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  assert.equal(createdBody.article.status, "draft");
+  assert.equal(createdBody.article.slug, "koza-tv-otomatik-yayin-akisi-test-haberi");
+
+  const hidden = await html(`/haber/${createdBody.article.slug}`);
+  assert.match(hidden, /Haber bulunamadı/);
+
+  const published = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...createdBody.article, status: "published" }) });
+  assert.equal(published.status, 200);
+  const publishedBody = await published.json();
+  assert.equal(publishedBody.article.status, "published");
+  assert.ok(publishedBody.article.publishedAt);
+
+  const publicPage = await html(`/haber/${publishedBody.article.slug}`);
+  assert.match(publicPage, /Koza TV otomatik yayın akışı test haberi/);
+  assert.match(publicPage, /"@type":"NewsArticle"/);
+  assert.match(publicPage, /Test Editörü/);
+});
+
+test("haber API geçersiz içerik ve kaynak adreslerini reddeder", async () => {
+  const invalidArticle = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "Kısa", status: "draft" }) });
+  assert.equal(invalidArticle.status, 400);
+  const invalidArticleBody = await invalidArticle.json();
+  assert.ok(invalidArticleBody.fields.title);
+
+  const invalidSource = await request("/api/sources", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Güvensiz", url: "javascript:alert(1)" }) });
+  assert.equal(invalidSource.status, 400);
+  const source = await request("/api/sources", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Koza Test Kaynağı", url: "https://example.com/koza-feed", type: "rss" }) });
+  assert.equal(source.status, 201);
+});
+
+test("haber detay, kategori, sitemap, robots ve RSS keşfedilebilirlik yüzeyleri çalışır", async () => {
+  const article = await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde");
+  assert.match(article, /property="og:type" content="article"/i);
+  assert.match(article, /rel="canonical" href="https:\/\/www\.kozatv\.com\.tr\/haber\/turkiyenin-gundemi-koza-tv-haber-merkezinde"/i);
+  assert.match(article, /"@type":"NewsArticle"/);
+  assert.match(article, /Koza TV Haber Merkezi/);
+
+  const category = await html("/kategori/gundem");
+  assert.match(category, /<h1>Gündem<\/h1>/);
+  assert.match(category, /Türkiye'nin gündemi/);
+
+  const sitemap = await request("/sitemap.xml");
+  assert.equal(sitemap.status, 200);
+  assert.match(await sitemap.text(), /\/haber\/turkiyenin-gundemi-koza-tv-haber-merkezinde/);
+  const robots = await request("/robots.txt");
+  assert.match(await robots.text(), /Disallow: \/admin/);
+  const rss = await request("/rss.xml");
+  assert.match(await rss.text(), /<rss version="2.0">/);
 });
 
 test("içerik modeli manşet ve yazar varsayılanlarını sağlar", () => {
@@ -307,6 +381,8 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve admin koruması sağlar
   assert.match(caddy, /kozatv\.com\.tr, www\.kozatv\.com\.tr/);
   assert.match(caddy, /@admin path \/admin\*/);
   assert.match(caddy, /respond @content_write 403/);
+  assert.match(caddy, /\/api\/articles\*/);
+  assert.match(caddy, /\/api\/sources\*/);
   assert.doesNotMatch(deploymentNotes, /WUg%|Elma258020/);
   assert.match(workflow, /branches: \[main\]/);
   assert.match(workflow, /actions\/checkout@v7/);
