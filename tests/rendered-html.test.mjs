@@ -188,6 +188,14 @@ test("haber API geçersiz içerik ve kaynak adreslerini reddeder", async () => {
   assert.equal(source.status, 201);
 });
 
+test("kimlik doğrulama tamamlanana kadar dış haber ve kaynak yazma istekleri kapalıdır", async () => {
+  const externalHeaders = { "content-type": "application/json", host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" };
+  const blockedArticle = await request("/api/articles", { method: "POST", headers: externalHeaders, body: "{}" });
+  const blockedSource = await request("/api/sources", { method: "POST", headers: externalHeaders, body: "{}" });
+  assert.equal(blockedArticle.status, 403);
+  assert.equal(blockedSource.status, 403);
+});
+
 test("haber detay, kategori, sitemap, robots ve RSS keşfedilebilirlik yüzeyleri çalışır", async () => {
   const article = await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde");
   assert.match(article, /property="og:type" content="article"/i);

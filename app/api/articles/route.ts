@@ -1,5 +1,6 @@
 import { getArticleStats, listArticles, saveArticle, type ArticleInput, type ArticleStatus } from "../../../db";
 import { validateArticleInput } from "../../../db/article-model.mjs";
+import { rejectExternalWrite } from "../write-access";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export async function GET(request: Request) {
 }
 
 async function persist(request: Request) {
+  const blocked = rejectExternalWrite(request);
+  if (blocked) return blocked;
   const payload = await request.json();
   const validation = validateArticleInput(payload);
   if (!validation.valid) return Response.json({ error: "Haber alanlarını kontrol edin", fields: validation.errors }, { status: 400 });
