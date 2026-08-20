@@ -309,6 +309,8 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve admin koruması sağlar
   assert.match(caddy, /respond @content_write 403/);
   assert.doesNotMatch(deploymentNotes, /WUg%|Elma258020/);
   assert.match(workflow, /branches: \[main\]/);
+  assert.match(workflow, /actions\/checkout@v7/);
+  assert.match(workflow, /actions\/setup-node@v7/);
   assert.match(workflow, /secrets\.HETZNER_SSH_KEY/);
   assert.match(workflow, /npm audit --omit=dev/);
   assert.match(workflow, /sudo \/usr\/local\/sbin\/kozatv-deploy/);
@@ -321,4 +323,5 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve admin koruması sağlar
     /^koza-deploy ALL=\(root\) NOPASSWD: \/usr\/local\/sbin\/kozatv-deploy \*$/m,
   );
   assert.doesNotMatch(deploySudoers, /ALL=\(ALL(?::ALL)?\) NOPASSWD: ALL/);
+  assert.match(deploymentNotes, /yalnız `kozatv` grubuna üyedir/);
 });

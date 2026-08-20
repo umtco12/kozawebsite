@@ -27,6 +27,7 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 - `.github/workflows/staging.yml`, `main` branch'ine her push sonrasında çalışır.
 - GitHub runner önce temiz kurulum, üretim bağımlılık denetimi, test/build ve lint yapar.
 - Başarılı kaynak kodu yalnız SSH host anahtarı doğrulanarak `koza-deploy` kullanıcısına aktarılır.
+- `koza-deploy`, `/srv/kozatv` yolunu geçebilmek için yalnız `kozatv` grubuna üyedir; `incoming` dizininin sahibi olmaya devam eder.
 - Root tarafından sahip olunan `/usr/local/sbin/kozatv-deploy` yeni sürümü sunucuda tekrar test eder.
 - `koza-deploy` yalnızca bu doğrulamalı deploy komutunu parolasız çalıştırabilir; genel root yetkisi yoktur.
 - Aktif sürüm sembolik bağlantıyla atomik değiştirilir; sağlık kontrolü başarısızsa önceki sürüme dönülür.
