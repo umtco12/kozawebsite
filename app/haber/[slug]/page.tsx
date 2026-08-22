@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getArticleBySlug, listCategories, listPublishedArticles } from "../../../db";
 import { slugify } from "../../../db/article-model.mjs";
+import { redirectIfMapped } from "../../legacy-redirect";
 import { SiteFooter, SiteHeader } from "../../site-chrome";
 import { ArticleBlocks } from "./article-blocks";
 import { ShareButtons } from "./share-buttons";
@@ -23,7 +24,7 @@ export default async function ArticlePage({ params }: Props) {
   const { slug } = await params; const article = getArticleBySlug(slug);
   const navItems = listCategories(true).map(({ id, name, slug: categorySlug }) => ({ id, name, slug: categorySlug }));
 
-  if (!article) notFound();
+  if (!article) { redirectIfMapped(`/haber/${slug}`); notFound(); }
 
   const related = listPublishedArticles(12).filter((item) => item.id !== article.id && item.category === article.category).slice(0, 3);
   const categoryHref = `/kategori/${slugify(article.category)}`;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAuthorBySlug, listArticlesByAuthor } from "../../../db";
+import { redirectIfMapped } from "../../legacy-redirect";
 import { SiteFooter, SiteHeader, navCategories } from "../../site-chrome";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function AuthorPage({ params }: Props) {
   const categories = navCategories();
   const author = getAuthorBySlug(slug);
 
-  if (!author) notFound();
+  if (!author) { redirectIfMapped(`/yazar/${slug}`); notFound(); }
 
   const articles = listArticlesByAuthor(author.name, 40);
   const jsonLd = { "@context": "https://schema.org", "@type": "Person", name: author.name, url: `https://www.kozatv.com.tr/yazar/${author.slug}`, worksFor: { "@type": "Organization", name: "Koza TV" } };

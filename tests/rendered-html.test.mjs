@@ -12,6 +12,7 @@ import {
 } from "../app/api/content/content-model.mjs";
 import { slugify, validateArticleInput } from "../db/article-model.mjs";
 import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
+import { normalizePath, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -776,4 +777,166 @@ test("gezinme bağlantıları çerçeveye bağlı olmayan gerçek bağlantılard
   for (const path of ["/son-dakika", "/kategori/gundem", "/kategori/ekonomi", "/videolar", "/yazarlar", "/canli"]) {
     assert.ok(navLinks.includes(path), `${path} ana sayfada <a href> olarak yer almalı`);
   }
+});
+
+test("site ayarları modeli adres, e-posta ve yayın akışı kurallarını uygular", () => {
+  const good = validateSettings({ liveHlsUrl: "https://yayin.example.com/koza.m3u8", newsEmail: "Haber@KozaTV.com.tr", satelliteInfo: "Türksat 3A", showMarketTicker: false });
+  assert.equal(good.valid, true);
+  assert.equal(good.values.newsEmail, "haber@kozatv.com.tr");
+  assert.equal(good.values.showMarketTicker, "0");
+
+  const bad = validateSettings({ liveHlsUrl: "javascript:alert(1)", newsEmail: "gecersiz", socialX: "ftp://x.com/koza" });
+  assert.equal(bad.valid, false);
+  assert.ok(bad.errors.liveHlsUrl);
+  assert.ok(bad.errors.newsEmail);
+  assert.ok(bad.errors.socialX);
+
+  const schedule = normalizeSchedule([{ time: "19:00", title: "Ana Haber", host: "Merkez" }, { time: "7:5", title: "Bozuk" }, { time: "07:00", title: "Günaydın", host: "" }]);
+  assert.deepEqual(schedule.map((row) => row.time), ["07:00", "19:00"], "Geçersiz saat atılmalı ve sıralanmalı");
+  assert.equal(validateSettings({ broadcastSchedule: [{ time: "bozuk", title: "x" }] }).valid, false);
+});
+
+test("yönlendirme modeli adresleri tek biçime indirir ve korumalı yolları reddeder", () => {
+  assert.equal(normalizePath("https://kozatv.com.tr/Haber/Eski-Adres/"), "/haber/eski-adres");
+  assert.equal(normalizePath("haber/x?utm=1#bolum"), "/haber/x");
+  assert.equal(validateRedirect({ fromPath: "/admin/panel", toPath: "/" }).valid, false, "Yönetim yolu yönlendirilemez");
+  assert.equal(validateRedirect({ fromPath: "/api/x", toPath: "/" }).valid, false);
+  assert.equal(validateRedirect({ fromPath: "/", toPath: "/haber/x" }).valid, false, "Ana sayfa yönlendirilemez");
+  assert.equal(validateRedirect({ fromPath: "/eski", toPath: "/eski" }).valid, false, "Kendine yönlendirme olmaz");
+  assert.equal(validateRedirect({ fromPath: "/eski/spor", toPath: "/kategori/spor" }).valid, true);
+
+  const inventory = parseRedirectInventory("/eski/a, /haber/a\nhttps://kozatv.com.tr/eski/b /kategori/spor\n# yorum satırı\nbozuk-satır\nbozuk satır\nnot: burada iki kelime var\n/eski/a, /haber/tekrar");
+  assert.equal(inventory.rows.length, 2);
+  assert.equal(inventory.invalid.length, 3, "Serbest metin satırları eşleme sayılmamalı");
+  assert.equal(inventory.duplicates, 1);
+  assert.ok(inventory.rows.every((row) => row.fromPath.startsWith("/") && row.toPath.startsWith("/")));
+});
+
+test("site ayarları panelden kaydedilir ve ziyaretçi sayfalarına yansır", async () => {
+  const payload = {
+    liveHlsUrl: "https://yayin.example.com/kozatv/index.m3u8",
+    liveBackupUrl: "https://yedek.example.com/kozatv.m3u8",
+    satelliteInfo: "Türksat 4A • 11919 H",
+    platformInfo: "Digitürk 615 • D-Smart 109",
+    socialX: "https://x.com/kozatvtest",
+    legalName: "Koza Medya Yayıncılık A.Ş.",
+    responsibleManager: "Test Sorumlu Müdür",
+    address: "Test Yayın Merkezi, Ankara",
+    contactEmail: "iletisim@kozatv.test",
+    newsEmail: "haber@kozatv.test",
+    broadcastSchedule: [{ time: "20:00", title: "Test Ana Haber", host: "Test Merkez" }],
+  };
+  const saved = await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).settings.liveHlsUrl, payload.liveHlsUrl);
+
+  const live = await html("/canli");
+  assert.match(live, /Türksat 4A/, "Uydu bilgisi ayarlardan gelmeli");
+  assert.match(live, /Test Ana Haber/, "Yayın akışı ayarlardan gelmeli");
+  assert.match(live, /kozatv\/index\.m3u8/, "Oynatıcı tanımlı yayın adresini kullanmalı");
+  assert.doesNotMatch(live, /YAYIN KAYNAĞI TANIMLI DEĞİL/, "Adres tanımlıyken kesinti ekranı gösterilmemeli");
+
+  const kunye = await html("/kurumsal/kunye");
+  assert.match(kunye, /Koza Medya Yayıncılık A\.Ş\./);
+  assert.match(kunye, /Test Sorumlu Müdür/);
+
+  const contact = await html("/kurumsal/iletisim");
+  assert.match(contact, /haber@kozatv\.test/);
+
+  const home = await html("/");
+  assert.match(home, /href="https:\/\/x\.com\/kozatvtest"/, "Tanımlı sosyal hesap bağlantı olmalı");
+  assert.match(home, /Türksat 4A/);
+
+  const invalid = await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ liveHlsUrl: "javascript:alert(1)" }) });
+  assert.equal(invalid.status, 400);
+  assert.ok((await invalid.json()).fields.liveHlsUrl);
+
+  const anonymous = await anonymousRequest("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ liveHlsUrl: "" }) });
+  assert.equal(anonymous.status, 401, "Oturumsuz ayar değişikliği kapalı olmalı");
+});
+
+test("eski adresler panelden eşlenir ve ziyaretçiyi kalıcı olarak yeni adrese gönderir", async () => {
+  const created = await request("/api/redirects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fromPath: "/eski/ekonomi-sayfasi", toPath: "/kategori/ekonomi", note: "Eski site taşıması" }) });
+  assert.equal(created.status, 201);
+
+  const hop = await request("/eski/ekonomi-sayfasi", { redirect: "manual" });
+  assert.ok([301, 308].includes(hop.status), `Kalıcı yönlendirme beklenir, gelen: ${hop.status}`);
+  assert.match(hop.headers.get("location") ?? "", /\/kategori\/ekonomi$/);
+
+  /* Var olan dinamik rotanın altındaki eski adres de taşınabilmeli. */
+  const legacyArticle = await request("/api/redirects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fromPath: "/haber/eski-piyasa-haberi", toPath: "/haber/piyasalar-yeni-karara-odaklandi" }) });
+  assert.equal(legacyArticle.status, 201);
+  const articleHop = await request("/haber/eski-piyasa-haberi", { redirect: "manual" });
+  assert.ok([301, 308].includes(articleHop.status), `Haber yolunda yönlendirme beklenir, gelen: ${articleHop.status}`);
+
+  /* Büyük harf aynı eşlemeye düşer; sondaki eğik çizgi çerçevenin kendi adımından sonra hedefe varır. */
+  const upperCase = await request("/Eski/Ekonomi-Sayfasi", { redirect: "manual" });
+  assert.ok([301, 308].includes(upperCase.status), "Büyük harfli eski adres de yönlenmeli");
+  assert.match(upperCase.headers.get("location") ?? "", /\/kategori\/ekonomi$/);
+  const withSlash = await request("/Eski/Ekonomi-Sayfasi/", { redirect: "follow" });
+  assert.equal(withSlash.status, 200);
+  assert.match(withSlash.url, /\/kategori\/ekonomi$/, "Sondaki eğik çizgili adres de hedefe varmalı");
+
+  const inventory = await request("/api/redirects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ inventory: "/eski/spor, /kategori/spor\n/eski/dunya, /kategori/dunya\nbozuk" }) });
+  assert.equal(inventory.status, 201);
+  const inventoryBody = await inventory.json();
+  assert.equal(inventoryBody.created, 2);
+  assert.equal(inventoryBody.invalid.length, 1);
+
+  const check = await request("/api/redirects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "check" }) });
+  assert.equal(check.status, 200);
+  const checkBody = await check.json();
+  assert.ok(checkBody.checked >= 4);
+  assert.deepEqual(checkBody.broken, [], "Tanımlı hedeflerin tamamı açılmalı");
+
+  const listed = await (await request("/api/redirects")).json();
+  const record = listed.redirects.find((item) => item.fromPath === "/eski/ekonomi-sayfasi");
+  assert.ok(record.hits >= 2, "Kullanım sayacı artmalı");
+
+  const stopped = await request("/api/redirects", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: record.id, active: false }) });
+  assert.equal(stopped.status, 200);
+  const afterStop = await request("/eski/ekonomi-sayfasi", { redirect: "manual", headers: { accept: "text/html" } });
+  assert.equal(afterStop.status, 404, "Durdurulan eşleme yönlendirmemeli");
+
+  const removed = await request(`/api/redirects?id=${record.id}`, { method: "DELETE" });
+  assert.equal(removed.status, 200);
+
+  const anonymous = await anonymousRequest("/api/redirects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fromPath: "/x", toPath: "/y" }) });
+  assert.equal(anonymous.status, 401);
+});
+
+test("piyasa göstergesi sunucu tarafından okunur ve veri yoksa uydurma değer üretmez", async () => {
+  const response = await request("/api/piyasa");
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(typeof data.ok, "boolean");
+  if (data.ok) {
+    assert.ok(Array.isArray(data.rates));
+    for (const rate of data.rates) {
+      assert.match(rate.value, /^\d{1,3}(\.\d{3})*,\d{2}$/, "Kur değeri Türkçe biçimde olmalı");
+      assert.ok(["USD", "EUR", "GBP"].includes(rate.code));
+    }
+    if (data.rates.length) assert.equal(data.rateSource, "TCMB", "Kur kaynağı belirtilmeli");
+  } else {
+    assert.deepEqual(data.rates, [], "Veri yoksa kur listesi boş olmalı");
+  }
+
+  /* Sabit kur değerleri koddan kaldırılmış olmalı. */
+  const client = await readFile(new URL("../app/site-client.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(client, /41,12|48,06|55,74/, "Üst bantta sabit kur değeri kalmamalı");
+  assert.doesNotMatch(client, /frankfurter/, "Kur isteği tarayıcıdan üçüncü tarafa gitmemeli");
+});
+
+test("operasyon kurgusu izleme, kurtarma hedefi ve canlıya geçiş kapılarını tanımlar", async () => {
+  const plan = await readFile(new URL("../deployment/OPERASYON.md", import.meta.url), "utf8");
+  for (const heading of ["İzleme kurgusu", "Olay müdahale akışı", "Yedekleme ve kurtarma hedefleri", "Canlıya geçiş kontrol listesi"]) {
+    assert.ok(plan.includes(heading), `${heading} bölümü bulunmalı`);
+  }
+  assert.match(plan, /RPO/, "Kabul edilebilir veri kaybı hedefi yazılmalı");
+  assert.match(plan, /RTO/, "Ayağa kalkma süresi hedefi yazılmalı");
+  assert.match(plan, /aynı sunucuda/, "Yedeklerin tek lokasyonda olduğu riski açıkça yazılmalı");
+  assert.match(plan, /P1/, "Alarm seviyeleri tanımlanmalı");
+  const addresses = plan.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? [];
+  assert.deepEqual(addresses.filter((address) => address !== "127.0.0.1"), [], "Ortak dokümanda dış sunucu adresi paylaşılmamalı");
+  assert.doesNotMatch(plan, /(parola|şifre|password|token|secret)\s*[:=]\s*\S/i, "Operasyon dokümanında gizli değer yazılmamalı");
 });

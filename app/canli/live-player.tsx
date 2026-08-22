@@ -2,10 +2,12 @@
 
 import { useRef, useState } from "react";
 
-/* Yayın kaynağı tanımlanmadıysa oynatıcı sahte bir yayın göstermez; kesinti ekranı gösterilir. */
-export function LivePlayer({ src, poster }: { src: string; poster: string }) {
+/* Yayın kaynağı tanımlanmadıysa oynatıcı sahte bir yayın göstermez; kesinti ekranı gösterilir.
+   Ana kaynak açılmazsa yönetim panelinde tanımlı yedek kaynağa geçilir. */
+export function LivePlayer({ src, backupSrc = "", poster }: { src: string; backupSrc?: string; poster: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
+  const [usingBackup, setUsingBackup] = useState(false);
   const [failed, setFailed] = useState(false);
 
   if (!src) {
@@ -15,11 +17,13 @@ export function LivePlayer({ src, poster }: { src: string; poster: string }) {
         <div>
           <span>YAYIN KAYNAĞI TANIMLI DEĞİL</span>
           <strong>Web canlı yayın adresi henüz sisteme girilmedi.</strong>
-          <p>Yayın sağlayıcısından alınan HLS adresi tanımlandığında bu alan gerçek oynatıcıya döner. Şu anda uydu ve platform üzerinden izlemeye devam edebilirsiniz.</p>
+          <p>Yönetim panelindeki Site Ayarları ekranına canlı yayın HLS adresi girildiğinde bu alan gerçek oynatıcıya döner. Şu anda uydu ve platform üzerinden izlemeye devam edebilirsiniz.</p>
         </div>
       </div>
     );
   }
+
+  const activeSrc = usingBackup ? backupSrc : src;
 
   async function start() {
     setFailed(false);
@@ -27,17 +31,28 @@ export function LivePlayer({ src, poster }: { src: string; poster: string }) {
     try {
       await videoRef.current?.play();
     } catch {
-      setFailed(true);
+      handleFailure();
     }
+  }
+
+  /* Ana kaynak açılmazsa bir kez yedek kaynağa geçilir; o da açılmazsa okura durum bildirilir. */
+  function handleFailure() {
+    if (!usingBackup && backupSrc) {
+      setUsingBackup(true);
+      window.setTimeout(() => { void videoRef.current?.play().catch(() => setFailed(true)); }, 100);
+      return;
+    }
+    setFailed(true);
   }
 
   return (
     <div className="live-frame">
-      <video ref={videoRef} poster={poster} controls={started} playsInline preload="none" onError={() => setFailed(true)}>
-        <source src={src} type="application/vnd.apple.mpegurl" />
+      <video ref={videoRef} key={activeSrc} poster={poster} controls={started} playsInline preload="none" onError={handleFailure}>
+        <source src={activeSrc} type="application/vnd.apple.mpegurl" />
         <track kind="captions" src="/empty-captions.vtt" srcLang="tr" label="Altyazı yok" default />
       </video>
       {!started && <button onClick={start} aria-label="Canlı yayını başlat">▶</button>}
+      {usingBackup && !failed && <p className="live-note" role="status">Yedek yayın kaynağı kullanılıyor.</p>}
       {failed && <p className="live-error" role="alert">Yayın şu anda açılamadı. Sayfayı yenileyebilir veya uydu/platform üzerinden izlemeye devam edebilirsiniz.</p>}
     </div>
   );

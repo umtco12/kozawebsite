@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { slugify } from "./article-model.mjs";
 import { hashPassword, verifyPassword } from "./auth-model.mjs";
+import { defaultSettings, normalizePath, normalizeSchedule, scheduleDefault } from "./settings-model.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
@@ -55,6 +56,14 @@ function ensureSchema(db: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS idx_comments_article_created ON article_comments(article_id,created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_workflow_events_article ON workflow_events(article_id,created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS site_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '');
+    CREATE TABLE IF NOT EXISTS redirects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, from_path TEXT NOT NULL UNIQUE, to_path TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'permanent' CHECK (kind IN ('permanent','temporary')), note TEXT NOT NULL DEFAULT '',
+      active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)), hits INTEGER NOT NULL DEFAULT 0, last_hit_at INTEGER,
+      last_check_status INTEGER, last_checked_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_redirects_active ON redirects(active, from_path);
   `);
   ensureColumn(db, "articles", "content_blocks", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "articles", "workflow_state", "TEXT NOT NULL DEFAULT 'reporter_draft'");
@@ -204,4 +213,96 @@ export function updateAdminUser(id: number, changes: { role?: AdminRole; active?
     db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('admin_user',?,'update',?,?,?)").run(id, actor.fullName, JSON.stringify({ fromRole: target.role, toRole: nextRole, fromActive: Number(target.active), toActive: nextActive ? 1 : 0 }), now);
   })();
   return getAdminUserById(id)!;
+}
+
+/* Site ayarları: yönetim panelinden düzenlenir, ziyaretçi sitesi ve kurumsal sayfalar buradan okur. */
+export type SiteSettings = Record<string, string> & { broadcastSchedule: string };
+export type ScheduleRow = { time: string; title: string; host: string };
+
+export function getSiteSettings(): SiteSettings {
+  const stored = getDb().prepare("SELECT key, value FROM site_settings").all() as { key: string; value: string }[];
+  const values = defaultSettings() as SiteSettings;
+  for (const row of stored) if (row.key in values) values[row.key] = row.value;
+  return values;
+}
+
+export function getBroadcastSchedule(): ScheduleRow[] {
+  try {
+    const parsed = JSON.parse(getSiteSettings().broadcastSchedule);
+    const rows = normalizeSchedule(parsed);
+    return rows.length ? rows : scheduleDefault;
+  } catch {
+    return scheduleDefault;
+  }
+}
+
+export function saveSiteSettings(values: Record<string, string>, actor = "Sistem") {
+  const db = getDb();
+  const now = Date.now();
+  const entries = Object.entries(values);
+  if (!entries.length) return getSiteSettings();
+  db.transaction(() => {
+    const statement = db.prepare("INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at, updated_by=excluded.updated_by");
+    for (const [key, value] of entries) statement.run(key, value, now, actor);
+    db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('site_settings',0,'update',?,?,?)").run(actor, JSON.stringify({ keys: entries.map(([key]) => key) }), now);
+  })();
+  return getSiteSettings();
+}
+
+/* Eski adres yönlendirmeleri: taşınan URL değerinin kaybedilmemesi için. */
+export type RedirectRecord = { id: number; fromPath: string; toPath: string; kind: "permanent" | "temporary"; note: string; active: number; hits: number; lastHitAt: number | null; lastCheckStatus: number | null; lastCheckedAt: number | null; createdAt: number; updatedAt: number };
+
+function mapRedirect(row: Record<string, unknown>): RedirectRecord {
+  return { id: Number(row.id), fromPath: String(row.from_path), toPath: String(row.to_path), kind: row.kind as "permanent" | "temporary", note: String(row.note), active: Number(row.active), hits: Number(row.hits), lastHitAt: row.last_hit_at == null ? null : Number(row.last_hit_at), lastCheckStatus: row.last_check_status == null ? null : Number(row.last_check_status), lastCheckedAt: row.last_checked_at == null ? null : Number(row.last_checked_at), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) };
+}
+
+export function listRedirects(limit = 200) {
+  return (getDb().prepare("SELECT * FROM redirects ORDER BY active DESC, hits DESC, from_path LIMIT ?").all(Math.min(Math.max(limit, 1), 500)) as Record<string, unknown>[]).map(mapRedirect);
+}
+
+export function saveRedirect(input: { id?: number; fromPath: string; toPath: string; kind: "permanent" | "temporary"; note?: string; active?: number | boolean }, actor = "Sistem") {
+  const db = getDb();
+  const now = Date.now();
+  const active = input.active === undefined ? 1 : input.active ? 1 : 0;
+  const row = { fromPath: input.fromPath, toPath: input.toPath, kind: input.kind, note: input.note ?? "", active, now };
+  let id: number;
+  if (input.id) {
+    db.prepare("UPDATE redirects SET from_path=@fromPath,to_path=@toPath,kind=@kind,note=@note,active=@active,updated_at=@now WHERE id=@id").run({ ...row, id: input.id });
+    id = input.id;
+  } else {
+    const inserted = db.prepare("INSERT INTO redirects (from_path,to_path,kind,note,active,hits,created_at,updated_at) VALUES (@fromPath,@toPath,@kind,@note,@active,0,@now,@now) ON CONFLICT(from_path) DO UPDATE SET to_path=excluded.to_path,kind=excluded.kind,note=excluded.note,active=excluded.active,updated_at=excluded.updated_at RETURNING id").get(row) as { id: number };
+    id = Number(inserted.id);
+  }
+  db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('redirect',?,?,?,?,?)").run(id, input.id ? "update" : "create", actor, JSON.stringify({ from: input.fromPath, to: input.toPath, kind: input.kind }), now);
+  return mapRedirect(db.prepare("SELECT * FROM redirects WHERE id=?").get(id) as Record<string, unknown>);
+}
+
+export function saveRedirectBatch(rows: { fromPath: string; toPath: string; kind: "permanent" | "temporary"; note?: string }[], actor = "Sistem") {
+  let created = 0;
+  for (const row of rows) { saveRedirect(row, actor); created += 1; }
+  return created;
+}
+
+export function deleteRedirect(id: number, actor = "Sistem") {
+  const db = getDb();
+  const existing = db.prepare("SELECT from_path FROM redirects WHERE id=?").get(id) as { from_path: string } | undefined;
+  if (!existing) return false;
+  db.prepare("DELETE FROM redirects WHERE id=?").run(id);
+  db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('redirect',?,'delete',?,?,?)").run(id, actor, JSON.stringify({ from: existing.from_path }), Date.now());
+  return true;
+}
+
+export function findRedirect(path: string) {
+  const normalized = normalizePath(path);
+  if (!normalized) return null;
+  const row = getDb().prepare("SELECT * FROM redirects WHERE from_path=? AND active=1").get(normalized) as Record<string, unknown> | undefined;
+  return row ? mapRedirect(row) : null;
+}
+
+export function recordRedirectHit(id: number) {
+  getDb().prepare("UPDATE redirects SET hits=hits+1, last_hit_at=? WHERE id=?").run(Date.now(), id);
+}
+
+export function recordRedirectCheck(id: number, status: number) {
+  getDb().prepare("UPDATE redirects SET last_check_status=?, last_checked_at=? WHERE id=?").run(status, Date.now(), id);
 }

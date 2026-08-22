@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCategoryBySlug, listArticles, listCategories } from "../../../db";
+import { redirectIfMapped } from "../../legacy-redirect";
 import { SiteFooter, SiteHeader } from "../../site-chrome";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ export default async function CategoryPage({ params }: Props) {
   const navItems = listCategories(true).map(({ id, name, slug: categorySlug }) => ({ id, name, slug: categorySlug }));
   const category = getCategoryBySlug(slug);
 
-  if (!category) notFound();
+  if (!category) { redirectIfMapped(`/kategori/${slug}`); notFound(); }
 
   const articles = listArticles({ status: "published", category: category.name, limit: 30 });
 

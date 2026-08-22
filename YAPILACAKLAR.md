@@ -40,7 +40,7 @@ Başarı ölçütleri:
 - [ ] Yapay zekâ destekli kaynak toplama ve editör onay kuyruğu
 - [ ] Arama, kategori, etiket, arşiv, video ve program sayfaları (arama, kategori, video ve yazar arşivi tamamlandı; etiket ve program sayfaları bekliyor)
 - [ ] Haber bazlı yapılandırılmış veri, sitemap, RSS ve Google News gereksinimleri
-- [ ] İzleme, hata alarmı, yedekleme, güvenlik ve trafik/yük testleri
+- [ ] İzleme, hata alarmı, yedekleme, güvenlik ve trafik/yük testleri (operasyon kurgusu `deployment/OPERASYON.md` içinde tanımlandı)
 - [ ] Staging ve canlı ortam için otomatik test/dağıtım hattı
 
 ## 3. Hedef teknik mimari
@@ -78,14 +78,14 @@ Mevcut genel `content_items` tablosu prototip içindir. Üretim şeması ilişki
 | `breaking_news` | Son dakika metni, bağlantısı, başlangıç/bitiş zamanı ve önceliği |
 | `live_streams` | HLS kaynağı, yayın durumu, yedek kaynak ve program bilgisi |
 | `programs`, `episodes` | TV programı, bölüm, sunucu ve video arşivi |
-| `redirects` | Eski URL'den yeni URL'ye 301 eşlemesi |
+| `redirects` | Eski URL'den yeni URL'ye 301 eşlemesi (tamamlandı) |
 | `ai_sources` | Kaynak URL/RSS, izin durumu, çekme sıklığı ve aktiflik |
 | `ingestion_jobs` | Kaynak çekme görevi, sonuç, hata, süre ve tekrar deneme |
 | `story_candidates` | Toplanan haber adayı, orijinal kaynak ve editörlük durumu |
 | `content_checks` | Kaynak, benzerlik, telif, doğruluk ve moderasyon sonuçları |
 | `scheduled_publications` | Zamanlanmış yayın/geri çekme görevleri |
 | `audit_logs` | Değiştirilemez nitelikte kullanıcı, işlem, hedef ve zaman kaydı |
-| `site_settings` | Logo, iletişim, sosyal hesap, reklam ve yayın ayarları |
+| `site_settings` | İletişim, sosyal hesap, künye ve yayın ayarları (tamamlandı) |
 
 ### Veri kuralları
 
@@ -107,7 +107,7 @@ Mevcut genel `content_items` tablosu prototip içindir. Üretim şeması ilişki
 - [ ] Etiket/konu sayfası ve haber arşivi
 - [x] Yazar listesi ve yazar profil/yazı arşivi
 - [ ] Video merkezi, program ve bölüm detayları (video merkezi tamamlandı; program/bölüm bekliyor)
-- [ ] Canlı yayın: yayın programı ve kesinti ekranı tamamlandı; gerçek HLS adresi ve yedek kaynak bekliyor
+- [x] Canlı yayın: yayın programı, kesinti ekranı, panelden HLS ve yedek kaynak tanımı (yayın adresi müşteriden bekleniyor)
 - [x] Site içi arama: boş sonuç ve popüler haber önerileri (yazım hatası toleransı sonraki adım)
 - [x] Kurumsal sayfalar: hakkımızda, yayın ilkeleri, künye, iletişim, KVKK, gizlilik ve çerez politikası
 - [ ] Özel 404, 410 ve bakım/kesinti ekranları (özel 404 tamamlandı)
@@ -201,7 +201,7 @@ AI sistemi otomatik yayıncı değil, editör yardımcısı olacaktır.
 - [ ] Son 48 saat haberlerini içeren Google News sitemap
 - [ ] RSS akışları: genel, kategori ve yazar bazlı
 - [ ] Robots kuralları; admin, önizleme, arama parametreleri ve taslakların indeks dışı tutulması
-- [ ] Eski siteden URL envanteri, 301 eşleme tablosu ve kırık bağlantı taraması
+- [x] Eski siteden URL envanteri, 301 eşleme tablosu ve kırık bağlantı taraması (panelden yönetilir; envanter verisi bekleniyor)
 - [ ] İç bağlantı, ilgili haber, breadcrumb ve konu kümeleri
 - [ ] Görsel SEO: anlamlı dosya/alt metin, boyut, telif ve image sitemap
 - [ ] Core Web Vitals bütçeleri: LCP ≤ 2,5 sn, INP ≤ 200 ms, CLS ≤ 0,1 hedefi
@@ -221,7 +221,7 @@ SEO başlığı üretmek tek başına yeterli değildir. Yayın hızı, özgünl
 - [ ] Günlük otomatik veri yedeği, medya sürümleme ve aylık geri yükleme testi
 - [ ] Kritik yayın, giriş, görev ve canlı yayın hataları için alarm
 - [ ] Bağımlılık, erişim anahtarı ve kullanıcı yetkilerinin düzenli gözden geçirilmesi
-- [ ] Olay müdahale planı ve bakım modu
+- [ ] Olay müdahale planı tanımlandı; bakım modu ekranı bekliyor
 
 ## 11. Test ve kalite kapıları
 
@@ -263,8 +263,8 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 
 - [x] CI/CD sağlayıcısını seç ve `main` kalite kapılarını kur
 - [x] Staging/canlı ortam ayrımını ve alan adlarını tanımla
-- [ ] Hata izleme, uptime kontrolü ve secret yönetimini kur
-- [ ] Mevcut eski site URL/içerik/medya envanterini çıkar
+- [ ] Hata izleme, uptime kontrolü ve secret yönetimini kur (kurgu hazır; araç ve hesap kararı bekliyor)
+- [ ] Mevcut eski site URL/içerik/medya envanterini çıkar (aktarım ekranı hazır; envanter verisi bekleniyor)
 
 **Çıkış kriteri:** Her commit otomatik test edilir; staging güvenli biçimde dağıtılabilir.
 
@@ -289,7 +289,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 ### Faz 3 — SEO, taşıma ve medya
 
 - [ ] Haber metadata/schema, sitemap, News sitemap ve RSS
-- [ ] Eski URL 301 haritası ve içerik taşıma aracı
+- [ ] Eski URL 301 haritası panelden yönetilir; içerik taşıma aracı bekliyor
 - [ ] Nesne depolama medya hattı, görsel türevleri, telif ve alt metin kontrolleri (alt metin, kredi, dosya doğrulama ve disk kotası tamamlandı)
 - [ ] Arama, yazar, video/program ve kurumsal sayfalar
 
@@ -306,7 +306,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 
 ### Faz 5 — Canlı yayın, büyüme ve üretim sertleştirme
 
-- [ ] Gerçek HLS ve yedek yayın entegrasyonu
+- [ ] Gerçek HLS ve yedek yayın entegrasyonu (panel alanları hazır; yayın adresi bekleniyor)
 - [ ] Reklam yerleşimleri, rıza yönetimi ve analitik olayları
 - [ ] Yük, güvenlik, erişilebilirlik ve geri yükleme tatbikatları
 - [ ] Editör eğitimi, operasyon rehberi ve canlıya geçiş kontrol listesi

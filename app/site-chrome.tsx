@@ -1,6 +1,6 @@
-import { listCategories } from "../db";
+import { getSiteSettings, listCategories } from "../db";
 import { LiveData, MobileMenu, SearchBox } from "./site-client";
-import { corporatePages, liveStream, socialLinks } from "./site-config";
+import { corporateTitles, liveStream, socialLinks } from "./site-config";
 
 /* Ziyaretçi sitesinin ortak başlık ve alt bölümü. Bütün sayfalar aynı çalışan menüyü kullanır. */
 
@@ -15,9 +15,10 @@ function istanbulDate() {
 }
 
 function SocialCluster() {
+  const settings = getSiteSettings();
   return (
     <span className="social">
-      {socialLinks.map((item) =>
+      {socialLinks(settings).map((item) =>
         item.href
           ? <a href={item.href} key={item.label} target="_blank" rel="noreferrer" aria-label={`Koza TV ${item.label}`}>{item.short}</a>
           : <span key={item.label} aria-hidden="true">{item.short}</span>,
@@ -67,8 +68,10 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
 }
 
 export function SiteFooter({ categories }: { categories: NavCategory[] }) {
-  const legal = corporatePages.filter((page) => ["kvkk", "gizlilik", "cerez-politikasi"].includes(page.slug));
-  const institutional = corporatePages.filter((page) => ["hakkimizda", "kunye", "yayin-ilkeleri", "iletisim"].includes(page.slug));
+  const settings = getSiteSettings();
+  const broadcast = liveStream(settings);
+  const legal = ["kvkk", "gizlilik", "cerez-politikasi"];
+  const institutional = ["hakkimizda", "kunye", "yayin-ilkeleri", "iletisim"];
 
   return (
     <footer>
@@ -85,18 +88,18 @@ export function SiteFooter({ categories }: { categories: NavCategory[] }) {
         </div>
         <div>
           <strong>Koza TV</strong>
-          {institutional.map((page) => <a href={`/kurumsal/${page.slug}`} key={page.slug}>{page.title}</a>)}
+          {institutional.map((slug) => <a href={`/kurumsal/${slug}`} key={slug}>{corporateTitles[slug]}</a>)}
           <a href="/canli">Canlı Yayın</a>
         </div>
         <div>
           <strong>Yayın Bilgileri</strong>
-          <p>{liveStream.satellite}<br />{liveStream.platforms}</p>
+          <p>{broadcast.satellite || "Uydu bilgisi tanımlanacak"}<br />{broadcast.platforms}</p>
           <a href="/rss.xml">RSS akışı</a>
         </div>
       </div>
       <div className="wrap copyright">
         © 2026 Koza TV. Tüm hakları saklıdır.
-        <span>{legal.map((page) => <a href={`/kurumsal/${page.slug}`} key={page.slug}>{page.title.replace(" Aydınlatma Metni", "").replace(" Politikası", "")}</a>)}</span>
+        <span>{legal.map((slug) => <a href={`/kurumsal/${slug}`} key={slug}>{corporateTitles[slug].replace(" Aydınlatma Metni", "").replace(" Politikası", "")}</a>)}</span>
       </div>
     </footer>
   );

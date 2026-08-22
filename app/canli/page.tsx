@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { listPublishedArticles } from "../../db";
+import { getBroadcastSchedule, getSiteSettings, listPublishedArticles } from "../../db";
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
-import { broadcastSchedule, liveStream } from "../site-config";
+import { liveStream } from "../site-config";
 import { LivePlayer } from "./live-player";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +16,8 @@ export const metadata: Metadata = {
 export default async function Live() {
   const categories = navCategories();
   const articles = listPublishedArticles(5);
+  const broadcast = liveStream(getSiteSettings());
+  const schedule = getBroadcastSchedule();
 
   return (
     <main className="category-page live-view">
@@ -30,16 +32,16 @@ export default async function Live() {
 
       <div className="wrap live-layout">
         <section>
-          <LivePlayer src={liveStream.hlsUrl} poster={liveStream.posterImage} />
+          <LivePlayer src={broadcast.hlsUrl} backupSrc={broadcast.backupUrl} poster={broadcast.posterImage} />
           <div className="live-channels">
-            <div><strong>Uydu</strong><span>{liveStream.satellite}</span></div>
-            <div><strong>Platform</strong><span>{liveStream.platforms}</span></div>
+            <div><strong>Uydu</strong><span>{broadcast.satellite || "Tanımlanacak"}</span></div>
+            <div><strong>Platform</strong><span>{broadcast.platforms || "Tanımlanacak"}</span></div>
             <div><strong>Yayın merkezi</strong><span>Koza TV Haber Merkezi</span></div>
           </div>
         </section>
         <aside className="live-flow">
           <div className="live-flow-head"><span>BUGÜN</span><strong>Yayın Akışı</strong></div>
-          {broadcastSchedule.map((item) => (
+          {schedule.map((item) => (
             <div className="live-flow-row" key={item.time}>
               <time>{item.time}</time>
               <div><strong>{item.title}</strong><small>{item.host}</small></div>

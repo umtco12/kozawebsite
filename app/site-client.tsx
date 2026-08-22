@@ -2,36 +2,39 @@
 
 import { useEffect, useRef, useState } from "react";
 
+type MarketData = {
+  ok: boolean;
+  rates: { code: string; label: string; value: string }[];
+  rateSource: string;
+  rateDate: string;
+  weather: { label: string; value: string } | null;
+};
+
+/* Döviz ve hava durumu sunucu tarafında TCMB ve açık hava durumu servisinden okunur.
+   Veri alınamazsa gösterge hiç çizilmez; okura sabit ya da eski değer gösterilmez. */
 export function LiveData() {
-  const [weather, setWeather] = useState("İstanbul 27°");
-  const [rates, setRates] = useState({ USD: "41,12", EUR: "48,06", GBP: "55,74" });
+  const [data, setData] = useState<MarketData | null>(null);
 
   useEffect(() => {
-    fetch(
-      "https://api.open-meteo.com/v1/forecast?latitude=41.01&longitude=28.97&current=temperature_2m&timezone=Europe%2FIstanbul",
-    )
-      .then((response) => response.json())
-      .then((data) => setWeather(`İstanbul ${Math.round(data.current.temperature_2m)}°`))
+    let cancelled = false;
+    fetch("/api/piyasa")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: MarketData | null) => { if (!cancelled && payload?.ok) setData(payload); })
       .catch(() => {});
-
-    fetch("https://api.frankfurter.app/latest?from=TRY&to=USD,EUR,GBP")
-      .then((response) => response.json())
-      .then((data) =>
-        setRates({
-          USD: (1 / data.rates.USD).toFixed(2).replace(".", ","),
-          EUR: (1 / data.rates.EUR).toFixed(2).replace(".", ","),
-          GBP: (1 / data.rates.GBP).toFixed(2).replace(".", ","),
-        }),
-      )
-      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
+
+  if (!data) return <div className="live-data" aria-hidden="true" />;
+
+  const rateTitle = data.rateSource && data.rateDate ? `${data.rateSource} döviz satış kuru · ${data.rateDate}` : undefined;
 
   return (
     <div className="live-data">
-      <span>☀ {weather}</span>
-      <span>$ {rates.USD} <b>↑</b></span>
-      <span>€ {rates.EUR} <b>↑</b></span>
-      <span>£ {rates.GBP}</span>
+      {data.weather && <span>☀ {data.weather.label} {data.weather.value}</span>}
+      {data.rates.map((rate) => (
+        <span key={rate.code} title={rateTitle}>{rate.label} {rate.value}</span>
+      ))}
+      {data.rateSource && <small className="live-data-source">{data.rateSource}</small>}
     </div>
   );
 }
