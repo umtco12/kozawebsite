@@ -33,12 +33,12 @@ Başarı ölçütleri:
 
 ### Üretime çıkmadan önce tamamlanması gereken ana boşluklar
 
-- [ ] Gerçek haber veri modeli ve içerik detay rotaları
+- [x] Gerçek haber veri modeli ve içerik detay rotaları
 - [x] Güvenli giriş, kullanıcı oluşturma ve rol bazlı yetkilendirme
 - [ ] Tam editoryal iş akışı, revizyon geçmişi ve denetim kaydı
 - [ ] Görsel/video yükleme, işleme ve kalıcı medya depolama
 - [ ] Yapay zekâ destekli kaynak toplama ve editör onay kuyruğu
-- [ ] Arama, kategori, etiket, arşiv, video ve program sayfaları
+- [ ] Arama, kategori, etiket, arşiv, video ve program sayfaları (arama, kategori, video ve yazar arşivi tamamlandı; etiket ve program sayfaları bekliyor)
 - [ ] Haber bazlı yapılandırılmış veri, sitemap, RSS ve Google News gereksinimleri
 - [ ] İzleme, hata alarmı, yedekleme, güvenlik ve trafik/yük testleri
 - [ ] Staging ve canlı ortam için otomatik test/dağıtım hattı
@@ -101,16 +101,16 @@ Mevcut genel `content_items` tablosu prototip içindir. Üretim şeması ilişki
 
 ### Sayfalar
 
-- [ ] Ana sayfa: manşet, son dakika, öne çıkanlar, kategori akışları, video, yazarlar ve reklam alanları
-- [ ] Haber detayı: zengin içerik, galeri/video, yazar, kaynak, tarih, ilgili haberler ve paylaşım
+- [x] Ana sayfa: manşet, son dakika, öne çıkanlar, kategori akışları, video, yazarlar ve reklam alanları
+- [x] Haber detayı: zengin içerik, galeri/video, yazar, kaynak, tarih, ilgili haberler ve paylaşım
 - [ ] Kategori ve alt kategori: sayfalama, öne çıkan içerik ve filtreleme
 - [ ] Etiket/konu sayfası ve haber arşivi
-- [ ] Yazar listesi ve yazar profil/yazı arşivi
-- [ ] Video merkezi, program ve bölüm detayları
-- [ ] Canlı yayın: gerçek oynatıcı, yayın programı, kesinti ve yedek kaynak durumu
-- [ ] Site içi arama: yazım hatasına tolerans, boş sonuç ve popüler aramalar
-- [ ] Kurumsal sayfalar: hakkımızda, yayın ilkeleri, künye, iletişim, KVKK, çerez ve kullanım şartları
-- [ ] Özel 404, 410 ve bakım/kesinti ekranları
+- [x] Yazar listesi ve yazar profil/yazı arşivi
+- [ ] Video merkezi, program ve bölüm detayları (video merkezi tamamlandı; program/bölüm bekliyor)
+- [ ] Canlı yayın: yayın programı ve kesinti ekranı tamamlandı; gerçek HLS adresi ve yedek kaynak bekliyor
+- [x] Site içi arama: boş sonuç ve popüler haber önerileri (yazım hatası toleransı sonraki adım)
+- [x] Kurumsal sayfalar: hakkımızda, yayın ilkeleri, künye, iletişim, KVKK, gizlilik ve çerez politikası
+- [ ] Özel 404, 410 ve bakım/kesinti ekranları (özel 404 tamamlandı)
 
 ### Tasarım sistemi
 
@@ -130,7 +130,7 @@ Mevcut genel `content_items` tablosu prototip içindir. Üretim şeması ilişki
 - [x] Yönetici, yayın yönetmeni, editör, muhabir ve görüntüleyici yetki matrisi
 - [ ] Yönetici, yayın yönetmeni, editör, muhabir ve görüntüleyici yetki matrisi
 - [ ] Çok faktörlü giriş, oturum sonlandırma ve şüpheli giriş alarmı
-- [ ] Kullanıcı davet etme, pasife alma ve yetki değişikliği kaydı (yönetici tarafından hesap oluşturma tamamlandı)
+- [x] Hesap oluşturma, pasife alma ve yetki değişikliği kaydı (e-posta ile davet sonraki adım)
 
 ### Haber üretim akışı
 

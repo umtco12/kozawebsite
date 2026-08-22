@@ -35,6 +35,14 @@ const eslintConfig = defineConfig([
         version: "detect",
       },
     },
+    rules: {
+      /* vinext beta istemci yönlendiricisi `next/link` tıklamalarını yakalıyor ancak gezinmeyi
+         tamamlayamıyor; bu yüzden menü ve haber kartları tıklanamaz hale geliyordu. Ziyaretçi
+         sitesi ve yönetim paneli bilinçli olarak tarayıcının kendi gezinmesini kullanan sade
+         <a href> etiketleriyle çalışır. Çerçeve sürümü yükseltilip Link davranışı doğrulanınca
+         bu kural yeniden açılmalıdır. */
+      "@next/next/no-html-link-for-pages": "off",
+    },
   },
 ]);
 

@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function LiveData() {
   const [weather, setWeather] = useState("İstanbul 27°");
@@ -43,7 +42,32 @@ type Lead = {
   summary: string;
   image: string;
   href?: string;
+  published?: string;
 };
+
+/* Arama, tarayıcının kendi GET gönderimini kullanır; JavaScript yüklenmese de çalışır. */
+export function SearchBox() {
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <form className={open ? "nav-search open" : "nav-search"} action="/arama" method="get" role="search">
+      <input ref={inputRef} type="search" name="q" placeholder="Haberlerde ara…" aria-label="Haberlerde ara" minLength={2} required />
+      <button
+        type="submit"
+        onClick={(event) => {
+          if (open) return;
+          event.preventDefault();
+          setOpen(true);
+          window.setTimeout(() => inputRef.current?.focus(), 60);
+        }}
+        aria-label={open ? "Aramayı başlat" : "Arama alanını aç"}
+      >
+        ⌕
+      </button>
+    </form>
+  );
+}
 
 export function LeadSlider({ items }: { items: Lead[] }) {
   const [slides] = useState(items);
@@ -65,9 +89,9 @@ export function LeadSlider({ items }: { items: Lead[] }) {
       <div className="lead-shade" />
       <div className="lead-copy">
         <span>{item.category}</span>
-        <h1><Link href={item.href ?? "#gundem"}>{item.title}</Link></h1>
+        <h1><a href={item.href ?? "/son-dakika"}>{item.title}</a></h1>
         <p>{item.summary}</p>
-        <time>20 Ağustos 2026 • 14:20</time>
+        <time>{item.published ?? "Koza TV Haber Merkezi"}</time>
       </div>
       <div className="slider-controls">
         <button
@@ -99,7 +123,7 @@ export function LeadSlider({ items }: { items: Lead[] }) {
 
 export function MobileMenu({ categories }: { categories: { name: string; slug: string }[] }) {
   const [open, setOpen] = useState(false);
-  const mobileLinks = [["Ana Sayfa", "/"], ["Son Dakika", "/#sondakika"], ...categories.map((category) => [category.name, `/kategori/${category.slug}`]), ["Yazarlar", "/yazarlar"]];
+  const mobileLinks = [["Ana Sayfa", "/"], ["Son Dakika", "/son-dakika"], ...categories.map((category) => [category.name, `/kategori/${category.slug}`]), ["Videolar", "/videolar"], ["Yazarlar", "/yazarlar"], ["Canlı Yayın", "/canli"], ["Arama", "/arama"], ["İletişim", "/kurumsal/iletisim"]];
 
   return (
     <>
@@ -115,9 +139,9 @@ export function MobileMenu({ categories }: { categories: { name: string; slug: s
       {open && (
         <div className="mobile-panel" id="mobile-menu">
           {mobileLinks.map(([label, href]) => (
-            <Link href={href} key={href} onClick={() => setOpen(false)}>
+            <a href={href} key={href} onClick={() => setOpen(false)}>
               {label}
-            </Link>
+            </a>
           ))}
         </div>
       )}

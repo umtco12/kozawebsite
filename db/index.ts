@@ -142,3 +142,66 @@ export function createAdminSession(userId: number, userAgent = "") { const token
 export function getAdminSession(token: string) { if (!token) return null; const tokenHash = createHash("sha256").update(token).digest("hex"); const now = Date.now(); const row = getDb().prepare("SELECT u.* FROM admin_sessions s JOIN admin_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1").get(tokenHash, now) as Record<string, unknown> | undefined; if (!row) return null; getDb().prepare("UPDATE admin_sessions SET last_seen_at=? WHERE token_hash=? AND last_seen_at<?").run(now, tokenHash, now - 5 * 60_000); return { user: mapAdminUser(row), tokenHash }; }
 export function deleteAdminSession(token: string) { if (!token) return; getDb().prepare("DELETE FROM admin_sessions WHERE token_hash=?").run(createHash("sha256").update(token).digest("hex")); }
 export function changeAdminPassword(userId: number, currentPassword: string, nextPassword: string) { const db = getDb(); const row = db.prepare("SELECT password_hash FROM admin_users WHERE id=? AND active=1").get(userId) as { password_hash: string } | undefined; if (!row || !verifyPassword(currentPassword, row.password_hash)) throw new Error("Mevcut parola doğru değil."); const now = Date.now(); db.transaction(() => { db.prepare("UPDATE admin_users SET password_hash=?,must_change_password=0,failed_attempts=0,locked_until=NULL,updated_at=? WHERE id=?").run(hashPassword(nextPassword), now, userId); db.prepare("DELETE FROM admin_sessions WHERE user_id=?").run(userId); db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('admin_user',?,'password_change','Kullanıcı','',?)").run(userId, now); })(); }
+
+/* Ziyaretçi sitesi keşif sorguları: arama, son dakika akışı, video merkezi ve yazar sayfaları. */
+export type AuthorRecord = { name: string; slug: string; articleCount: number; lastPublishedAt: number | null; topCategory: string; latestTitle: string; latestSlug: string };
+
+export function searchArticles(query: string, limit = 40) {
+  publishDueArticles();
+  const term = query.trim().slice(0, 120);
+  if (term.length < 2) return [];
+  const pattern = `%${term.replace(/[%_]/g, (character) => `\\${character}`)}%`;
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  const rows = getDb().prepare("SELECT * FROM articles WHERE status='published' AND (title LIKE ? ESCAPE '\\' OR spot LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\' OR author LIKE ? ESCAPE '\\') ORDER BY CASE WHEN title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, published_at DESC LIMIT ?").all(pattern, pattern, pattern, pattern, pattern, pattern, safeLimit) as Record<string, unknown>[];
+  return rows.map(mapArticle);
+}
+
+export function listBreakingArticles(limit = 40) {
+  publishDueArticles();
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  return (getDb().prepare("SELECT * FROM articles WHERE status='published' ORDER BY is_breaking DESC, published_at DESC LIMIT ?").all(safeLimit) as Record<string, unknown>[]).map(mapArticle);
+}
+
+export function listVideoArticles(limit = 30) {
+  publishDueArticles();
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  return (getDb().prepare("SELECT * FROM articles WHERE status='published' AND TRIM(video_url)<>'' ORDER BY published_at DESC LIMIT ?").all(safeLimit) as Record<string, unknown>[]).map(mapArticle);
+}
+
+export function listAuthors(): AuthorRecord[] {
+  publishDueArticles();
+  const rows = getDb().prepare("SELECT author, COUNT(*) AS article_count, MAX(published_at) AS last_published_at FROM articles WHERE status='published' AND TRIM(author)<>'' GROUP BY author ORDER BY article_count DESC, author").all() as Record<string, unknown>[];
+  return rows.map((row) => {
+    const name = String(row.author);
+    const latest = getDb().prepare("SELECT title, slug, category FROM articles WHERE status='published' AND author=? ORDER BY published_at DESC LIMIT 1").get(name) as { title: string; slug: string; category: string } | undefined;
+    return { name, slug: slugify(name), articleCount: Number(row.article_count), lastPublishedAt: row.last_published_at == null ? null : Number(row.last_published_at), topCategory: latest?.category ?? "", latestTitle: latest?.title ?? "", latestSlug: latest?.slug ?? "" };
+  });
+}
+
+export function getAuthorBySlug(slug: string) { return listAuthors().find((author) => author.slug === slug) ?? null; }
+
+export function listArticlesByAuthor(author: string, limit = 40) {
+  publishDueArticles();
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  return (getDb().prepare("SELECT * FROM articles WHERE status='published' AND author=? ORDER BY published_at DESC LIMIT ?").all(author, safeLimit) as Record<string, unknown>[]).map(mapArticle);
+}
+
+/* Kullanıcı yetki değişikliği ve pasife alma. Son aktif yöneticinin kilitlenmesi engellenir. */
+export function updateAdminUser(id: number, changes: { role?: AdminRole; active?: boolean }, actor: AdminUser) {
+  const db = getDb();
+  const target = getAdminUserById(id);
+  if (!target) throw new Error("Kullanıcı bulunamadı.");
+  if (target.id === actor.id && (changes.role && changes.role !== target.role || changes.active === false)) throw new Error("Kendi rolünüzü değiştiremez veya hesabınızı kapatamazsınız.");
+  const nextRole = changes.role ?? target.role;
+  const nextActive = changes.active === undefined ? Boolean(target.active) : changes.active;
+  const activeAdmins = (db.prepare("SELECT COUNT(*) AS total FROM admin_users WHERE role='admin' AND active=1").get() as { total: number }).total;
+  const losesAdmin = target.role === "admin" && Number(target.active) === 1 && (nextRole !== "admin" || !nextActive);
+  if (losesAdmin && activeAdmins <= 1) throw new Error("Sistemde en az bir aktif yönetici kalmalıdır.");
+  const now = Date.now();
+  db.transaction(() => {
+    db.prepare("UPDATE admin_users SET role=?,active=?,updated_at=? WHERE id=?").run(nextRole, nextActive ? 1 : 0, now, id);
+    if (!nextActive) db.prepare("DELETE FROM admin_sessions WHERE user_id=?").run(id);
+    db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('admin_user',?,'update',?,?,?)").run(id, actor.fullName, JSON.stringify({ fromRole: target.role, toRole: nextRole, fromActive: Number(target.active), toActive: nextActive ? 1 : 0 }), now);
+  })();
+  return getAdminUserById(id)!;
+}
