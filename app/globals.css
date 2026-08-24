@@ -231,7 +231,7 @@ footer .social a:hover{color:var(--red)}
 
 /* Eski site içerik aktarımı */
 .import-layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;align-items:start}
-.import-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:0 16px 16px}
+.import-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:0 16px 16px}
 .import-stats article{background:#f7f8f9;border:1px solid var(--line);padding:16px}
 .import-stats span{font-size:10px;font-weight:900;letter-spacing:.9px;color:#7b838c;text-transform:uppercase}
 .import-stats strong{display:block;font-size:28px;font-family:var(--font-serif),serif;margin:6px 0 2px}
@@ -267,3 +267,184 @@ footer .social a:hover{color:var(--red)}
 @media(max-width:1100px){.import-layout{grid-template-columns:1fr}.import-stats{grid-template-columns:repeat(2,1fr)}}
 .live-embed{padding:0;background:#000}
 .live-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+
+/* ============================================================
+   Ana sayfa tasarım katmanı
+   Gerçek arşiv içeriğiyle (7.700+ haber, farklı en-boy oranlarında görseller) tutarlı
+   görünmesi için kart sistemi, tipografi ölçeği ve boşluk düzeni yeniden kuruldu.
+   ============================================================ */
+
+/* Masthead: büyük gri reklam kutusu kaldırıldı, marka ve canlı yayın öne alındı. */
+.masthead{gap:28px}
+.masthead-claim{margin-right:auto}
+.masthead-claim span{font-size:9px;letter-spacing:2.4px;color:#8d959e;font-weight:800}
+.masthead-claim strong{display:block;font-family:var(--font-serif),serif;font-size:15px;color:var(--ink);margin-top:3px}
+
+/* Bütün kart görselleri aynı orana oturur; arşivdeki farklı boyutlar kırpılarak hizalanır. */
+.home .news-thumb,.home .spotlight-card>img,.home .video-main>img,.home .video-list a>div{background:#0d141c}
+.home .news-thumb{position:relative;overflow:hidden;aspect-ratio:16/9}
+.home .news-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .5s ease}
+.home .news-card:hover .news-thumb img{transform:scale(1.045)}
+
+/* Son haberler ızgarası: ilk kart geniş, diğerleri üç sütun. */
+.home .news-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:26px 22px}
+.home .news-card{display:block;grid-template-columns:none;border-bottom:0;padding-bottom:0}
+.home .news-card.featured{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;align-items:center;padding-bottom:26px;border-bottom:1px solid var(--line)}
+.home .news-card .card-body{padding-top:12px}
+.home .news-card span{font-size:10px;font-weight:900;letter-spacing:1.1px;color:var(--red);text-transform:uppercase}
+.home .news-card h3{font-family:var(--font-serif),serif;font-size:17px;line-height:1.32;margin:7px 0 0;color:var(--ink);letter-spacing:-.2px}
+.home .news-card.featured h3{font-size:30px;line-height:1.2}
+.home .news-card p{display:none;color:#5c646d;font-size:13.5px;line-height:1.6;margin:9px 0 0}
+.home .news-card.featured p{display:block}
+.home .news-card time{display:block;margin-top:9px;font-size:11px;color:#8d959e;font-weight:600}
+.home .news-card:hover h3{color:var(--red)}
+
+/* Öne çıkanlar şeridi */
+.home .spotlight{gap:0}
+.home .spotlight-card{grid-template-columns:118px minmax(0,1fr);gap:14px;padding:18px 20px;align-items:start}
+.home .spotlight-card>img{aspect-ratio:4/3;height:auto;object-fit:cover}
+.home .spotlight-card h2{font-size:14px;line-height:1.35;margin:6px 0 5px;letter-spacing:-.1px}
+.home .spotlight-card span{font-size:9px}
+.home .spotlight-card:hover h2{color:var(--red)}
+
+/* Günün akışı sütunu */
+.home .hero-flow{padding:0 22px 20px}
+.home .hero-flow-head{padding-top:22px}
+.home .flow-item h2{font-size:14px;line-height:1.38}
+.home .flow-item:hover h2{color:#ff8f93}
+.home .flow-item.active h2{font-size:15px}
+
+/* Manşet tipografisi: uzun Türkçe başlıklarda da dengeli kalır. */
+.home .lead-copy h1{font-size:clamp(28px,3vw,42px);line-height:1.12;letter-spacing:-.6px;margin:10px 0 12px}
+.home .lead-copy p{font-size:14.5px;line-height:1.6;max-width:52ch;color:#dfe4e9}
+.home .lead-copy time{font-size:11px;color:#aab2ba;font-weight:600}
+.home .lead-copy span{background:var(--red);color:#fff;padding:5px 10px;font-size:10px;font-weight:900;letter-spacing:1.2px}
+
+/* Yan sütun son dakika listesi */
+.home .latest a{grid-template-columns:52px 1fr;padding:15px 17px}
+.home .latest p{font-size:13px;line-height:1.4}
+.home .latest time{font-size:11px}
+
+/* Bölüm başlıkları */
+.home .section-head{border-bottom-width:3px;padding-bottom:12px;margin-bottom:24px}
+.home .section-head h2{font-size:30px;letter-spacing:-.4px}
+.home .section-head span{font-size:10px;letter-spacing:2px;color:var(--red);font-weight:900}
+.home .section-head a{font-size:11px;font-weight:800;color:#5c646d}
+.home .section-head a:hover{color:var(--red)}
+
+/* Video bölümü */
+.home .video-main>img{object-fit:cover}
+.home .video-list img{object-fit:cover}
+.home .video-list a>div{aspect-ratio:16/9;overflow:hidden}
+.home .video-list img{height:100%}
+.home .video-main h3{font-size:23px;line-height:1.25}
+
+/* Yazar şeridi */
+.home .writers-strip{align-items:center}
+.home .writer p{font-size:12px;line-height:1.4;color:#646c76;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+.home .content{padding-bottom:10px}
+.home section+section{margin-top:44px}
+
+@media(max-width:1000px){
+  .home .news-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .home .news-card.featured{grid-template-columns:1fr;gap:0}
+  .home .news-card.featured h3{font-size:24px}
+}
+@media(max-width:640px){
+  .home .news-grid{grid-template-columns:1fr;gap:22px}
+  .home .news-card.featured h3{font-size:22px}
+  .home .spotlight-card{grid-template-columns:104px minmax(0,1fr);padding:14px 0}
+  .home .section-head h2{font-size:24px}
+  .home section+section{margin-top:32px}
+}
+
+/* ============================================================
+   Bölüm sayfaları (kategori, son dakika, arşiv listeleri)
+   Ana sayfayla aynı kart dili; manşet + ızgara + yan sütun.
+   ============================================================ */
+.section-hero{background:#0f1720;color:#fff;padding:48px 0 42px;border-top:5px solid var(--red)}
+.section-hero span{font-size:9px;letter-spacing:2.4px;font-weight:900;color:#ff555b}
+.section-hero h1{font-family:var(--font-serif),serif;font-size:clamp(32px,4vw,52px);margin:10px 0 8px;letter-spacing:-1px}
+.section-hero p{font-size:14px;color:#aab2ba;max-width:60ch;margin:0}
+.section-hero small{display:block;margin-top:14px;font-size:10px;font-weight:800;letter-spacing:1.2px;color:#7b838c}
+
+.section-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:40px;padding:36px 0 60px;align-items:start}
+
+.section-lead{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:26px;align-items:center;padding-bottom:28px;margin-bottom:28px;border-bottom:2px solid var(--dark);color:inherit}
+.section-lead-thumb{position:relative;aspect-ratio:16/9;overflow:hidden;background:#0d141c}
+.section-lead-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .5s ease}
+.section-lead:hover .section-lead-thumb img{transform:scale(1.04)}
+.section-lead span{display:inline-block;color:#fff;padding:5px 11px;font-size:10px;font-weight:900;letter-spacing:1.2px}
+.section-lead h2{font-family:var(--font-serif),serif;font-size:clamp(22px,2.4vw,32px);line-height:1.2;margin:12px 0 10px;letter-spacing:-.4px}
+.section-lead p{font-size:14px;line-height:1.65;color:#5c646d;margin:0}
+.section-lead time{display:block;margin-top:12px;font-size:11px;color:#8d959e;font-weight:600}
+.section-lead:hover h2{color:var(--red)}
+
+.section-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:30px 22px}
+.section-card{color:inherit;display:block}
+.section-card-thumb{position:relative;aspect-ratio:16/9;overflow:hidden;background:#0d141c}
+.section-card-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .5s ease}
+.section-card:hover .section-card-thumb img{transform:scale(1.045)}
+.section-card span{display:block;margin-top:12px;font-size:10px;font-weight:900;letter-spacing:1.1px;text-transform:uppercase}
+.section-card h3{font-family:var(--font-serif),serif;font-size:16.5px;line-height:1.34;margin:7px 0 0;letter-spacing:-.2px}
+.section-card time{display:block;margin-top:8px;font-size:11px;color:#8d959e;font-weight:600}
+.section-card:hover h3{color:var(--red)}
+
+.pager{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:44px;padding-top:26px;border-top:1px solid var(--line)}
+.pager a{border:1px solid var(--line);padding:11px 18px;font-size:12px;font-weight:800;color:var(--ink)}
+.pager a:hover{border-color:var(--red);color:var(--red)}
+.pager span{font-size:12px;font-weight:700;color:#8d959e}
+
+.section-aside{position:sticky;top:20px;display:grid;gap:22px}
+.aside-block{background:#f7f8f9;border:1px solid var(--line);padding:20px}
+.aside-block>strong{display:block;font-size:10px;letter-spacing:1.6px;color:#7b838c;text-transform:uppercase;padding-bottom:12px;margin-bottom:14px;border-bottom:2px solid var(--dark)}
+.aside-chips{display:flex;flex-wrap:wrap;gap:8px}
+.aside-chips a{background:#fff;border:1px solid var(--line);padding:8px 12px;font-size:12px;font-weight:700;color:var(--ink)}
+.aside-chips a:hover{border-color:var(--red);color:var(--red)}
+.aside-row{display:grid;grid-template-columns:76px minmax(0,1fr);gap:12px;padding:11px 0;border-bottom:1px solid var(--line);color:inherit}
+.aside-row img{width:76px;height:52px;object-fit:cover;background:#0d141c}
+.aside-row b{display:block;font-size:9px;font-weight:900;letter-spacing:1px;color:var(--red);margin-bottom:4px}
+.aside-row span{font-family:var(--font-serif),serif;font-size:12.5px;line-height:1.38}
+.aside-row:hover span{color:var(--red)}
+.aside-more{display:block;margin-top:14px;font-size:11px;font-weight:900;color:var(--red)}
+
+@media(max-width:1000px){
+  .section-layout{grid-template-columns:1fr;gap:30px}
+  .section-aside{position:static}
+  .section-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .section-lead{grid-template-columns:1fr;gap:16px}
+}
+@media(max-width:640px){
+  .section-grid{grid-template-columns:1fr;gap:24px}
+  .section-hero{padding:32px 0 28px}
+  .pager{gap:10px}
+  .pager a{padding:10px 12px;font-size:11px}
+}
+
+/* Son dakika akışı */
+.breaking-hero{border-top-color:var(--red)}
+.breaking-hero span{display:inline-flex;align-items:center}
+.lead-flag{position:absolute;top:12px;left:12px;z-index:2;background:var(--red);color:#fff;font-size:9px;font-weight:900;letter-spacing:1.1px;padding:5px 9px}
+.feed{margin-top:44px}
+.feed-head{border-bottom:3px solid var(--dark);padding-bottom:12px;margin-bottom:8px}
+.feed-head span{font-size:10px;letter-spacing:2px;color:var(--red);font-weight:900}
+.feed-head strong{display:block;font-family:var(--font-serif),serif;font-size:28px;letter-spacing:-.4px}
+.feed-day{font-size:11px;font-weight:900;letter-spacing:1.4px;color:#7b838c;text-transform:uppercase;margin:26px 0 6px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.feed-row{display:grid;grid-template-columns:64px minmax(0,1fr) 96px;gap:16px;align-items:center;padding:15px 0;border-bottom:1px solid var(--line);color:inherit;position:relative}
+.feed-row>time{font-size:13px;font-weight:900;color:#8d959e;font-variant-numeric:tabular-nums}
+.feed-row span{font-size:9px;font-weight:900;letter-spacing:1.1px;color:#7b838c;text-transform:uppercase}
+.feed-row.urgent>time{color:var(--red)}
+.feed-row.urgent span{color:var(--red)}
+.feed-row.urgent{padding-left:14px}
+.feed-row.urgent:before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;background:var(--red)}
+.feed-row h3{font-family:var(--font-serif),serif;font-size:16px;line-height:1.35;margin:6px 0 0;letter-spacing:-.2px}
+.feed-row img{width:96px;height:62px;object-fit:cover;background:#0d141c}
+.feed-row:hover h3{color:var(--red)}
+.aside-empty{font-size:12px;line-height:1.6;color:#646c76;margin:0}
+.aside-empty b{color:var(--ink)}
+@media(max-width:640px){
+  .feed-row{grid-template-columns:52px minmax(0,1fr);gap:12px}
+  .feed-row img{display:none}
+  .feed-head strong{font-size:23px}
+}

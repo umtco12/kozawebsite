@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { listAuthors } from "../../db";
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
+import { displayTitle } from "../../db/title-model.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function Writers() {
             <div className="avatar">{author.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</div>
             <div>
               <h2>{author.name}</h2>
-              <p>{author.latestTitle || "Yayınlanmış haber bekleniyor"}</p>
+              <p>{displayTitle(author.latestTitle) || "Yayınlanmış haber bekleniyor"}</p>
               <span className="author-count">{author.articleCount} haber · {author.topCategory}</span>
             </div>
           </a>

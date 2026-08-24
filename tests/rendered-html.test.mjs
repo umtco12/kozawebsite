@@ -14,6 +14,7 @@ import { slugify, validateArticleInput } from "../db/article-model.mjs";
 import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
 import { normalizePath, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
 import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
+import { displaySpot, displayTitle } from "../db/title-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -623,7 +624,7 @@ test("son dakika sayfası doğrulanmış akışı ve son dakika işaretini göst
 
   assert.match(body, /<title>Son Dakika Haberleri \| Koza TV<\/title>/i);
   assert.match(body, /KOZA TV CANLI AKIŞ/);
-  assert.match(body, /timeline-row/);
+  assert.match(body, /section-lead|feed-row/, "Akış manşeti veya dakika dakika listesi görünmeli");
   assert.match(body, /SON DAKİKA/);
   assert.match(body, /href="\/haber\/turkiyenin-gundemi-koza-tv-haber-merkezinde"/);
   assert.match(body, /rel="canonical" href="https:\/\/www\.kozatv\.com\.tr\/son-dakika"/i);
@@ -1083,4 +1084,53 @@ test("taşıma rehberi veri taşıma ve dağıtım değişkeni kurallarını tan
   const workflow = await readFile(new URL("../.github/workflows/staging.yml", import.meta.url), "utf8");
   assert.match(workflow, /vars\.KOZA_HOST/, "Sunucu adresi GitHub değişkeninden gelmeli");
   assert.ok(workflow.includes("known_hosts"), "Sabit SSH host anahtarı doğrulaması korunmalı");
+});
+
+test("büyük harfli arşiv başlıkları okunur biçimde gösterilir, kısaltmalar korunur", () => {
+  assert.equal(displayTitle("CHP'NİN MİTİNGİ YARIN"), "CHP'nin Mitingi Yarın");
+  assert.equal(displayTitle("TBMM'DE BÜTÇE GÖRÜŞMESİ"), "TBMM'de Bütçe Görüşmesi");
+  assert.equal(displayTitle("PKK SİLAH BIRAKTI"), "PKK Silah Bıraktı");
+  assert.equal(displayTitle("SON DAKİKA: İSTANBUL'DA DEPREM"), "Son Dakika: İstanbul'da Deprem");
+  assert.equal(displayTitle("HZ. MUHAMMED'E HAKARET"), "Hz. Muhammed'e Hakaret");
+  assert.equal(displayTitle("UEFA LİGİ: (MAÇ SONUCU)"), "UEFA Ligi: (Maç Sonucu)");
+  assert.equal(displayTitle("200'DEN FAZLA KEZ ÇIKTI"), "200'den Fazla Kez Çıktı");
+
+  /* Zaten normal yazılmış başlığa dokunulmaz. */
+  const normal = "Piyasalar yeni karara odaklandı: Ekonomistler ne bekliyor?";
+  assert.equal(displayTitle(normal), normal);
+  assert.equal(displayTitle(""), "");
+
+  /* Spot başlığın kopyasıysa kartta ikinci kez gösterilmez. */
+  const title = "NEVADA'DAKİ YANGIN 61 BİN DÖNÜMÜ KÜL ETTİ";
+  assert.equal(displaySpot(title, title), "");
+  assert.equal(displaySpot("", title), "");
+  assert.equal(displaySpot("Yangın iki gündür sürüyor.", title), "Yangın iki gündür sürüyor.");
+});
+
+test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async () => {
+  const body = await html("/");
+
+  /* Az haber olan kurulumda da hiçbir bölüm boş kalmamalı. */
+  for (const marker of ["Günün Akışı", "Öne Çıkanlar", "Son Haberler", "SON DAKİKA"]) {
+    assert.match(body, new RegExp(marker), `${marker} bölümü görünmeli`);
+  }
+  const cards = body.match(/class="news-card/g) ?? [];
+  assert.ok(cards.length >= 4, `Haber ızgarasında yeterli kart olmalı, bulunan: ${cards.length}`);
+
+  /* Masthead'deki boş reklam kutusu kaldırıldı. */
+  assert.doesNotMatch(body, /970 × 90/, "Ana sayfada boş reklam yer tutucusu kalmamalı");
+
+  /* Kart görselleri tembel yüklenmeli. */
+  assert.match(body, /loading="lazy"/);
+});
+
+test("kapak görseli olmayan haberde tarafsız yer tutucu kullanılır", async () => {
+  /* Eski aktarım, görseli olmayan haberlere gerçek bir haber karesini yedek olarak yazıyordu;
+     bu, okura ilgisiz bir fotoğrafı haberin görseli gibi gösteriyordu. */
+  const placeholder = await readFile(new URL("../public/news/gorsel-yok.svg", import.meta.url), "utf8");
+  assert.match(placeholder, /Bu haberde görsel bulunmuyor/, "Yer tutucu eksikliği açıkça belirtmeli");
+
+  const importRoute = await readFile(new URL("../app/api/import/route.ts", import.meta.url), "utf8");
+  assert.match(importRoute, /MISSING_IMAGE = "\/news\/gorsel-yok\.svg"/);
+  assert.doesNotMatch(importRoute, /heroImage: heroImage \|\| "\/news\//, "Aktarımda gerçek haber karesi yedek olarak kullanılmamalı");
 });

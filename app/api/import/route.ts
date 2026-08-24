@@ -14,6 +14,8 @@ export const dynamic = "force-dynamic";
 const SITEMAP_INDEX = "https://www.kozatv.com.tr/sitemap.xml";
 const FETCH_TIMEOUT_MS = 20_000;
 const POLITE_DELAY_MS = 250;
+/* Kapak görseli bulunamayan haberde gerçek bir haber karesi kullanılmaz; okuyucu eksikliği görmeli. */
+const MISSING_IMAGE = "/news/gorsel-yok.svg";
 
 async function fetchText(url: string) {
   if (!isAllowedSource(url)) throw new Error("Adres izin listesinde değil.");
@@ -94,7 +96,7 @@ export async function POST(request: Request) {
           const heroImage = await importImage(value.imageUrl, value.imageAlt, actor);
           const article = importLegacyArticle({
             slug: value.slug, title: value.title, spot: value.spot, body: value.body, blocks: value.blocks,
-            category, author: value.author, heroImage: heroImage || "/news/gundem.jpg", imageAlt: value.imageAlt,
+            category, author: value.author, heroImage: heroImage || MISSING_IMAGE, imageAlt: value.imageAlt,
             sourceUrl: value.sourceUrl, seoTitle: value.seoTitle, seoDescription: value.seoDescription,
             publishedAt: value.publishedAt, status: payload.publish ? "published" : "draft",
           }, actor);
@@ -108,7 +110,7 @@ export async function POST(request: Request) {
             }
           }
 
-          markImportItem(item.id, "imported", { articleId: article.id, title: article.title, message: heroImage ? "Görsel aktarıldı" : "Görsel alınamadı" });
+          markImportItem(item.id, "imported", { articleId: article.id, title: article.title, message: heroImage ? "Görsel aktarıldı" : "Kaynakta kapak görseli yok" });
           results.push({ url: item.sourceUrl, status: "imported", message: article.title });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Bilinmeyen hata";

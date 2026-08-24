@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-label="Bu haberde görsel bulunmuyor">
+  <!-- Kapak görseli olmayan haberler için tarafsız yer tutucu. Gerçek bir haber karesi
+       kullanılmaz; okuyucu görselin eksik olduğunu açıkça anlamalıdır. -->
+  <defs>
+    <linearGradient id="zemin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2531"/>
+      <stop offset="1" stop-color="#0f1720"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#zemin)"/>
+  <g opacity="0.10" fill="none" stroke="#ffffff" stroke-width="2">
+    <path d="M0 506 L300 338 L560 506 L820 300 L1200 540"/>
+  </g>
+  <g transform="translate(600 300)" text-anchor="middle">
+    <circle r="52" fill="none" stroke="#dc151d" stroke-width="4" opacity="0.9"/>
+    <text y="14" font-family="Georgia, 'Times New Roman', serif" font-size="42" font-weight="bold" fill="#ffffff">K</text>
+  </g>
+  <text x="600" y="410" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="26" font-weight="bold" letter-spacing="6" fill="#ffffff" opacity="0.85">KOZA TV</text>
+  <text x="600" y="452" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="19" letter-spacing="1" fill="#8d959e">Bu haberde görsel bulunmuyor</text>
+</svg>

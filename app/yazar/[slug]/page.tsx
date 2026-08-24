@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getAuthorBySlug, listArticlesByAuthor } from "../../../db";
 import { redirectIfMapped } from "../../legacy-redirect";
 import { SiteFooter, SiteHeader, navCategories } from "../../site-chrome";
+import { displaySpot, displayTitle } from "../../../db/title-model.mjs";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string }> };
@@ -48,8 +49,8 @@ export default async function AuthorPage({ params }: Props) {
             <img src={article.heroImage} alt={article.imageAlt} />
             <div>
               <span>{article.category}</span>
-              <h2>{article.title}</h2>
-              <p>{article.spot}</p>
+              <h2>{displayTitle(article.title)}</h2>
+              {displaySpot(article.spot, article.title) && <p>{displaySpot(article.spot, article.title)}</p>}
               <time>{article.publishedAt ? new Date(article.publishedAt).toLocaleString("tr-TR") : ""}</time>
             </div>
           </a>

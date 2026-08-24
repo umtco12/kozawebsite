@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Stats = { total: number; pending: number; imported: number; skipped: number; failed: number };
+type Stats = { total: number; pending: number; imported: number; skipped: number; failed: number; withoutImage: number };
 type Item = { id: number; sourceUrl: string; sourcePath: string; status: string; title: string; message: string; articleId: number | null; processedAt: number | null };
 
 const statusLabels: Record<string, string> = { pending: "Bekliyor", imported: "Aktarıldı", skipped: "Atlandı", failed: "Hata" };
@@ -15,7 +15,7 @@ function stamp(value: number | null) {
 /* Eski kozatv.com.tr arşivini yeni siteye taşıyan köprü. Aktarım parça parça çalışır; tarayıcı
    kapatılsa bile kaldığı yerden sürdürülebilir çünkü durum veritabanında tutulur. */
 export function ContentImport({ canEdit }: { canEdit: boolean }) {
-  const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, imported: 0, skipped: 0, failed: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, imported: 0, skipped: 0, failed: 0, withoutImage: 0 });
   const [items, setItems] = useState<Item[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -115,6 +115,7 @@ export function ContentImport({ canEdit }: { canEdit: boolean }) {
           <article><span>Aktarılan</span><strong>{stats.imported}</strong><small>haber yeni sitede</small></article>
           <article><span>Kuyrukta</span><strong>{stats.pending}</strong><small>bekleyen adres</small></article>
           <article className={stats.failed ? "accent" : ""}><span>Hata / atlanan</span><strong>{stats.failed + stats.skipped}</strong><small>{stats.failed} hata · {stats.skipped} atlandı</small></article>
+          <article><span>Kapak görseli yok</span><strong>{stats.withoutImage}</strong><small>eski sitede de görseli yoktu</small></article>
         </div>
 
         {stats.total > 0 && (

@@ -81,6 +81,10 @@ function ensureSchema(db: InstanceType<typeof Database>) {
   ensureColumn(db, "articles", "withdrawn_at", "INTEGER");
   ensureColumn(db, "articles", "homepage_order", "INTEGER NOT NULL DEFAULT 100");
   db.exec("CREATE INDEX IF NOT EXISTS idx_workflow_state_assignee ON articles(workflow_state,assigned_to,updated_at DESC)");
+  /* Aktarımın ilk sürümü kapak görseli bulunamayan haberlere gerçek bir haber karesini
+     (`/news/gundem.jpg`) yedek olarak yazıyordu; bu, okura yanlış görsel gösteriyordu.
+     Yalnızca aktarılan kayıtlar tarafsız yer tutucuya çevrilir. */
+  db.prepare("UPDATE articles SET hero_image='/news/gorsel-yok.svg' WHERE source_name='kozatv.com.tr' AND hero_image='/news/gundem.jpg'").run();
   const articleCount = Number((db.prepare("SELECT COUNT(*) AS count FROM articles").get() as { count: number }).count);
   if (articleCount === 0) {
     const now = Date.now();
@@ -352,8 +356,9 @@ export function takePendingImportItems(limit = 20) {
 
 export function getImportStats() {
   const rows = getDb().prepare("SELECT status, COUNT(*) AS total FROM import_items GROUP BY status").all() as { status: string; total: number }[];
-  const stats = { total: 0, pending: 0, imported: 0, skipped: 0, failed: 0 } as Record<string, number>;
+  const stats = { total: 0, pending: 0, imported: 0, skipped: 0, failed: 0, withoutImage: 0 } as Record<string, number>;
   for (const row of rows) { stats[row.status] = row.total; stats.total += row.total; }
+  stats.withoutImage = Number((getDb().prepare("SELECT COUNT(*) AS total FROM articles WHERE source_name='kozatv.com.tr' AND hero_image='/news/gorsel-yok.svg'").get() as { total: number }).total);
   return stats;
 }
 
@@ -418,4 +423,23 @@ export function ensureCategory(name: string, actor = "İçerik Aktarımı") {
     .run(clean, slug, `${clean} haberleri`, "", "", "#c92721", 200, now, now);
   getDb().prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('category',0,'import_create',?,?,?)").run(actor, JSON.stringify({ name: clean }), now);
   return clean;
+}
+
+/* Ana sayfa akışları için saf tarih sıralı liste. `listPublishedArticles` manşet sabitlemesi
+   yaptığı için arşiv aktarımından sonra güncel haberleri geri planda bırakıyordu. */
+export function listLatestArticles(limit = 30) {
+  publishDueArticles();
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  return (getDb().prepare("SELECT * FROM articles WHERE status='published' ORDER BY published_at DESC, id DESC LIMIT ?").all(safeLimit) as Record<string, unknown>[]).map(mapArticle);
+}
+
+/* Kategori sayfalaması: arşiv aktarımından sonra bazı kategorilerde yüzlerce haber var;
+   ilk 30 kayıttan sonrası erişilemez kalmamalı. */
+export function listCategoryPage(category: string, page = 1, perPage = 18) {
+  publishDueArticles();
+  const size = Math.min(Math.max(perPage, 6), 48);
+  const current = Math.max(page, 1);
+  const total = Number((getDb().prepare("SELECT COUNT(*) AS total FROM articles WHERE status='published' AND category=?").get(category) as { total: number }).total);
+  const rows = getDb().prepare("SELECT * FROM articles WHERE status='published' AND category=? ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?").all(category, size, (current - 1) * size) as Record<string, unknown>[];
+  return { articles: rows.map(mapArticle), total, page: current, perPage: size, pageCount: Math.max(1, Math.ceil(total / size)) };
 }

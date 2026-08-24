@@ -118,10 +118,25 @@ function firstString(...values) {
   return "";
 }
 
+/* Eski site, kapak görseli olmayan haberlerde dosya adı içermeyen bir klasör yolu yayımlıyor
+   (".../images/haber/"). Böyle adaylar görsel sayılmaz; aksi hâlde 403 sayfası indirilirdi. */
+function looksLikeImage(candidate) {
+  if (!isAllowedSource(candidate)) return false;
+  try {
+    const file = new URL(candidate).pathname.split("/").pop() ?? "";
+    return /\.(jpe?g|png|webp|gif)$/i.test(file);
+  } catch {
+    return false;
+  }
+}
+
 function pickImage(data, html) {
   const fromData = typeof data?.image === "string" ? data.image : data?.image?.url;
-  const candidate = firstString(fromData, data?.thumbnailUrl, metaContent(html, "og:image"));
-  return isAllowedSource(candidate) ? candidate : "";
+  for (const candidate of [fromData, data?.thumbnailUrl, metaContent(html, "og:image"), metaContent(html, "twitter:image")]) {
+    const value = firstString(candidate);
+    if (looksLikeImage(value)) return value;
+  }
+  return "";
 }
 
 /* Bir haber sayfasını uygulamanın haber alanlarına çevirir. */
@@ -137,7 +152,12 @@ export function mapLegacyArticle({ url, html }) {
   const body = bodyText.length >= jsonBody.length ? bodyText : jsonBody;
   if (body.length < 40) return { ok: false, reason: "Haber metni bulunamadı" };
 
-  const spotSource = firstString(data.description, metaContent(html, "og:description"), body);
+  /* Eski sitede açıklama çoğu haberde başlığın kopyası; böyle durumlarda gövdenin ilk
+     paragrafı spot olarak daha bilgilendirici. */
+  const described = firstString(data.description, metaContent(html, "og:description"));
+  const sameAsTitle = described.replace(/[^\p{L}\p{N}]+/gu, "").toLocaleLowerCase("tr-TR") === title.replace(/[^\p{L}\p{N}]+/gu, "").toLocaleLowerCase("tr-TR");
+  const firstParagraph = blocks.find((block) => block.type === "paragraph")?.content ?? "";
+  const spotSource = (!described || sameAsTitle) ? (firstParagraph || described || body) : described;
   const spot = spotSource.length > 240 ? `${spotSource.slice(0, 237).trimEnd()}…` : spotSource;
   const publishedAt = Date.parse(firstString(data.datePublished, data.dateCreated, metaContent(html, "article:published_time")));
   const category = firstString(data.articleSection, metaContent(html, "article:section")) || "Gündem";

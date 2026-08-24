@@ -46,7 +46,6 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
         <div className="wrap masthead">
           <a className="brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></a>
           <div className="masthead-claim"><span>TÜRKİYE&apos;NİN HABER MERKEZİ</span><strong>Doğru haber. Güçlü yorum.</strong></div>
-          <div className="ad-space"><span>REKLAM</span><strong>970 × 90</strong></div>
           <a className="live-button" href="/canli"><i /> CANLI YAYIN</a>
           <MobileMenu categories={categories.map(({ name, slug }) => ({ name, slug }))} />
         </div>

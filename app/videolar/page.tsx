@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { listPublishedArticles, listVideoArticles } from "../../db";
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
+import { displayTitle } from "../../db/title-model.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -38,14 +39,14 @@ export default async function VideoCenter() {
           <a href={`/haber/${article.slug}`} className="video-card" key={article.id}>
             <div className="video-thumb"><img src={article.heroImage} alt={article.imageAlt} /><i aria-hidden="true">▶</i></div>
             <span>{article.category}</span>
-            <h2>{article.title}</h2>
+            <h2>{displayTitle(article.title)}</h2>
             <time>{stamp(article.publishedAt)}</time>
           </a>
         )) : (
           <div className="category-empty video-empty">
             <h2>Henüz video eklenmiş haber yok.</h2>
             <p>Yönetim panelindeki haber editöründe <strong>Video URL</strong> alanı doldurulan haberler bu sayfada listelenir.</p>
-            <div className="search-suggestions">{fallback.map((article) => <a href={`/haber/${article.slug}`} key={article.id}>{article.title}</a>)}</div>
+            <div className="search-suggestions">{fallback.map((article) => <a href={`/haber/${article.slug}`} key={article.id}>{displayTitle(article.title)}</a>)}</div>
             <a href="/canli">Canlı yayına git →</a>
           </div>
         )}
