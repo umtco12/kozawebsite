@@ -1158,3 +1158,23 @@ test("görsel türü içerik imzasından tanınır ve aktarım hatası sebebiyle
   assert.equal(typeof data.recovered, "number");
   assert.equal(typeof data.reasons, "object");
 });
+
+test("kapak görseli onarım aracı depolama kurallarını uygulamayla aynı tutar", async () => {
+  /* Araç derlenmiş uygulamadan bağımsız çalıştığı için depolama kuralları iki yerde tanımlı;
+     ikisi ayrışırsa aynı görsel iki farklı adla kaydedilir. Bu test ayrışmayı yakalar. */
+  const script = await readFile(new URL("../scripts/kapak-gorsellerini-onar.mjs", import.meta.url), "utf8");
+  const storage = await readFile(new URL("../db/media-storage.ts", import.meta.url), "utf8");
+
+  for (const rule of ['digest("hex").slice(0, 32)', "getUTCFullYear()", "flag: \"wx\""]) {
+    assert.ok(script.includes(rule), `Araç ${rule} kuralını içermeli`);
+    assert.ok(storage.includes(rule), `Uygulama ${rule} kuralını içermeli`);
+  }
+  for (const mimeType of ["image/jpeg", "image/png", "image/webp", "image/gif"]) {
+    assert.ok(script.includes(mimeType) && storage.includes(mimeType), `${mimeType} iki tarafta da tanımlı olmalı`);
+  }
+
+  /* Araç yalnız eksik görselleri hedefler; var olanları ellemez. */
+  assert.match(script, /hero_image=\?[\s\S]{0,40}source_url<>''/, "Yalnız yer tutuculu kayıtlar seçilmeli");
+  assert.match(script, /PLACEHOLDER = "\/news\/gorsel-yok\.svg"/);
+  assert.doesNotMatch(script, /DELETE|DROP/i, "Onarım aracı veri silmemeli");
+});

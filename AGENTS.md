@@ -278,6 +278,15 @@ Bir iş ancak aşağıdakiler tamamlandığında bitmiş kabul edilir:
 - Doğrulama: `npm test` içinde üretim derlemesi ve **52 test geçti; 0 başarısız, 0 atlandı**. Yeni test: imza tabanlı tür tanıma kuralı, görsel hatasının sessizce yutulmaması, yeniden deneme işleminin yetkisiz erişimi reddetmesi ve sayaç döndürmesi. `npx tsc --noEmit` başarılı; `npm run lint` **0 hata**.
 - Kalan karar veya risk: Staging'deki görsel hatasının kök nedeni henüz bilinmiyor; panelden "Eksik görselleri indir" çalıştırıldığında sebep ekranda görünecek. En olası adaylar sunucudaki boş disk alanı koruması (1 GB altına düşünce kaydetme reddediliyor) ve medya dizini yazma izni. Sunucu kimlik bilgileri sohbette paylaşıldığı için parola ve API anahtarının değiştirilmesi önerildi.
 
+### 2026-08-24 — Sunucudaki medya izni ve kapak görsellerinin onarımı
+
+- İstek: Staging'de haber görsellerinin görünmemesi; sunucuya bağlanıp sorunun çözülmesi.
+- Kök neden: `/srv/kozatv/data/media` dizini `root:root` sahipliğinde ve `700` izniyle oluşturulmuştu; uygulama `kozatv` kullanıcısıyla çalıştığı için dizine hiç yazamıyordu. Aktarımda veritabanı kaydı oluşuyor, dosya yazma işlemi izin hatası alıyor ve haber yer tutucu görsele düşüyordu. Disk sorunu yoktu (38 GB'ın 23 GB'ı boş). Hata `importImage` içinde sessizce yutulduğu için dışarıdan görülemiyordu.
+- Yapılanlar: Dizin sahipliği `kozatv:kozatv` ve izni `750` yapıldı; yazma ve alt klasör oluşturma doğrulandı. Dağıtım betiğinin veri dizinine dokunmadığı, dolayısıyla düzeltmenin kalıcı olduğu kontrol edildi. Yalnız kapak görseli eksik haberleri yeniden indiren `scripts/kapak-gorsellerini-onar.mjs` yazıldı; haber metnini yeniden çekmez, var olan görselleri ellemez, tekrar çalıştırmak güvenlidir ve başarısızlık sebeplerini sayarak raporlar.
+- Değişen ana dosyalar: `scripts/kapak-gorsellerini-onar.mjs`, `tests/rendered-html.test.mjs`, `AGENTS.md`; sunucuda `/srv/kozatv/data/media` sahiplik ve izni.
+- Doğrulama: `npm test` içinde üretim derlemesi ve **53 test geçti; 0 başarısız, 0 atlandı**. Yeni test, onarım aracının depolama kurallarının (SHA-256 tabanlı ad, yıl/ay klasörü, `wx` bayrağı, kabul edilen dört tür) `db/media-storage.ts` ile aynı kalmasını ve aracın veri silmemesini denetler. Araç yerel veritabanında denendi; oradaki 216 haberin kaynağında gerçekten görsel bulunmadığı için "kaynakta kapak görseli yok" sebebiyle raporladı.
+- Kalan karar veya risk: Sunucu kimlik bilgileri sohbette paylaşıldı; parolanın ve API anahtarının değiştirilmesi gerekiyor. Medya dizini izni ilk kurulumda yanlış oluşmuştu; benzer kurulumlarda `deployment/hetzner/README.md` adımlarına dizin sahipliği kontrolü eklenmelidir.
+
 ### Yeni günlük kaydı şablonu
 
 ### 2026-08-20 — Güvenli yayın stüdyosu, yedekleme ve editoryal onay
