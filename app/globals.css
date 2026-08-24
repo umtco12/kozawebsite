@@ -265,3 +265,5 @@ footer .social a:hover{color:var(--red)}
 .import-row em{display:block;color:#7b838c;font-size:10px;font-style:normal;margin-top:3px}
 .import-row time{font-size:10px;color:#8d959e;text-align:right}
 @media(max-width:1100px){.import-layout{grid-template-columns:1fr}.import-stats{grid-template-columns:repeat(2,1fr)}}
+.live-embed{padding:0;background:#000}
+.live-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}

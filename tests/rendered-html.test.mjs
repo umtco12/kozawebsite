@@ -12,7 +12,7 @@ import {
 } from "../app/api/content/content-model.mjs";
 import { slugify, validateArticleInput } from "../db/article-model.mjs";
 import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
-import { normalizePath, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
+import { normalizePath, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
 import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
@@ -1014,4 +1014,73 @@ test("aktarım ucu yetkisiz erişimi ve geçersiz işlemi reddeder", async () =>
     assert.equal(typeof data.stats[key], "number", `${key} sayacı bulunmalı`);
   }
   assert.ok(Array.isArray(data.items));
+});
+
+test("canlı yayın kaynağı YouTube bağlantısını ve HLS adresini ayırt eder", () => {
+  /* Koza TV yayını bugün YouTube üzerinden gidiyor; oynatıcı bunu birinci sınıf desteklemeli. */
+  for (const address of [
+    "https://www.youtube.com/watch?v=fJpho27H7Mk",
+    "https://youtu.be/fJpho27H7Mk",
+    "https://www.youtube.com/embed/fJpho27H7Mk",
+    "https://www.youtube.com/live/fJpho27H7Mk",
+  ]) {
+    const source = parseLiveSource(address);
+    assert.equal(source.kind, "youtube", `${address} YouTube olarak tanınmalı`);
+    assert.match(source.embedUrl, /^https:\/\/www\.youtube-nocookie\.com\/embed\/fJpho27H7Mk\?/);
+  }
+
+  /* Kanal kimliği verilirse yayın kimliği değişse bile adres güncellemek gerekmez. */
+  const channel = parseLiveSource("https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv");
+  assert.equal(channel.kind, "youtube");
+  assert.match(channel.embedUrl, /embed\/live_stream\?channel=UCabcdefghijklmnopqrstuv/);
+
+  const hls = parseLiveSource("https://yayin.example.com/koza/index.m3u8");
+  assert.equal(hls.kind, "hls");
+  assert.equal(hls.src, "https://yayin.example.com/koza/index.m3u8");
+  assert.equal(parseLiveSource("https://yayin.example.com/koza.m3u8?token=1").kind, "hls");
+
+  assert.equal(parseLiveSource("").kind, "none");
+  assert.equal(parseLiveSource("javascript:alert(1)").kind, "invalid");
+  assert.equal(parseLiveSource("https://example.com/video.mp4").kind, "invalid");
+  const handle = parseLiveSource("https://www.youtube.com/@KozaTv");
+  assert.equal(handle.kind, "invalid");
+  assert.match(handle.reason, /kullanıcı adı gömülemez/);
+
+  /* Ayar kaydında da aynı kural uygulanır. */
+  assert.equal(validateSettings({ liveHlsUrl: "https://www.youtube.com/watch?v=fJpho27H7Mk" }).valid, true);
+  const rejected = validateSettings({ liveHlsUrl: "https://example.com/video.mp4" });
+  assert.equal(rejected.valid, false);
+  assert.ok(rejected.errors.liveHlsUrl);
+});
+
+test("canlı yayın sayfası YouTube kaynağını gömülü oynatıcıyla sunar", async () => {
+  const saved = await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ liveHlsUrl: "https://www.youtube.com/watch?v=fJpho27H7Mk" }) });
+  assert.equal(saved.status, 200);
+
+  const body = await html("/canli");
+  assert.match(body, /youtube-nocookie\.com\/embed\/fJpho27H7Mk/, "YouTube gömülü oynatıcısı kurulmalı");
+  assert.match(body, /title="Koza TV canlı yayın"/);
+  assert.doesNotMatch(body, /YAYIN KAYNAĞI TANIMLI DEĞİL/, "Kaynak tanımlıyken kesinti ekranı gösterilmemeli");
+
+  /* Kaynak boşaltılınca sahte oynatıcı değil kesinti ekranı gösterilir. */
+  const cleared = await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ liveHlsUrl: "" }) });
+  assert.equal(cleared.status, 200);
+  const offline = await html("/canli");
+  assert.match(offline, /YAYIN KAYNAĞI TANIMLI DEĞİL/);
+  assert.doesNotMatch(offline, /youtube-nocookie/);
+});
+
+test("taşıma rehberi veri taşıma ve dağıtım değişkeni kurallarını tanımlar", async () => {
+  const guide = await readFile(new URL("../deployment/TASIMA.md", import.meta.url), "utf8");
+  for (const heading of ["Neden kolay", "Taşıma adımları", "Dikkat edilecek noktalar"]) {
+    assert.ok(guide.includes(heading), `${heading} bölümü bulunmalı`);
+  }
+  assert.match(guide, /koza\.sqlite/, "Veritabanı dosyasının yolu yazılmalı");
+  assert.match(guide, /kozatv-restore\.sh/, "Geri yükleme yolu yazılmalı");
+  assert.match(guide, /KOZA_HOST/, "Dağıtım değişkeni yazılmalı");
+
+  /* Dağıtım hattı sunucu adresini değişkenden okumalı; taşımada kod değişmemeli. */
+  const workflow = await readFile(new URL("../.github/workflows/staging.yml", import.meta.url), "utf8");
+  assert.match(workflow, /vars\.KOZA_HOST/, "Sunucu adresi GitHub değişkeninden gelmeli");
+  assert.ok(workflow.includes("known_hosts"), "Sabit SSH host anahtarı doğrulaması korunmalı");
 });

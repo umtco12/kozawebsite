@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { getBroadcastSchedule, getSiteSettings, listPublishedArticles } from "../../db";
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
 import { liveStream } from "../site-config";
-import { LivePlayer } from "./live-player";
+import { parseLiveSource } from "../../db/settings-model.mjs";
+import { LivePlayer, type LiveSource } from "./live-player";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function Live() {
 
       <div className="wrap live-layout">
         <section>
-          <LivePlayer src={broadcast.hlsUrl} backupSrc={broadcast.backupUrl} poster={broadcast.posterImage} />
+          <LivePlayer source={parseLiveSource(broadcast.hlsUrl) as LiveSource} backup={parseLiveSource(broadcast.backupUrl) as LiveSource} poster={broadcast.posterImage} />
           <div className="live-channels">
             <div><strong>Uydu</strong><span>{broadcast.satellite || "Tanımlanacak"}</span></div>
             <div><strong>Platform</strong><span>{broadcast.platforms || "Tanımlanacak"}</span></div>

@@ -8,8 +8,8 @@ export const settingGroups = [
 ];
 
 export const settingFields = [
-  { key: "liveHlsUrl", group: "yayin", type: "url", label: "Canlı yayın HLS adresi", hint: "Boş bırakılırsa oynatıcı yerine kesinti ekranı gösterilir.", placeholder: "https://yayin.example.com/kozatv/index.m3u8", default: "" },
-  { key: "liveBackupUrl", group: "yayin", type: "url", label: "Yedek yayın adresi", hint: "Ana kaynak açılmazsa izleyiciye bu adres sunulur.", placeholder: "https://yedek.example.com/kozatv.m3u8", default: "" },
+  { key: "liveHlsUrl", group: "yayin", type: "url", label: "Canlı yayın kaynağı", hint: "YouTube canlı yayın bağlantısı veya HLS (.m3u8) adresi. YouTube kanal adresi verilirse o kanalın o anda açık olan yayını gösterilir. Boş bırakılırsa kesinti ekranı çıkar.", placeholder: "https://www.youtube.com/watch?v=... veya https://yayin.example.com/koza.m3u8", default: "" },
+  { key: "liveBackupUrl", group: "yayin", type: "url", label: "Yedek yayın kaynağı", hint: "Ana kaynak açılmazsa izleyiciye bu adres sunulur. YouTube veya HLS olabilir.", placeholder: "https://www.youtube.com/watch?v=… veya https://yedek.example.com/koza.m3u8", default: "" },
   { key: "satelliteInfo", group: "yayin", type: "text", label: "Uydu bilgisi", maxLength: 120, default: "Türksat 3A • 12685 V" },
   { key: "platformInfo", group: "yayin", type: "text", label: "Platform bilgisi", maxLength: 120, default: "Digitürk 614 • D-Smart 108" },
   { key: "showMarketTicker", group: "yayin", type: "bool", label: "Üst bantta döviz ve hava durumu göster", hint: "Veri alınamazsa gösterge kendiliğinden gizlenir; sabit değer gösterilmez.", default: "1" },
@@ -90,6 +90,11 @@ export function validateSettings(payload) {
     if (field.type === "url") {
       if (!isSafeUrl(value)) { errors[field.key] = "Adres http veya https ile başlayan geçerli bir bağlantı olmalıdır."; continue; }
       if (value.length > 500) { errors[field.key] = "Adres en fazla 500 karakter olabilir."; continue; }
+      /* Canlı yayın alanları yalnızca oynatılabilir kaynak kabul eder. */
+      if (field.key === "liveHlsUrl" || field.key === "liveBackupUrl") {
+        const source = parseLiveSource(value);
+        if (source.kind === "invalid") { errors[field.key] = source.reason; continue; }
+      }
       values[field.key] = value;
       continue;
     }
@@ -166,4 +171,45 @@ export function parseRedirectInventory(text) {
   const seen = new Set();
   const unique = rows.filter((row) => (seen.has(row.fromPath) ? false : seen.add(row.fromPath)));
   return { rows: unique, invalid, duplicates: rows.length - unique.length };
+}
+
+/* Canlı yayın kaynağı: YouTube bağlantısı da HLS adresi de kabul edilir. Yayın sağlayıcısı
+   değiştiğinde kod değişmez; yönetici panelden adresi günceller.
+
+   Desteklenen YouTube biçimleri:
+   - youtube.com/watch?v=VIDEO      → o yayını gösterir
+   - youtu.be/VIDEO, youtube.com/embed/VIDEO, youtube.com/live/VIDEO
+   - youtube.com/channel/UC…        → kanalın o an açık olan yayınını gösterir (kesintide yayın
+                                       kimliği değişse bile adres güncellemek gerekmez)
+   Kullanıcı adı biçimi (youtube.com/@KozaTv) gömülemez; YouTube bunun için kanal kimliği ister. */
+export function parseLiveSource(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return { kind: "none" };
+
+  let url;
+  try { url = new URL(raw); } catch { return { kind: "invalid", reason: "Adres okunamadı." }; }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return { kind: "invalid", reason: "Adres http veya https olmalıdır." };
+
+  const host = url.host.toLowerCase().replace(/^www\./, "");
+  const youtubeHosts = ["youtube.com", "m.youtube.com", "youtube-nocookie.com", "youtu.be"];
+  if (youtubeHosts.includes(host)) {
+    const segments = url.pathname.split("/").filter(Boolean);
+    const videoId = host === "youtu.be"
+      ? segments[0]
+      : url.searchParams.get("v") ?? (["embed", "live", "v", "shorts"].includes(segments[0]) ? segments[1] : "");
+    if (videoId && /^[A-Za-z0-9_-]{6,20}$/.test(videoId)) {
+      return { kind: "youtube", embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1` };
+    }
+    const channelId = segments[0] === "channel" ? segments[1] : /^UC[A-Za-z0-9_-]{20,26}$/.test(segments[0] ?? "") ? segments[0] : "";
+    if (channelId && /^UC[A-Za-z0-9_-]{20,26}$/.test(channelId)) {
+      return { kind: "youtube", embedUrl: `https://www.youtube-nocookie.com/embed/live_stream?channel=${channelId}&rel=0` };
+    }
+    if (segments[0]?.startsWith("@")) {
+      return { kind: "invalid", reason: "YouTube kullanıcı adı gömülemez. Yayın bağlantısını (watch?v=…) veya kanal kimliğini (youtube.com/channel/UC…) kullanın." };
+    }
+    return { kind: "invalid", reason: "YouTube bağlantısında yayın kimliği bulunamadı." };
+  }
+
+  if (/\.m3u8($|\?)/i.test(url.pathname + url.search)) return { kind: "hls", src: raw };
+  return { kind: "invalid", reason: "Kaynak YouTube bağlantısı veya .m3u8 uzantılı HLS adresi olmalıdır." };
 }
