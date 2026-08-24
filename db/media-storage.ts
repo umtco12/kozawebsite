@@ -23,11 +23,20 @@ export function validateImage(buffer: Buffer, mimeType: string) {
   return null;
 }
 
+/* Kaynak sunucu yanlış ya da eksik content-type gönderdiğinde tür dosya imzasından bulunur. */
+export function detectImageType(buffer: Buffer) {
+  for (const [mimeType, accepted] of Object.entries(acceptedTypes)) {
+    if (accepted.signature(buffer)) return mimeType;
+  }
+  return "";
+}
+
 export async function storeImage(file: File) {
   const buffer = Buffer.from(await file.arrayBuffer());
-  const error = validateImage(buffer, file.type);
+  const mimeType = acceptedTypes[file.type]?.signature(buffer) ? file.type : detectImageType(buffer);
+  const error = validateImage(buffer, mimeType);
   if (error) throw new Error(error);
-  const accepted = acceptedTypes[file.type];
+  const accepted = acceptedTypes[mimeType];
   const now = new Date();
   const folder = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
   const filename = `${createHash("sha256").update(buffer).digest("hex").slice(0, 32)}.${accepted.extension}`;
@@ -38,7 +47,7 @@ export async function storeImage(file: File) {
   const availableBytes = Number(disk.bavail) * Number(disk.bsize);
   if (availableBytes - buffer.length < 1024 * 1024 * 1024) throw new Error("Sunucuda ayrılması gereken 1 GB güvenlik alanı nedeniyle görsel yüklenemedi.");
   try { await writeFile(resolve(directory, filename), buffer, { flag: "wx" }); } catch (writeError) { if ((writeError as NodeJS.ErrnoException).code !== "EEXIST") throw writeError; }
-  return { storageKey, publicUrl: `/media/${storageKey}`, mimeType: file.type, sizeBytes: buffer.length };
+  return { storageKey, publicUrl: `/media/${storageKey}`, mimeType, sizeBytes: buffer.length };
 }
 
 export async function readStoredImage(parts: string[]) {

@@ -1,6 +1,7 @@
 import {
   ensureCategory, getImportStats, importLegacyArticle, listImportItems, markImportItem,
-  recordDiscoveredUrls, resetFailedImports, saveMediaAsset, saveRedirect, takePendingImportItems,
+  listArticlesMissingImage, recordDiscoveredUrls, resetFailedImports, saveMediaAsset, saveRedirect,
+  setArticleHeroImage, takePendingImportItems,
 } from "../../../db";
 import { isAllowedSource, legacyPath, mapLegacyArticle, parseSitemapEntries, parseSitemapLocations } from "../../../db/import-model.mjs";
 import { storeImage } from "../../../db/media-storage";
@@ -25,19 +26,22 @@ async function fetchText(url: string) {
 }
 
 /* Kapak görseli medya kütüphanesine indirilir; eski sitenin ayakta olmasına bağlı kalınmaz. */
-async function importImage(imageUrl: string, altText: string, actor: string) {
-  if (!isAllowedSource(imageUrl)) return "";
+/* Başarısızlık sebebi çağırana döner; sessizce yutulursa sorun teşhis edilemiyor. */
+async function importImage(imageUrl: string, altText: string, actor: string): Promise<{ url: string; reason: string }> {
+  if (!imageUrl) return { url: "", reason: "Kaynakta kapak görseli yok" };
+  if (!isAllowedSource(imageUrl)) return { url: "", reason: "Görsel adresi izin listesinde değil" };
   try {
-    const response = await fetch(imageUrl, { headers: { "user-agent": "KozaTV-Icerik-Aktarimi/1.0" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    if (!response.ok) return "";
+    const response = await fetch(imageUrl, { headers: { "user-agent": "KozaTV-Icerik-Aktarimi/1.0", accept: "image/*" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!response.ok) return { url: "", reason: `Görsel indirilemedi (HTTP ${response.status})` };
     const contentType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!bytes.length) return { url: "", reason: "Görsel boş geldi" };
     const name = decodeURIComponent(new URL(imageUrl).pathname.split("/").pop() ?? "gorsel");
     const stored = await storeImage(new File([bytes], name, { type: contentType }));
     const media = saveMediaAsset({ ...stored, originalName: name.slice(0, 160), altText: altText.slice(0, 200), credit: "kozatv.com.tr" }, actor);
-    return media.publicUrl;
-  } catch {
-    return "";
+    return { url: media.publicUrl, reason: "" };
+  } catch (error) {
+    return { url: "", reason: `Görsel kaydedilemedi: ${error instanceof Error ? error.message : "bilinmeyen hata"}` };
   }
 }
 
@@ -93,10 +97,10 @@ export async function POST(request: Request) {
           }
           const value = mapped.value;
           const category = ensureCategory(value.category, actor) ?? "Gündem";
-          const heroImage = await importImage(value.imageUrl, value.imageAlt, actor);
+          const image = await importImage(value.imageUrl, value.imageAlt, actor);
           const article = importLegacyArticle({
             slug: value.slug, title: value.title, spot: value.spot, body: value.body, blocks: value.blocks,
-            category, author: value.author, heroImage: heroImage || MISSING_IMAGE, imageAlt: value.imageAlt,
+            category, author: value.author, heroImage: image.url || MISSING_IMAGE, imageAlt: value.imageAlt,
             sourceUrl: value.sourceUrl, seoTitle: value.seoTitle, seoDescription: value.seoDescription,
             publishedAt: value.publishedAt, status: payload.publish ? "published" : "draft",
           }, actor);
@@ -110,7 +114,7 @@ export async function POST(request: Request) {
             }
           }
 
-          markImportItem(item.id, "imported", { articleId: article.id, title: article.title, message: heroImage ? "Görsel aktarıldı" : "Kaynakta kapak görseli yok" });
+          markImportItem(item.id, "imported", { articleId: article.id, title: article.title, message: image.url ? "Görsel aktarıldı" : image.reason });
           results.push({ url: item.sourceUrl, status: "imported", message: article.title });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Bilinmeyen hata";
@@ -122,7 +126,30 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, processed: results.length, results, stats: getImportStats() });
     }
 
-    /* 3. Başarısızları tekrar kuyruğa al. */
+    /* 3. Kapak görseli inememiş haberlerde yalnız görseli yeniden dener; haber metni yeniden çekilmez. */
+    if (payload.action === "images") {
+      const limit = Math.min(Math.max(Number(payload.limit ?? 25), 1), 50);
+      const missing = listArticlesMissingImage(limit);
+      const reasons: Record<string, number> = {};
+      let recovered = 0;
+      for (const article of missing) {
+        try {
+          const html = await fetchText(article.sourceUrl);
+          const mapped = mapLegacyArticle({ url: article.sourceUrl, html }) as MappedArticle;
+          const imageUrl = mapped.ok ? mapped.value.imageUrl : "";
+          const image = await importImage(imageUrl, article.imageAlt, actor);
+          if (image.url) { setArticleHeroImage(article.id, image.url); recovered += 1; }
+          else reasons[image.reason] = (reasons[image.reason] ?? 0) + 1;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "bilinmeyen hata";
+          reasons[reason] = (reasons[reason] ?? 0) + 1;
+        }
+        await new Promise((resolve) => setTimeout(resolve, POLITE_DELAY_MS));
+      }
+      return Response.json({ ok: true, checked: missing.length, recovered, reasons, stats: getImportStats() });
+    }
+
+    /* 4. Başarısızları tekrar kuyruğa al. */
     if (payload.action === "retry") {
       return Response.json({ ok: true, requeued: resetFailedImports(), stats: getImportStats() });
     }

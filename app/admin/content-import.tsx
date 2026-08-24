@@ -88,6 +88,22 @@ export function ContentImport({ canEdit }: { canEdit: boolean }) {
     setMessage((current) => `${current} Aktarım tamamlandı.`);
   }
 
+  /* Kapak görseli inememiş haberlerde yalnız görseli yeniden dener ve sebebi raporlar. */
+  async function retryImages() {
+    setBusy(true); setMessage("Eksik kapak görselleri yeniden indiriliyor…");
+    try {
+      const data = await send({ action: "images", limit: 25 });
+      setStats(data.stats);
+      const reasons = Object.entries(data.reasons ?? {}) as [string, number][];
+      const detail = reasons.length ? ` Sebepler: ${reasons.map(([reason, count]) => `${reason} (${count})`).join(" · ")}` : "";
+      setMessage(`${data.checked} haber denendi, ${data.recovered} görsel kurtarıldı.${detail}`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Görseller indirilemedi.");
+    }
+    setBusy(false);
+  }
+
   async function retryFailed() {
     setBusy(true);
     try {
@@ -128,6 +144,7 @@ export function ContentImport({ canEdit }: { canEdit: boolean }) {
             <button type="button" onClick={runOnce} disabled={busy || running || !stats.pending}>2 · {batchSize} haber aktar</button>
             <button type="button" className={running ? "danger" : "primary"} onClick={runContinuous} disabled={busy || (!stats.pending && !running)}>{running ? "■ Aktarımı durdur" : "▶ Tümünü aktar"}</button>
             {stats.failed > 0 && <button type="button" onClick={retryFailed} disabled={busy || running}>Hatalıları tekrar dene</button>}
+            {stats.withoutImage > 0 && <button type="button" onClick={retryImages} disabled={busy || running}>Eksik görselleri indir ({stats.withoutImage})</button>}
           </div>
         )}
 

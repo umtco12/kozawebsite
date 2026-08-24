@@ -1134,3 +1134,27 @@ test("kapak görseli olmayan haberde tarafsız yer tutucu kullanılır", async (
   assert.match(importRoute, /MISSING_IMAGE = "\/news\/gorsel-yok\.svg"/);
   assert.doesNotMatch(importRoute, /heroImage: heroImage \|\| "\/news\//, "Aktarımda gerçek haber karesi yedek olarak kullanılmamalı");
 });
+
+test("görsel türü içerik imzasından tanınır ve aktarım hatası sebebiyle raporlanır", async () => {
+  /* Kaynak sunucu yanlış content-type gönderse bile tür dosya imzasından bulunmalı.
+     TypeScript kaynağı testte doğrudan çalıştırılamadığı için kural kaynak üzerinden doğrulanır. */
+  const storage = await readFile(new URL("../db/media-storage.ts", import.meta.url), "utf8");
+  assert.match(storage, /export function detectImageType/, "İmza tabanlı tür tanıma bulunmalı");
+  assert.match(storage, /acceptedTypes\[file\.type\]\?\.signature\(buffer\) \? file\.type : detectImageType\(buffer\)/, "Hatalı content-type imzayla düzeltilmeli");
+
+  /* Aktarım artık görsel hatasını yutmuyor; sebep kaydediliyor ve yeniden deneme sunuluyor. */
+  const route = await readFile(new URL("../app/api/import/route.ts", import.meta.url), "utf8");
+  assert.match(route, /reason: `Görsel indirilemedi \(HTTP \$\{response\.status\}\)`/);
+  assert.match(route, /payload\.action === "images"/, "Eksik görseller için yeniden deneme işlemi olmalı");
+  assert.doesNotMatch(route, /\} catch \{\s*return "";\s*\}/, "Görsel hatası sessizce yutulmamalı");
+
+  const unauthorized = await anonymousRequest("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "images" }) });
+  assert.equal(unauthorized.status, 401);
+
+  const retry = await request("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "images", limit: 5 }) });
+  assert.equal(retry.status, 200);
+  const data = await retry.json();
+  assert.equal(typeof data.checked, "number");
+  assert.equal(typeof data.recovered, "number");
+  assert.equal(typeof data.reasons, "object");
+});

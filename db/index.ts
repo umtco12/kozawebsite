@@ -443,3 +443,12 @@ export function listCategoryPage(category: string, page = 1, perPage = 18) {
   const rows = getDb().prepare("SELECT * FROM articles WHERE status='published' AND category=? ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?").all(category, size, (current - 1) * size) as Record<string, unknown>[];
   return { articles: rows.map(mapArticle), total, page: current, perPage: size, pageCount: Math.max(1, Math.ceil(total / size)) };
 }
+
+/* Kapak görseli inememiş aktarım haberleri: sebebini görmek ve yeniden denemek için. */
+export function listArticlesMissingImage(limit = 25) {
+  return (getDb().prepare("SELECT * FROM articles WHERE source_name='kozatv.com.tr' AND hero_image='/news/gorsel-yok.svg' AND source_url<>'' ORDER BY published_at DESC LIMIT ?").all(Math.min(Math.max(limit, 1), 50)) as Record<string, unknown>[]).map(mapArticle);
+}
+
+export function setArticleHeroImage(id: number, heroImage: string) {
+  getDb().prepare("UPDATE articles SET hero_image=?, updated_at=? WHERE id=?").run(heroImage, Date.now(), id);
+}
