@@ -201,7 +201,7 @@ AI sistemi otomatik yayıncı değil, editör yardımcısı olacaktır.
 - [ ] Son 48 saat haberlerini içeren Google News sitemap
 - [ ] RSS akışları: genel, kategori ve yazar bazlı
 - [ ] Robots kuralları; admin, önizleme, arama parametreleri ve taslakların indeks dışı tutulması
-- [x] Eski siteden URL envanteri, 301 eşleme tablosu ve kırık bağlantı taraması (panelden yönetilir; envanter verisi bekleniyor)
+- [x] Eski siteden URL envanteri, 301 eşleme tablosu ve kırık bağlantı taraması (aktarımda eşleme otomatik oluşur)
 - [ ] İç bağlantı, ilgili haber, breadcrumb ve konu kümeleri
 - [ ] Görsel SEO: anlamlı dosya/alt metin, boyut, telif ve image sitemap
 - [ ] Core Web Vitals bütçeleri: LCP ≤ 2,5 sn, INP ≤ 200 ms, CLS ≤ 0,1 hedefi
@@ -264,7 +264,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 - [x] CI/CD sağlayıcısını seç ve `main` kalite kapılarını kur
 - [x] Staging/canlı ortam ayrımını ve alan adlarını tanımla
 - [ ] Hata izleme, uptime kontrolü ve secret yönetimini kur (kurgu hazır; araç ve hesap kararı bekliyor)
-- [ ] Mevcut eski site URL/içerik/medya envanterini çıkar (aktarım ekranı hazır; envanter verisi bekleniyor)
+- [x] Mevcut eski site URL/içerik/medya envanteri çıkarıldı: 7.718 haber adresi, 2020-2026 arası aylık sitemap
 
 **Çıkış kriteri:** Her commit otomatik test edilir; staging güvenli biçimde dağıtılabilir.
 
@@ -289,7 +289,7 @@ Mevcut repoda doğrulanmış Jenkins veya GitHub Actions hattı yoktur. İlk alt
 ### Faz 3 — SEO, taşıma ve medya
 
 - [ ] Haber metadata/schema, sitemap, News sitemap ve RSS
-- [ ] Eski URL 301 haritası panelden yönetilir; içerik taşıma aracı bekliyor
+- [x] Eski URL 301 haritası ve içerik taşıma aracı panelden yönetilir (7.718 haber envanteri keşfedildi)
 - [ ] Nesne depolama medya hattı, görsel türevleri, telif ve alt metin kontrolleri (alt metin, kredi, dosya doğrulama ve disk kotası tamamlandı)
 - [ ] Arama, yazar, video/program ve kurumsal sayfalar
 

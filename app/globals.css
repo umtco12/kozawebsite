@@ -228,3 +228,40 @@ footer .social a:hover{color:var(--red)}
 .redirect-add button{height:40px;background:var(--ink);color:#fff;border:0;font-weight:800;font-size:12px;cursor:pointer}
 .redirect-add button:disabled{opacity:.55}
 @media(max-width:1100px){.settings-layout,.redirect-layout{grid-template-columns:1fr}.settings-aside{position:static}.redirect-head{display:none}.redirect-row{grid-template-columns:1fr;gap:6px}}
+
+/* Eski site içerik aktarımı */
+.import-layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;align-items:start}
+.import-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:0 16px 16px}
+.import-stats article{background:#f7f8f9;border:1px solid var(--line);padding:16px}
+.import-stats span{font-size:10px;font-weight:900;letter-spacing:.9px;color:#7b838c;text-transform:uppercase}
+.import-stats strong{display:block;font-size:28px;font-family:var(--font-serif),serif;margin:6px 0 2px}
+.import-stats small{color:#8d959e;font-size:11px}
+.import-stats .accent{background:#fff6f6;border-color:#f0d3d3}
+.import-progress{position:relative;height:26px;margin:0 16px 16px;background:#eef0f2;overflow:hidden}
+.import-progress>div{height:100%;background:var(--red);transition:width .4s ease}
+.import-progress span{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;font-weight:800;color:var(--ink)}
+.import-actions{display:flex;flex-wrap:wrap;gap:10px;padding:0 16px 14px}
+.import-actions button{border:1px solid var(--line);background:#fff;padding:11px 16px;font-size:12px;font-weight:800;cursor:pointer}
+.import-actions button:hover:not(:disabled){border-color:var(--red);color:var(--red)}
+.import-actions button:disabled{opacity:.5;cursor:not-allowed}
+.import-actions .primary{background:var(--red);color:#fff;border-color:var(--red)}
+.import-actions .danger{background:var(--ink);color:#fff;border-color:var(--ink)}
+.import-options{display:grid;gap:12px;padding:0 16px 16px}
+.import-options>label{display:flex;gap:10px;align-items:flex-start;background:#f7f8f9;border:1px solid var(--line);padding:14px;font-size:12px}
+.import-options strong{display:block;font-size:13px;margin-bottom:3px}
+.import-options small{color:#7b838c;line-height:1.5;display:block}
+.import-batch{align-items:center!important;font-weight:800;color:#5c646d}
+.import-batch select{margin-left:auto;height:34px;border:1px solid var(--line);background:#fff;font:inherit;font-size:12px;padding:0 8px}
+.import-log{padding:22px;max-height:640px;overflow:auto}
+.import-log>span{font-size:10px;letter-spacing:1.4px;color:#7b838c;font-weight:900}
+.import-log h2{font-family:var(--font-serif),serif;font-size:19px;margin:8px 0 14px}
+.import-row{display:grid;grid-template-columns:76px minmax(0,1fr) 62px;gap:10px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line);font-size:12px}
+.import-row b{font-size:9px;font-weight:900;letter-spacing:.6px;padding:4px 6px;text-align:center;background:#eef0f2;color:#5c646d}
+.import-row.status-imported b{background:#e7f5ec;color:#1d6b3a}
+.import-row.status-failed b{background:#fdeaea;color:#a32020}
+.import-row.status-skipped b{background:#fdf4e3;color:#8a6510}
+.import-row strong{display:block;font-size:12px;line-height:1.35}
+.import-row small{display:block;color:#8d959e;font-size:10px;word-break:break-all;margin-top:2px}
+.import-row em{display:block;color:#7b838c;font-size:10px;font-style:normal;margin-top:3px}
+.import-row time{font-size:10px;color:#8d959e;text-align:right}
+@media(max-width:1100px){.import-layout{grid-template-columns:1fr}.import-stats{grid-template-columns:repeat(2,1fr)}}

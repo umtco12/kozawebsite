@@ -13,6 +13,7 @@ import {
 import { slugify, validateArticleInput } from "../db/article-model.mjs";
 import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
 import { normalizePath, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
+import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -939,4 +940,78 @@ test("operasyon kurgusu izleme, kurtarma hedefi ve canlıya geçiş kapıların�
   const addresses = plan.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? [];
   assert.deepEqual(addresses.filter((address) => address !== "127.0.0.1"), [], "Ortak dokümanda dış sunucu adresi paylaşılmamalı");
   assert.doesNotMatch(plan, /(parola|şifre|password|token|secret)\s*[:=]\s*\S/i, "Operasyon dokümanında gizli değer yazılmamalı");
+});
+
+test("eski site aktarımı yalnızca kurumun kendi alan adından veri çeker", () => {
+  assert.equal(isAllowedSource("https://www.kozatv.com.tr/haber-x-1.html"), true);
+  assert.equal(isAllowedSource("https://kozatv.com.tr/haber-x-1.html"), true);
+  assert.equal(isAllowedSource("https://baska-site.com/haber"), false, "Dış alan adından aktarım yapılamaz");
+  assert.equal(isAllowedSource("http://127.0.0.1:8201/admin"), false, "İç ağ adresi çekilemez");
+  assert.equal(isAllowedSource("file:///etc/passwd"), false);
+  assert.equal(isAllowedSource("https://www.kozatv.com.tr.saldirgan.com/x"), false, "Benzer görünen alan adı reddedilmeli");
+
+  const index = `<sitemapindex><sitemap><loc>https://www.kozatv.com.tr/haberler-2026-8.xml</loc></sitemap><sitemap><loc>https://kotu-site.com/x.xml</loc></sitemap></sitemapindex>`;
+  assert.deepEqual(parseSitemapLocations(index), ["https://www.kozatv.com.tr/haberler-2026-8.xml"]);
+
+  const urlset = `<urlset><url><loc>https://www.kozatv.com.tr/haber-a-1.html</loc><lastmod>2026-08-24T14:21:55+03:00</lastmod></url><url><loc>https://www.kozatv.com.tr/haber-b-2.html</loc></url></urlset>`;
+  const entries = parseSitemapEntries(urlset);
+  assert.equal(entries.length, 2);
+  assert.ok(entries[0].lastmod > 0, "lastmod okunmalı");
+  assert.equal(entries[1].lastmod, null);
+});
+
+test("eski adresten sabit slug ve site içi yol üretilir", () => {
+  assert.equal(slugFromLegacyUrl("https://www.kozatv.com.tr/haber-balcova-baskani-goreve-iade-edildi-9715.html"), "balcova-baskani-goreve-iade-edildi-9715");
+  assert.equal(legacyPath("https://www.kozatv.com.tr/Haber-Ornek-1.html"), "/haber-ornek-1.html");
+  assert.equal(slugFromLegacyUrl("bozuk-adres", "Türkçe Başlık Örneği"), "turkce-baslik-ornegi");
+});
+
+test("eski haber sayfası tam gövde, ara başlık ve alanlarıyla aktarılır", async () => {
+  const html = await readFile(new URL("./fixtures/eski-haber.html", import.meta.url), "utf8");
+  const url = "https://www.kozatv.com.tr/haber-eski-site-ornek-haberi-4242.html";
+  const result = mapLegacyArticle({ url, html });
+  assert.equal(result.ok, true);
+  const value = result.value;
+
+  assert.equal(value.slug, "eski-site-ornek-haberi-4242");
+  assert.equal(value.title, "ESKİ SİTE ÖRNEK HABERİ");
+  assert.equal(value.category, "Ekonomi");
+  assert.equal(value.author, "Koza TV Ekonomi Servisi");
+  assert.equal(new Date(value.publishedAt).toISOString().slice(0, 10), "2024-03-05", "Özgün yayın tarihi korunmalı");
+  assert.equal(value.sourceUrl, url);
+  assert.match(value.imageUrl, /^https:\/\/www\.kozatv\.com\.tr\/images\//);
+
+  /* Gövde JSON-LD özetinden değil sayfadan okunmalı; özet 500 karakterde kesiliyor. */
+  assert.ok(value.body.length > 300, `Tam gövde beklenir, gelen: ${value.body.length}`);
+  assert.match(value.body, /Son paragrafta olayın arka planı/, "Gövdenin sonu da alınmalı");
+  assert.doesNotMatch(value.body, /yorum bölümündedir/, "Yorum bölümü gövdeye girmemeli");
+  assert.doesNotMatch(value.body, /^Paylaş$/m, "Paylaş bağlantısı gövdeye girmemeli");
+
+  const headings = value.blocks.filter((block) => block.type === "heading").map((block) => block.content);
+  assert.deepEqual(headings, ["ARA BAŞLIK BURADA", "NE OLMUŞTU?"], "Ara başlıklar korunmalı");
+  assert.ok(value.blocks.filter((block) => block.type === "paragraph").length >= 4);
+
+  /* Gövde konteyneri bulunamazsa haber atlanır, uydurma içerik üretilmez. */
+  const empty = mapLegacyArticle({ url, html: "<html><head></head><body><p>metin</p></body></html>" });
+  assert.equal(empty.ok, false);
+  assert.deepEqual(extractBodyBlocks("<div>gövde yok</div>"), []);
+});
+
+test("aktarım ucu yetkisiz erişimi ve geçersiz işlemi reddeder", async () => {
+  const anonymous = await anonymousRequest("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "discover" }) });
+  assert.equal(anonymous.status, 401, "Oturumsuz aktarım kapalı olmalı");
+
+  const anonymousRead = await anonymousRequest("/api/import");
+  assert.equal(anonymousRead.status, 401);
+
+  const unknown = await request("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "bilinmeyen" }) });
+  assert.equal(unknown.status, 400);
+
+  const status = await request("/api/import");
+  assert.equal(status.status, 200);
+  const data = await status.json();
+  for (const key of ["total", "pending", "imported", "skipped", "failed"]) {
+    assert.equal(typeof data.stats[key], "number", `${key} sayacı bulunmalı`);
+  }
+  assert.ok(Array.isArray(data.items));
 });

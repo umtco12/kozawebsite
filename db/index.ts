@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import { slugify } from "./article-model.mjs";
 import { hashPassword, verifyPassword } from "./auth-model.mjs";
 import { defaultSettings, normalizePath, normalizeSchedule, scheduleDefault } from "./settings-model.mjs";
+import { legacyPath } from "./import-model.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
@@ -64,6 +65,13 @@ function ensureSchema(db: InstanceType<typeof Database>) {
       last_check_status INTEGER, last_checked_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_redirects_active ON redirects(active, from_path);
+    CREATE TABLE IF NOT EXISTS import_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, source_url TEXT NOT NULL UNIQUE, source_path TEXT NOT NULL, source_lastmod INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','imported','skipped','failed')),
+      article_id INTEGER, title TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '',
+      discovered_at INTEGER NOT NULL, processed_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_import_items_status ON import_items(status, source_lastmod DESC);
   `);
   ensureColumn(db, "articles", "content_blocks", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "articles", "workflow_state", "TEXT NOT NULL DEFAULT 'reporter_draft'");
@@ -305,4 +313,109 @@ export function recordRedirectHit(id: number) {
 
 export function recordRedirectCheck(id: number, status: number) {
   getDb().prepare("UPDATE redirects SET last_check_status=?, last_checked_at=? WHERE id=?").run(status, Date.now(), id);
+}
+
+/* Eski site içerik aktarımı: keşfedilen adresler, aktarım durumu ve tekrar çalıştırılabilirlik. */
+export type ImportItem = { id: number; sourceUrl: string; sourcePath: string; sourceLastmod: number | null; status: "pending" | "imported" | "skipped" | "failed"; articleId: number | null; title: string; message: string; discoveredAt: number; processedAt: number | null };
+
+function mapImportItem(row: Record<string, unknown>): ImportItem {
+  return { id: Number(row.id), sourceUrl: String(row.source_url), sourcePath: String(row.source_path), sourceLastmod: row.source_lastmod == null ? null : Number(row.source_lastmod), status: row.status as ImportItem["status"], articleId: row.article_id == null ? null : Number(row.article_id), title: String(row.title), message: String(row.message), discoveredAt: Number(row.discovered_at), processedAt: row.processed_at == null ? null : Number(row.processed_at) };
+}
+
+/* Keşif tekrar çalıştırılabilir: var olan adres yeniden eklenmez, durumu korunur. */
+export function recordDiscoveredUrls(entries: { url: string; lastmod: number | null }[]) {
+  const db = getDb();
+  const now = Date.now();
+  let added = 0;
+  const statement = db.prepare("INSERT INTO import_items (source_url,source_path,source_lastmod,status,discovered_at) VALUES (?,?,?,'pending',?) ON CONFLICT(source_url) DO NOTHING");
+  db.transaction(() => {
+    for (const entry of entries) {
+      const path = legacyPath(entry.url);
+      if (!path) continue;
+      added += statement.run(entry.url, path, entry.lastmod, now).changes;
+    }
+  })();
+  return added;
+}
+
+export function listImportItems(status: ImportItem["status"] | "all" = "all", limit = 50) {
+  const safeLimit = Math.min(Math.max(limit, 1), 200);
+  const rows = status === "all"
+    ? getDb().prepare("SELECT * FROM import_items ORDER BY processed_at DESC, source_lastmod DESC LIMIT ?").all(safeLimit)
+    : getDb().prepare("SELECT * FROM import_items WHERE status=? ORDER BY source_lastmod DESC LIMIT ?").all(status, safeLimit);
+  return (rows as Record<string, unknown>[]).map(mapImportItem);
+}
+
+export function takePendingImportItems(limit = 20) {
+  return (getDb().prepare("SELECT * FROM import_items WHERE status='pending' ORDER BY source_lastmod DESC LIMIT ?").all(Math.min(Math.max(limit, 1), 50)) as Record<string, unknown>[]).map(mapImportItem);
+}
+
+export function getImportStats() {
+  const rows = getDb().prepare("SELECT status, COUNT(*) AS total FROM import_items GROUP BY status").all() as { status: string; total: number }[];
+  const stats = { total: 0, pending: 0, imported: 0, skipped: 0, failed: 0 } as Record<string, number>;
+  for (const row of rows) { stats[row.status] = row.total; stats.total += row.total; }
+  return stats;
+}
+
+export function markImportItem(id: number, status: ImportItem["status"], detail: { articleId?: number | null; title?: string; message?: string } = {}) {
+  getDb().prepare("UPDATE import_items SET status=?, article_id=?, title=?, message=?, processed_at=? WHERE id=?")
+    .run(status, detail.articleId ?? null, (detail.title ?? "").slice(0, 200), (detail.message ?? "").slice(0, 300), Date.now(), id);
+}
+
+export function resetFailedImports() {
+  return getDb().prepare("UPDATE import_items SET status='pending', message='', processed_at=NULL WHERE status='failed'").run().changes;
+}
+
+export function findArticleBySourceUrl(sourceUrl: string) {
+  const row = getDb().prepare("SELECT * FROM articles WHERE source_url=?").get(sourceUrl) as Record<string, unknown> | undefined;
+  return row ? mapArticle(row) : null;
+}
+
+export function getArticleBySlugAnyStatus(slug: string) {
+  const row = getDb().prepare("SELECT * FROM articles WHERE slug=?").get(slug) as Record<string, unknown> | undefined;
+  return row ? mapArticle(row) : null;
+}
+
+/* Aktarılan haberi doğrudan yazar. Editoryal onay akışı arşiv aktarımı için atlanır; kaynak
+   adres ve özgün yayın tarihi korunur, işlem denetim kaydına yazılır. */
+export function importLegacyArticle(input: { slug: string; title: string; spot: string; body: string; blocks: { type: string; content: string }[]; category: string; author: string; heroImage: string; imageAlt: string; sourceUrl: string; seoTitle: string; seoDescription: string; publishedAt: number | null; status: "draft" | "published" }, actor = "İçerik Aktarımı") {
+  const db = getDb();
+  const now = Date.now();
+  const blocks = input.blocks.map((block, index) => ({ id: `import-${index}`, type: block.type, content: block.content }));
+  const values = {
+    ...input,
+    contentBlocks: JSON.stringify(blocks),
+    workflowState: input.status === "published" ? "published" : "reporter_draft",
+    publishedAt: input.status === "published" ? (input.publishedAt ?? now) : null,
+    sourceName: "kozatv.com.tr",
+    now,
+  };
+  const existing = db.prepare("SELECT id FROM articles WHERE source_url=? OR slug=?").get(input.sourceUrl, input.slug) as { id: number } | undefined;
+  let id: number;
+  if (existing) {
+    db.prepare(`UPDATE articles SET title=@title,spot=@spot,body=@body,content_blocks=@contentBlocks,category=@category,status=@status,workflow_state=@workflowState,hero_image=@heroImage,image_alt=@imageAlt,author=@author,source_name=@sourceName,source_url=@sourceUrl,seo_title=@seoTitle,seo_description=@seoDescription,published_at=@publishedAt,edit_version=edit_version+1,updated_at=@now WHERE id=@id`).run({ ...values, id: existing.id });
+    id = existing.id;
+  } else {
+    const result = db.prepare(`INSERT INTO articles (slug,title,spot,body,content_blocks,category,status,workflow_state,hero_image,image_alt,video_url,author,source_name,source_url,seo_title,seo_description,is_breaking,is_featured,homepage_order,published_at,scheduled_at,created_at,updated_at) VALUES (@slug,@title,@spot,@body,@contentBlocks,@category,@status,@workflowState,@heroImage,@imageAlt,'',@author,@sourceName,@sourceUrl,@seoTitle,@seoDescription,0,0,500,@publishedAt,NULL,@now,@now)`).run(values);
+    id = Number(result.lastInsertRowid);
+  }
+  db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,'import',?,?,?)").run(id, actor, JSON.stringify({ sourceUrl: input.sourceUrl, status: input.status }), now);
+  return mapArticle(db.prepare("SELECT * FROM articles WHERE id=?").get(id) as Record<string, unknown>);
+}
+
+/* Aktarılan kategori sitede yoksa menüde gizli olarak açılır; yönetici sonradan görünür yapar. */
+export function ensureCategory(name: string, actor = "İçerik Aktarımı") {
+  const clean = name.trim().slice(0, 60);
+  if (!clean) return null;
+  const existing = getDb().prepare("SELECT name FROM categories WHERE name=? COLLATE NOCASE").get(clean) as { name: string } | undefined;
+  if (existing) return existing.name;
+  const now = Date.now();
+  const slug = slugify(clean);
+  if (!slug) return null;
+  const clash = getDb().prepare("SELECT name FROM categories WHERE slug=?").get(slug) as { name: string } | undefined;
+  if (clash) return clash.name;
+  getDb().prepare("INSERT INTO categories (name,slug,description,seo_title,seo_description,color,nav_order,is_visible,created_at,updated_at) VALUES (?,?,?,?,?,?,?,0,?,?)")
+    .run(clean, slug, `${clean} haberleri`, "", "", "#c92721", 200, now, now);
+  getDb().prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('category',0,'import_create',?,?,?)").run(actor, JSON.stringify({ name: clean }), now);
+  return clean;
 }
