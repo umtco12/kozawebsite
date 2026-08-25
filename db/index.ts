@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { slugify } from "./article-model.mjs";
 import { hashPassword, verifyPassword } from "./auth-model.mjs";
+import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "./demo-content-model.mjs";
 import { defaultSettings, normalizePath, normalizeSchedule, scheduleDefault } from "./settings-model.mjs";
 import { legacyPath } from "./import-model.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
@@ -85,8 +86,18 @@ function ensureSchema(db: InstanceType<typeof Database>) {
      (`/news/gundem.jpg`) yedek olarak yazıyordu; bu, okura yanlış görsel gösteriyordu.
      Yalnızca aktarılan kayıtlar tarafsız yer tutucuya çevrilir. */
   db.prepare("UPDATE articles SET hero_image='/news/gorsel-yok.svg' WHERE source_name='kozatv.com.tr' AND hero_image='/news/gundem.jpg'").run();
+
+  /* Prototip haberleri canlı içerik değildir. Üretimde yalnız bilinen slug + boş kaynak
+     birleşimi silinir; editörün gerçek haberlerine ve aktarılan arşive dokunulmaz. */
+  const demoEnabled = shouldSeedDemoContent(process.env.KOZA_ENABLE_DEMO_CONTENT);
+  if (!demoEnabled && DEMO_ARTICLE_SLUGS.length) {
+    const placeholders = DEMO_ARTICLE_SLUGS.map(() => "?").join(",");
+    db.prepare(`DELETE FROM articles WHERE source_url='' AND source_name='Koza TV' AND slug IN (${placeholders})`)
+      .run(...DEMO_ARTICLE_SLUGS);
+  }
+
   const articleCount = Number((db.prepare("SELECT COUNT(*) AS count FROM articles").get() as { count: number }).count);
-  if (articleCount === 0) {
+  if (articleCount === 0 && demoEnabled) {
     const now = Date.now();
     const insert = db.prepare(`INSERT INTO articles (slug,title,spot,body,category,status,hero_image,image_alt,video_url,author,source_name,source_url,seo_title,seo_description,is_breaking,is_featured,published_at,scheduled_at,created_at,updated_at) VALUES (@slug,@title,@spot,@body,@category,@status,@heroImage,@imageAlt,'',@author,@sourceName,@sourceUrl,@title,@spot,@isBreaking,@isFeatured,@publishedAt,NULL,@createdAt,@createdAt)`);
     db.transaction(() => { for (const article of seedArticles) insert.run({ ...article, publishedAt: article.status === "published" ? now - article.publishedOffsetMinutes * 60_000 : null, createdAt: now - Math.max(article.publishedOffsetMinutes, 1) * 60_000 }); })();
@@ -352,6 +363,34 @@ export function listImportItems(status: ImportItem["status"] | "all" = "all", li
 
 export function takePendingImportItems(limit = 20) {
   return (getDb().prepare("SELECT * FROM import_items WHERE status='pending' ORDER BY source_lastmod DESC LIMIT ?").all(Math.min(Math.max(limit, 1), 50)) as Record<string, unknown>[]).map(mapImportItem);
+}
+
+/* Ana sayfa eşitlemesi büyük arşiv kuyruğundan bağımsız çalışır: yalnız eski sitenin
+   o anda görünür olan adresleri, kaynakta göründükleri sırayla seçilir. */
+export function takePendingImportItemsByUrls(urls: string[]) {
+  const ordered = [...new Set(urls)].slice(0, 50);
+  if (!ordered.length) return [];
+  const placeholders = ordered.map(() => "?").join(",");
+  const rows = getDb().prepare(`SELECT * FROM import_items WHERE status='pending' AND source_url IN (${placeholders})`).all(...ordered) as Record<string, unknown>[];
+  const byUrl = new Map(rows.map((row) => [String(row.source_url), mapImportItem(row)]));
+  return ordered.map((url) => byUrl.get(url)).filter((item): item is ImportItem => Boolean(item));
+}
+
+/* Eski sitenin vitrini geçiş döneminde yayın sırasının kaynağıdır. İlk beş haber manşete,
+   ilk haber de flaş/son dakika bandına alınır. Yalnız kozatv.com.tr aktarım kayıtları
+   etkilenir; editörün yeni sitede elle hazırladığı seçimler korunur. */
+export function applyLegacyHomepageOrder(urls: string[]) {
+  const db = getDb();
+  const ordered = [...new Set(urls)].slice(0, 50);
+  let matched = 0;
+  db.transaction(() => {
+    db.prepare("UPDATE articles SET is_featured=0,is_breaking=0,homepage_order=500 WHERE source_name='kozatv.com.tr'").run();
+    const update = db.prepare("UPDATE articles SET is_featured=?,is_breaking=?,homepage_order=?,updated_at=? WHERE source_name='kozatv.com.tr' AND source_url=? AND status='published'");
+    ordered.forEach((url, index) => {
+      matched += update.run(index < 5 ? 1 : 0, index === 0 ? 1 : 0, index + 1, Date.now(), url).changes;
+    });
+  })();
+  return matched;
 }
 
 export function getImportStats() {

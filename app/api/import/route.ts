@@ -1,17 +1,19 @@
 import {
-  ensureCategory, getImportStats, importLegacyArticle, listImportItems, markImportItem,
+  applyLegacyHomepageOrder, ensureCategory, getImportStats, importLegacyArticle, listImportItems, markImportItem,
   listArticlesMissingImage, recordDiscoveredUrls, resetFailedImports, saveMediaAsset, saveRedirect,
-  setArticleHeroImage, takePendingImportItems,
+  setArticleHeroImage, takePendingImportItems, takePendingImportItemsByUrls,
 } from "../../../db";
-import { isAllowedSource, legacyPath, mapLegacyArticle, parseSitemapEntries, parseSitemapLocations } from "../../../db/import-model.mjs";
+import { isAllowedSource, legacyPath, mapLegacyArticle, parseHomepageEntries, parseSitemapEntries, parseSitemapLocations } from "../../../db/import-model.mjs";
 import { storeImage } from "../../../db/media-storage";
 import { authorizeAdmin } from "../write-access";
 
 type LegacyArticle = { slug: string; title: string; spot: string; body: string; blocks: { type: string; content: string }[]; category: string; author: string; imageUrl: string; imageAlt: string; publishedAt: number | null; sourceUrl: string; seoTitle: string; seoDescription: string };
 type MappedArticle = { ok: true; value: LegacyArticle } | { ok: false; reason: string };
+type PendingItem = ReturnType<typeof takePendingImportItems>[number];
 
 export const dynamic = "force-dynamic";
 
+const HOMEPAGE_URL = "https://www.kozatv.com.tr/";
 const SITEMAP_INDEX = "https://www.kozatv.com.tr/sitemap.xml";
 const FETCH_TIMEOUT_MS = 20_000;
 const POLITE_DELAY_MS = 250;
@@ -43,6 +45,47 @@ async function importImage(imageUrl: string, altText: string, actor: string): Pr
   } catch (error) {
     return { url: "", reason: `Görsel kaydedilemedi: ${error instanceof Error ? error.message : "bilinmeyen hata"}` };
   }
+}
+
+async function importItems(items: PendingItem[], actor: string, options: { publish: boolean; createRedirects: boolean }) {
+  const results: { url: string; status: string; message: string }[] = [];
+  for (const item of items) {
+    try {
+      const html = await fetchText(item.sourceUrl);
+      const mapped = mapLegacyArticle({ url: item.sourceUrl, html }) as MappedArticle;
+      if (!mapped.ok) {
+        markImportItem(item.id, "skipped", { message: mapped.reason });
+        results.push({ url: item.sourceUrl, status: "skipped", message: mapped.reason });
+        continue;
+      }
+      const value = mapped.value;
+      const category = ensureCategory(value.category, actor) ?? "Gündem";
+      const image = await importImage(value.imageUrl, value.imageAlt, actor);
+      const article = importLegacyArticle({
+        slug: value.slug, title: value.title, spot: value.spot, body: value.body, blocks: value.blocks,
+        category, author: value.author, heroImage: image.url || MISSING_IMAGE, imageAlt: value.imageAlt,
+        sourceUrl: value.sourceUrl, seoTitle: value.seoTitle, seoDescription: value.seoDescription,
+        publishedAt: value.publishedAt, status: options.publish ? "published" : "draft",
+      }, actor);
+
+      if (options.createRedirects) {
+        const fromPath = legacyPath(item.sourceUrl);
+        const toPath = `/haber/${article.slug}`;
+        if (fromPath && fromPath !== toPath) {
+          try { saveRedirect({ fromPath, toPath, kind: "permanent", note: "Eski site aktarımı" }, actor); } catch { /* Eşleme zaten varsa atlanır. */ }
+        }
+      }
+
+      markImportItem(item.id, "imported", { articleId: article.id, title: article.title, message: image.url ? "Görsel aktarıldı" : image.reason });
+      results.push({ url: item.sourceUrl, status: "imported", message: article.title });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Bilinmeyen hata";
+      markImportItem(item.id, "failed", { message });
+      results.push({ url: item.sourceUrl, status: "failed", message });
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLITE_DELAY_MS));
+  }
+  return results;
 }
 
 export async function GET(request: Request) {
@@ -79,50 +122,26 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, sitemaps: monthly.length, discovered, scanned, stats: getImportStats() });
     }
 
+    /* Canlı ana sayfa köprüsü: eski vitrinde görünen ilk 25 haber doğrudan yayına
+       alınır ve aynı sırayla yeni manşete işaretlenir. Tekrar çalıştırmak güvenlidir. */
+    if (payload.action === "sync_homepage") {
+      const visible = parseHomepageEntries(await fetchText(HOMEPAGE_URL)).slice(0, 25);
+      if (!visible.length) throw new Error("Eski ana sayfada haber bağlantısı bulunamadı.");
+      const discovered = recordDiscoveredUrls(visible);
+      const urls = visible.map((entry) => entry.url);
+      const items = takePendingImportItemsByUrls(urls);
+      const results = await importItems(items, actor, { publish: true, createRedirects: true });
+      const ordered = applyLegacyHomepageOrder(urls);
+      return Response.json({ ok: true, visible: visible.length, discovered, processed: results.length, ordered, results, stats: getImportStats() });
+    }
+
     /* 2. Aktarım: bekleyen adresler parça parça çekilir. Yeniden çalıştırmak güvenlidir. */
     if (payload.action === "run") {
       const limit = Math.min(Math.max(Number(payload.limit ?? 10), 1), 50);
       const items = takePendingImportItems(limit);
       if (!items.length) return Response.json({ ok: true, processed: 0, message: "Bekleyen adres yok.", stats: getImportStats() });
 
-      const results: { url: string; status: string; message: string }[] = [];
-      for (const item of items) {
-        try {
-          const html = await fetchText(item.sourceUrl);
-          const mapped = mapLegacyArticle({ url: item.sourceUrl, html }) as MappedArticle;
-          if (!mapped.ok) {
-            markImportItem(item.id, "skipped", { message: mapped.reason });
-            results.push({ url: item.sourceUrl, status: "skipped", message: mapped.reason });
-            continue;
-          }
-          const value = mapped.value;
-          const category = ensureCategory(value.category, actor) ?? "Gündem";
-          const image = await importImage(value.imageUrl, value.imageAlt, actor);
-          const article = importLegacyArticle({
-            slug: value.slug, title: value.title, spot: value.spot, body: value.body, blocks: value.blocks,
-            category, author: value.author, heroImage: image.url || MISSING_IMAGE, imageAlt: value.imageAlt,
-            sourceUrl: value.sourceUrl, seoTitle: value.seoTitle, seoDescription: value.seoDescription,
-            publishedAt: value.publishedAt, status: payload.publish ? "published" : "draft",
-          }, actor);
-
-          /* Eski adres yeni habere kalıcı olarak yönlendirilir; arama motoru değeri korunur. */
-          if (payload.createRedirects !== false) {
-            const fromPath = legacyPath(item.sourceUrl);
-            const toPath = `/haber/${article.slug}`;
-            if (fromPath && fromPath !== toPath) {
-              try { saveRedirect({ fromPath, toPath, kind: "permanent", note: "Eski site aktarımı" }, actor); } catch { /* Eşleme zaten varsa atlanır. */ }
-            }
-          }
-
-          markImportItem(item.id, "imported", { articleId: article.id, title: article.title, message: image.url ? "Görsel aktarıldı" : image.reason });
-          results.push({ url: item.sourceUrl, status: "imported", message: article.title });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Bilinmeyen hata";
-          markImportItem(item.id, "failed", { message });
-          results.push({ url: item.sourceUrl, status: "failed", message });
-        }
-        await new Promise((resolve) => setTimeout(resolve, POLITE_DELAY_MS));
-      }
+      const results = await importItems(items, actor, { publish: Boolean(payload.publish), createRedirects: payload.createRedirects !== false });
       return Response.json({ ok: true, processed: results.length, results, stats: getImportStats() });
     }
 

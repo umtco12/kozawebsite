@@ -44,9 +44,12 @@ type Lead = {
   title: string;
   summary: string;
   image: string;
+  imageAlt: string;
   href?: string;
   published?: string;
 };
+
+const ROTATION_MS = 6000;
 
 /* Arama, tarayıcının kendi GET gönderimini kullanır; JavaScript yüklenmese de çalışır. */
 export function SearchBox() {
@@ -73,54 +76,104 @@ export function SearchBox() {
 }
 
 export function LeadSlider({ items }: { items: Lead[] }) {
-  const [slides] = useState(items);
+  const slides = items.filter((item) => item?.title && item?.image);
   const [active, setActive] = useState(0);
+  const [pausedByUser, setPausedByUser] = useState(false);
+  const [interacting, setInteracting] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
-    const id = setInterval(
-      () => setActive((value) => (value + 1) % slides.length),
-      6500,
-    );
-    return () => clearInterval(id);
-  }, [slides.length]);
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
 
-  const item = slides[active] ?? items[0];
+  const paused = pausedByUser || interacting || reducedMotion;
+
+  useEffect(() => {
+    if (paused || slides.length < 2) return;
+    const id = window.setTimeout(() => setActive((value) => (value + 1) % slides.length), ROTATION_MS);
+    return () => window.clearTimeout(id);
+  }, [active, paused, slides.length]);
+
+  if (!slides.length) return null;
+
+  const item = slides[active] ?? slides[0];
+  const previous = () => setActive((value) => (value - 1 + slides.length) % slides.length);
+  const next = () => setActive((value) => (value + 1) % slides.length);
 
   return (
-    <article className="lead">
-      <img src={item.image} alt="" />
+    <section
+      className="lead"
+      aria-roledescription="carousel"
+      aria-label="Koza TV manşet haberleri"
+      data-autoplay={!paused && slides.length > 1 ? "true" : "false"}
+      onMouseEnter={() => setInteracting(true)}
+      onMouseLeave={() => setInteracting(false)}
+      onFocusCapture={() => setInteracting(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setInteracting(false);
+      }}
+    >
+      <div className="lead-slides" aria-hidden="true">
+        {slides.map((slide, index) => (
+          <img
+            className={index === active ? "lead-slide active" : "lead-slide"}
+            src={slide.image}
+            alt=""
+            loading={index === 0 ? "eager" : "lazy"}
+            fetchPriority={index === 0 ? "high" : "auto"}
+            key={`${slide.href}-${slide.image}`}
+          />
+        ))}
+      </div>
       <div className="lead-shade" />
-      <div className="lead-copy">
-        <span>{item.category}</span>
+      <div className="lead-copy" key={item.href} aria-live={pausedByUser ? "polite" : "off"}>
+        <div className="lead-eyebrow"><span>{item.category}</span><b>KOZA TV MANŞET</b></div>
         <h1><a href={item.href ?? "/son-dakika"}>{item.title}</a></h1>
         <p>{item.summary}</p>
-        <time>{item.published ?? "Koza TV Haber Merkezi"}</time>
+        <div className="lead-meta">
+          <time>{item.published ?? "Koza TV Haber Merkezi"}</time>
+          <a className="lead-read" href={item.href ?? "/son-dakika"}>Haberi oku <span aria-hidden="true">↗</span></a>
+        </div>
       </div>
-      <div className="slider-controls">
-        <button
-          onClick={() => setActive((active - 1 + slides.length) % slides.length)}
-          aria-label="Önceki"
-        >
-          ←
-        </button>
-        <div>
-          {slides.map((_, index) => (
+      <div className="slider-dock">
+        <div className="slider-count">
+          <strong>{String(active + 1).padStart(2, "0")}</strong>
+          <span>/ {String(slides.length).padStart(2, "0")}</span>
+        </div>
+        <div className="slider-progress" aria-hidden="true">
+          <i key={`${active}-${paused}`} className={paused ? "paused" : ""} />
+        </div>
+        <div className="slider-controls" aria-label="Manşet kontrolleri">
+          <button className="slider-arrow" onClick={previous} aria-label="Önceki manşet">←</button>
+          <div className="slider-dots" aria-label="Manşet seçimi">
+          {slides.map((slide, index) => (
             <button
-              key={index}
+              key={slide.href ?? index}
+              aria-pressed={index === active}
               className={index === active ? "active" : ""}
               onClick={() => setActive(index)}
-              aria-label={`${index + 1}. manşet`}
-            />
+              aria-label={`${index + 1}. manşeti göster`}
+            >{String(index + 1).padStart(2, "0")}</button>
           ))}
+          </div>
+          <button className="slider-arrow" onClick={next} aria-label="Sonraki manşet">→</button>
+          {slides.length > 1 && !reducedMotion && (
+            <button
+              className="slider-pause"
+              onClick={() => setPausedByUser((value) => !value)}
+              aria-pressed={pausedByUser}
+              aria-label={pausedByUser ? "Otomatik geçişi sürdür" : "Otomatik geçişi duraklat"}
+            >
+              <span aria-hidden="true">{pausedByUser ? "▶" : "Ⅱ"}</span>
+            </button>
+          )}
         </div>
-        <button
-          onClick={() => setActive((active + 1) % slides.length)}
-          aria-label="Sonraki"
-        >
-          →
-        </button>
       </div>
-    </article>
+    </section>
   );
 }
 

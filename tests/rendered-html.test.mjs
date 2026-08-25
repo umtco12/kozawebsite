@@ -12,8 +12,10 @@ import {
 } from "../app/api/content/content-model.mjs";
 import { slugify, validateArticleInput } from "../db/article-model.mjs";
 import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
+import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "../db/demo-content-model.mjs";
 import { normalizePath, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
-import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
+import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseHomepageEntries, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
+import { selectHomepageLeads } from "../db/homepage-model.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
@@ -31,6 +33,7 @@ process.env.KOZA_BOOTSTRAP_ADMIN_EMAIL = "admin@koza.test";
 process.env.KOZA_BOOTSTRAP_ADMIN_PASSWORD = "Koza!Test2026Secure";
 process.env.KOZA_BOOTSTRAP_ADMIN_NAME = "Koza Test Yöneticisi";
 process.env.KOZA_BOOTSTRAP_ADMIN_FORCE_CHANGE = "0";
+process.env.KOZA_ENABLE_DEMO_CONTENT = "1";
 const port = 32000 + (process.pid % 10000);
 const baseUrl = `http://127.0.0.1:${port}`;
 let productionServer;
@@ -961,6 +964,33 @@ test("eski site aktarımı yalnızca kurumun kendi alan adından veri çeker", (
   assert.equal(entries[1].lastmod, null);
 });
 
+test("eski ana sayfa haberleri görünür sırayla ve tekrarsız ayrıştırılır", () => {
+  const source = `
+    <a href="haber-ilk-gundem-100.html">İlk haber</a>
+    <a href="https://www.kozatv.com.tr/haber-ikinci-gundem-99.html">İkinci haber</a>
+    <a href="haber-ilk-gundem-100.html#yeniden">Tekrar</a>
+    <a href="https://saldirgan.example/haber-dis-1.html">Dış kaynak</a>
+    <a href="/kategori/gundem">Kategori</a>`;
+  assert.deepEqual(parseHomepageEntries(source), [
+    { url: "https://www.kozatv.com.tr/haber-ilk-gundem-100.html", lastmod: null },
+    { url: "https://www.kozatv.com.tr/haber-ikinci-gundem-99.html", lastmod: null },
+  ]);
+});
+
+test("demo haberler üretimde kapalı, yalnız açık test ortamında etkindir", async () => {
+  assert.equal(shouldSeedDemoContent(undefined), false);
+  assert.equal(shouldSeedDemoContent("0"), false);
+  assert.equal(shouldSeedDemoContent("1"), true);
+  assert.equal(DEMO_ARTICLE_SLUGS.length, 7);
+  assert.ok(DEMO_ARTICLE_SLUGS.includes("piyasalar-yeni-karara-odaklandi"));
+
+  const database = await readFile(new URL("../db/index.ts", import.meta.url), "utf8");
+  assert.match(database, /DELETE FROM articles WHERE source_url='' AND source_name='Koza TV'/,
+    "Var olan prototip kayıtları üretim başlangıcında temizlenmeli");
+  assert.match(database, /articleCount === 0 && demoEnabled/,
+    "Boş üretim veritabanına kendiliğinden demo haber eklenmemeli");
+});
+
 test("eski adresten sabit slug ve site içi yol üretilir", () => {
   assert.equal(slugFromLegacyUrl("https://www.kozatv.com.tr/haber-balcova-baskani-goreve-iade-edildi-9715.html"), "balcova-baskani-goreve-iade-edildi-9715");
   assert.equal(legacyPath("https://www.kozatv.com.tr/Haber-Ornek-1.html"), "/haber-ornek-1.html");
@@ -1004,6 +1034,9 @@ test("aktarım ucu yetkisiz erişimi ve geçersiz işlemi reddeder", async () =>
 
   const anonymousRead = await anonymousRequest("/api/import");
   assert.equal(anonymousRead.status, 401);
+
+  const anonymousSync = await anonymousRequest("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "sync_homepage" }) });
+  assert.equal(anonymousSync.status, 401, "Canlı ana sayfa eşitlemesi yalnız yetkili yöneticiye açık olmalı");
 
   const unknown = await request("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "bilinmeyen" }) });
   assert.equal(unknown.status, 400);
@@ -1116,12 +1149,42 @@ test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async
   }
   const cards = body.match(/class="news-card/g) ?? [];
   assert.ok(cards.length >= 4, `Haber ızgarasında yeterli kart olmalı, bulunan: ${cards.length}`);
+  const spotlightCards = body.match(/class="spotlight-card/g) ?? [];
+  assert.equal(spotlightCards.length, 4, "Büyük manşetin altında eski vitrindeki ritme uygun dört güncel haber olmalı");
 
   /* Masthead'deki boş reklam kutusu kaldırıldı. */
   assert.doesNotMatch(body, /970 × 90/, "Ana sayfada boş reklam yer tutucusu kalmamalı");
 
   /* Kart görselleri tembel yüklenmeli. */
   assert.match(body, /loading="lazy"/);
+  assert.match(body, /aria-roledescription="carousel"/, "Manşet erişilebilir carousel olarak tanımlanmalı");
+  assert.match(body, /Otomatik geçişi duraklat/, "Otomatik manşetin duraklatma kontrolü olmalı");
+  assert.match(body, /Günün Öne Çıkanları/, "Ana sayfa güçlü bir editoryal giriş taşımalı");
+});
+
+test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async () => {
+  const latest = [
+    { id: 10, heroImage: "/media/2026/08/guncel-1.webp" },
+    { id: 11, heroImage: "/media/2026/08/guncel-2.webp" },
+    { id: 12, heroImage: "/news/gorsel-yok.svg" },
+    { id: 13, heroImage: "/media/2026/08/guncel-3.webp" },
+  ];
+  const oldDemo = { id: 1, heroImage: "/news/gundem.jpg" };
+  const leads = selectHomepageLeads({ featured: [oldDemo, latest[1]], latest, limit: 3, recentWindow: 4 });
+
+  assert.deepEqual(leads.map((article) => article.id), [11, 10, 13], "Güncel editör seçimi öne alınmalı, eski demo ve yer tutucu gerçek görsellerin önüne geçmemeli");
+  assert.equal(selectHomepageLeads({ featured: [], latest: [latest[2]], limit: 1 })[0].id, 12, "Başka içerik yoksa görselsiz haber de kaybolmamalı");
+
+  const slider = await readFile(new URL("../app/site-client.tsx", import.meta.url), "utf8");
+  assert.match(slider, /const ROTATION_MS = 6000/);
+  assert.match(slider, /window\.setTimeout/, "Manşet belirli aralıkla otomatik ilerlemeli");
+  assert.match(slider, /prefers-reduced-motion: reduce/, "Hareket azaltma tercihi otomatik geçişi durdurmalı");
+  assert.match(slider, /Otomatik geçişi sürdür/);
+
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.home \.lead-copy\{z-index:3;[^}]*opacity:1\}/, "Manşet metni animasyon beklemeden görünür olmalı");
+  assert.match(css, /@media\(max-width:500px\)\{[\s\S]*\.home \.writer-list\{grid-template-columns:1fr\}/,
+    "Mobil yazar şeridi sayfayı yatay genişletmemeli");
 });
 
 test("kapak görseli olmayan haberde tarafsız yer tutucu kullanılır", async () => {

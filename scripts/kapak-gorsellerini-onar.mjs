@@ -65,7 +65,7 @@ async function fetchBuffer(url, accept) {
   return response;
 }
 
-async function storeImage(bytes, headerType, originalName) {
+async function storeImage(bytes, headerType) {
   const buffer = Buffer.from(bytes);
   if (!buffer.length) throw new Error("boş dosya");
   if (buffer.length > MAX_BYTES) throw new Error("12 MB üzeri");
@@ -108,7 +108,7 @@ for (const article of queue) {
     const response = await fetchBuffer(imageUrl, "image/*");
     const headerType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const name = decodeURIComponent(new URL(imageUrl).pathname.split("/").pop() ?? "gorsel");
-    const stored = await storeImage(await response.arrayBuffer(), headerType, name);
+    const stored = await storeImage(await response.arrayBuffer(), headerType);
 
     const now = Date.now();
     insertMedia.run(stored.storageKey, stored.publicUrl, name.slice(0, 160), stored.mimeType, stored.sizeBytes, String(article.image_alt ?? "").slice(0, 200), "kozatv.com.tr", now);

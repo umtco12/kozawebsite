@@ -1,4 +1,5 @@
 import { listAuthors, listLatestArticles, listPublishedArticles, listVideoArticles } from "../db";
+import { selectHomepageLeads } from "../db/homepage-model.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
@@ -22,18 +23,20 @@ function dayStamp(value: number | null) {
 
 export default async function Home() {
   const categories = navCategories();
-  const featured = listPublishedArticles(12).filter((article) => article.isFeatured);
-  const latest = listLatestArticles(40);
+  const featured = listPublishedArticles(20).filter((article) => article.isFeatured);
+  const latest = listLatestArticles(50);
   const authors = listAuthors().slice(0, 4);
   const videos = listVideoArticles(6);
 
-  /* Manşet: editörün seçtiği öne çıkanlar, yoksa en güncel haberler. */
-  const leadPool = (featured.length >= 3 ? featured : latest).slice(0, 4);
+  /* Yalnız güncel havuzdaki editör seçimleri öne alınır; eski demo manşetleri
+     binlerce gerçek haber aktarıldıktan sonra vitrini işgal etmez. */
+  const leadPool = selectHomepageLeads({ featured, latest, limit: 5, recentWindow: 40 });
   const leads = leadPool.map((article) => ({
     category: article.category,
     title: displayTitle(article.title),
     summary: displaySpot(article.spot, article.title),
     image: article.heroImage,
+    imageAlt: article.imageAlt,
     href: `/haber/${article.slug}`,
     published: stamp(article.publishedAt),
   }));
@@ -49,8 +52,11 @@ export default async function Home() {
     return [...picked, ...latest.filter((article) => !chosen.has(article.id)).slice(0, count - picked.length)];
   }
 
+  /* Eski vitrindeki büyük manşet + dört güncel haber ritmi korunur; kartlarda aktif
+     manşet tekrar edilmez ve tasarım yeni sitenin premium diliyle sunulur. */
+  const spotlight = leadPool.slice(1, 5);
+  if (spotlight.length < 4) spotlight.push(...take(4 - spotlight.length));
   const flow = take(6);
-  const spotlight = take(3);
   const grid = take(8);
   const sidebar = take(8);
   const breaking = latest.find((article) => article.isBreaking) ?? latest[0];
@@ -73,6 +79,14 @@ export default async function Home() {
       )}
 
       <div className="wrap content">
+        <header className="front-page-head">
+          <div>
+            <span>KOZA TV HABER</span>
+            <strong>Günün Öne Çıkanları</strong>
+          </div>
+          <p>Türkiye ve dünyadan doğrulanmış gelişmeler, canlı akış ve güçlü yorum.</p>
+        </header>
+
         <section className="hero-grid" aria-label="Öne çıkan haberler">
           <LeadSlider items={leads} />
           <aside className="hero-flow">

@@ -34,6 +34,27 @@ export function parseSitemapEntries(xml) {
   return entries;
 }
 
+/* Eski ana sayfada görünür olan haber bağlantılarını DOM kütüphanesine ihtiyaç duymadan,
+   ekrandaki sırayı ve ilk karşılaşmayı koruyarak çıkarır. Yalnız kurum alan adı ve eski
+   `haber-...html` biçimi kabul edilir. */
+export function parseHomepageEntries(html) {
+  const entries = [];
+  const seen = new Set();
+  const pattern = /href\s*=\s*["']([^"']+)["']/gi;
+  for (const match of String(html ?? "").matchAll(pattern)) {
+    try {
+      const url = new URL(match[1], "https://www.kozatv.com.tr/");
+      if (!isAllowedSource(url.href) || !/^\/haber-[^/]+\.html$/i.test(url.pathname)) continue;
+      url.hash = "";
+      const normalized = url.href;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      entries.push({ url: normalized, lastmod: null });
+    } catch { /* Bozuk veya desteklenmeyen bağlantı atlanır. */ }
+  }
+  return entries;
+}
+
 function decodeEntities(value) {
   return String(value ?? "")
     .replace(/&nbsp;/g, " ")

@@ -53,6 +53,19 @@ export function ContentImport({ canEdit }: { canEdit: boolean }) {
     setBusy(false);
   }
 
+  async function syncHomepage() {
+    setBusy(true); setMessage("Eski sitenin canlı ana sayfasındaki haberler ve görseller eşitleniyor…");
+    try {
+      const data = await send({ action: "sync_homepage" });
+      setStats(data.stats);
+      setMessage(`${data.visible} görünür haber okundu; ${data.discovered} yeni adres bulundu, ${data.processed} haber aktarıldı ve ${data.ordered} haber vitrin sırasına alındı.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Canlı ana sayfa eşitlenemedi.");
+    }
+    setBusy(false);
+  }
+
   async function runOnce() {
     setBusy(true); setMessage(`${batchSize} haber aktarılıyor…`);
     try {
@@ -140,6 +153,7 @@ export function ContentImport({ canEdit }: { canEdit: boolean }) {
 
         {canEdit && (
           <div className="import-actions">
+            <button type="button" className="primary" onClick={syncHomepage} disabled={busy || running}>↻ Canlı ana sayfayı eşitle</button>
             <button type="button" onClick={discover} disabled={busy || running}>1 · Eski siteyi tara</button>
             <button type="button" onClick={runOnce} disabled={busy || running || !stats.pending}>2 · {batchSize} haber aktar</button>
             <button type="button" className={running ? "danger" : "primary"} onClick={runContinuous} disabled={busy || (!stats.pending && !running)}>{running ? "■ Aktarımı durdur" : "▶ Tümünü aktar"}</button>
