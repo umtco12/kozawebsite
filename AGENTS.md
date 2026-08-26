@@ -421,3 +421,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/site-client.tsx`, `app/slider-gesture.mjs`, `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: `npm test` production build ile **58 test geçti; 0 başarısız, 0 atlandı**. `npx tsc --noEmit` ve bağımsız `npm run build` başarılı; `npm run lint` **0 hata**, mevcut **33** ham görsel performans uyarısıyla tamamlandı. Gerçek Chrome motorunda 390 px dokunmatik emülasyonda beş manşetli geçici veriyle sola kaydırma `01 → 02`, sağa kaydırma `02 → 01` çalıştı; kısa dokunuş ve dikey hareket manşeti değiştirmedi, dikey sayfa kaydırması korundu, yanlış haber navigasyonu ve yatay taşma oluşmadı.
 - Kalan karar veya risk: Browser becerisi çalışma alanındaki sembolik klasör kısıtı nedeniyle açılamadı; gerçek cihaz davranışı yerel Chrome 151 dokunmatik emülasyonuyla doğrulandı. Değişiklikler kullanıcı isteğiyle commit ve Hetzner staging dağıtımı kapsamına alındı.
+
+### 2026-08-26 — Mobil manşet kaydırmasının staging dağıtımı
+
+- İstek: Mobil manşette parmakla sağa/sola kaydırma desteğinin commit edilip Hetzner staging ortamına dağıtılması.
+- Yapılanlar: `b98c88a` uygulama commit'i fast-forward olarak `main` branch'ine push edildi. GitHub Actions üzerindeki **Koza TV Staging** iş akışı test, dosya aktarımı ve atomik Hetzner dağıtımını başarıyla tamamladı.
+- Değişen ana dosyalar: Dağıtılan uygulama sürümü `b98c88a`; dağıtım kaydı için `AGENTS.md`.
+- Doğrulama: Push öncesinde `npm test` production build ile **58 test geçti; 0 başarısız, 0 atlandı**; `npx tsc --noEmit`, `npm run lint` ve bağımsız `npm run build` başarılı oldu. GitHub Actions çalışması `32973736863` başarıyla tamamlandı. Dış kontrolde `/`, `/kategori/gundem`, `/son-dakika`, `/canli`, `/yazarlar` ve `/admin/giris` HTTP 200; `/admin` HTTP 307 ve `/api/auth/me` HTTP 401 döndürdü. Yayın CSS'inde `touch-action:pan-y`, istemci paketinde Pointer Events kodu doğrulandı. Staging'in gerçek beş manşetli verisinde 390 px Chrome dokunmatik emülasyonuyla sola kaydırma `01 → 02`, sağa kaydırma `02 → 01` çalıştı; yanlış navigasyon ve yatay taşma oluşmadı.
+- Kalan karar veya risk: Staging IP üzerinden HTTP çalışmaktadır; canlı alan adı ve DNS geçişi bu dağıtımın kapsamında değildir. Mobil kaydırma düğmelere ek bir kullanım yoludur; mevcut sağ/sol ve erişilebilir klavye kontrolleri korunmuştur.
