@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getSwipeDirection } from "./slider-gesture.mjs";
 
 type MarketData = {
   ok: boolean;
@@ -96,6 +97,9 @@ export function LeadSlider({ items }: { items: Lead[] }) {
   const [pausedByUser, setPausedByUser] = useState(false);
   const [interacting, setInteracting] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
+  const suppressClickTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -103,6 +107,10 @@ export function LeadSlider({ items }: { items: Lead[] }) {
     update();
     media.addEventListener?.("change", update);
     return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(() => () => {
+    if (suppressClickTimerRef.current !== null) window.clearTimeout(suppressClickTimerRef.current);
   }, []);
 
   const paused = pausedByUser || interacting || reducedMotion;
@@ -119,6 +127,25 @@ export function LeadSlider({ items }: { items: Lead[] }) {
   const previous = () => setActive((value) => (value - 1 + slides.length) % slides.length);
   const next = () => setActive((value) => (value + 1) % slides.length);
 
+  const finishTouch = (x: number, y: number) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    setInteracting(false);
+    if (!start || slides.length < 2) return;
+
+    const direction = getSwipeDirection(start, { x, y });
+    if (!direction) return;
+
+    suppressClickRef.current = true;
+    if (suppressClickTimerRef.current !== null) window.clearTimeout(suppressClickTimerRef.current);
+    suppressClickTimerRef.current = window.setTimeout(() => {
+      suppressClickRef.current = false;
+      suppressClickTimerRef.current = null;
+    }, 400);
+    if (direction === "next") next();
+    else previous();
+  };
+
   return (
     <section
       className="lead"
@@ -128,6 +155,35 @@ export function LeadSlider({ items }: { items: Lead[] }) {
       onMouseEnter={() => setInteracting(true)}
       onMouseLeave={() => setInteracting(false)}
       onFocusCapture={() => setInteracting(true)}
+      onClickCapture={(event) => {
+        if (!suppressClickRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClickRef.current = false;
+      }}
+      onPointerDown={(event) => {
+        if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+        if (suppressClickTimerRef.current !== null) window.clearTimeout(suppressClickTimerRef.current);
+        suppressClickRef.current = false;
+        touchStartRef.current = { x: event.clientX, y: event.clientY };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setInteracting(true);
+      }}
+      onPointerUp={(event) => {
+        if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+        finishTouch(event.clientX, event.clientY);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      }}
+      onPointerCancel={(event) => {
+        if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+        touchStartRef.current = null;
+        setInteracting(false);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      }}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setInteracting(false);
       }}

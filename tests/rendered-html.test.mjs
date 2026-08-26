@@ -1190,12 +1190,22 @@ test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async (
   assert.equal(selectHomepageLeads({ featured: [], latest: [latest[2]], limit: 1 })[0].id, 12, "Başka içerik yoksa görselsiz haber de kaybolmamalı");
 
   const slider = await readFile(new URL("../app/site-client.tsx", import.meta.url), "utf8");
+  const { getSwipeDirection, SWIPE_THRESHOLD_PX } = await import("../app/slider-gesture.mjs");
   assert.match(slider, /const ROTATION_MS = 5000/);
   assert.match(slider, /window\.setTimeout/, "Manşet belirli aralıkla otomatik ilerlemeli");
   assert.match(slider, /prefers-reduced-motion: reduce/, "Hareket azaltma tercihi otomatik geçişi durdurmalı");
   assert.match(slider, /Otomatik geçişi sürdür/);
 
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.equal(SWIPE_THRESHOLD_PX, 42);
+  assert.equal(getSwipeDirection({ x: 240, y: 100 }, { x: 160, y: 104 }), "next", "Sola kaydırma sonraki manşeti açmalı");
+  assert.equal(getSwipeDirection({ x: 120, y: 100 }, { x: 205, y: 97 }), "previous", "Sağa kaydırma önceki manşeti açmalı");
+  assert.equal(getSwipeDirection({ x: 200, y: 100 }, { x: 175, y: 101 }), null, "Kısa dokunuş manşeti değiştirmemeli");
+  assert.equal(getSwipeDirection({ x: 200, y: 100 }, { x: 150, y: 190 }), null, "Dikey sayfa kaydırması manşeti değiştirmemeli");
+  assert.match(slider, /onPointerDown=/, "Manşet dokunma başlangıcını dinlemeli");
+  assert.match(slider, /onPointerUp=/, "Manşet dokunma bitişini dinlemeli");
+  assert.match(slider, /suppressClickRef/, "Kaydırma sonrasında haber bağlantısı yanlışlıkla açılmamalı");
+  assert.match(css, /\.home \.lead\{[^}]*touch-action:pan-y/, "Mobil dikey sayfa kaydırması korunmalı");
   assert.match(css, /\.home \.lead-copy\{z-index:3;[^}]*opacity:1\}/, "Manşet metni animasyon beklemeden görünür olmalı");
   assert.match(css, /@media\(max-width:500px\)\{[\s\S]*\.home \.writer-list\{grid-template-columns:1fr\}/,
     "Mobil yazar şeridi sayfayı yatay genişletmemeli");
