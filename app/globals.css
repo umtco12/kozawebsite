@@ -821,3 +821,48 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 @media(prefers-reduced-motion:reduce){
   .breaking-ribbon{animation:none!important}
 }
+
+
+/* Koza TV imza vitrini: no external portrait dependency, so missing images cannot break it. */
+.home .writers-showcase{position:relative;isolation:isolate;margin-top:58px;padding:30px;background:linear-gradient(135deg,#0b121a 0%,#111d28 58%,#0d151e 100%);color:#fff;border-top:5px solid var(--red);border-radius:4px;box-shadow:0 20px 46px rgba(15,23,32,.18);overflow:hidden}
+.home .writers-showcase:before{content:"";position:absolute;z-index:-1;top:-150px;right:-70px;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,rgba(220,21,29,.2),transparent 68%)}
+.writers-showcase-head{display:flex;align-items:end;justify-content:space-between;gap:30px;margin-bottom:24px;padding-bottom:21px;border-bottom:1px solid rgba(255,255,255,.13)}
+.writers-showcase-head span{color:#ff4d55;font-size:9px;font-weight:950;letter-spacing:2.1px}
+.writers-showcase-head h2{margin:5px 0 7px;font:800 29px/1.05 var(--font-serif),Georgia,serif;letter-spacing:-.5px}
+.writers-showcase-head p{margin:0;color:#98a3ad;font-size:11px;line-height:1.55}
+.writers-showcase-head>a{flex:none;display:inline-flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid rgba(255,255,255,.2);border-radius:2px;color:#fff;font-size:9px;font-weight:900;letter-spacing:.4px;transition:.2s ease}
+.writers-showcase-head>a i{width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:var(--red);font-style:normal;font-size:12px}
+.writers-showcase-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;counter-reset:writer-card}
+.writer-profile{position:relative;isolation:isolate;min-width:0;min-height:225px;padding:20px;display:flex;flex-direction:column;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.11);border-radius:3px;overflow:hidden;counter-increment:writer-card;transition:transform .22s ease,background-color .22s ease,border-color .22s ease}
+.writer-profile:after{content:"0" counter(writer-card);position:absolute;z-index:-1;right:9px;bottom:-15px;color:rgba(255,255,255,.035);font:900 78px/1 var(--font-serif),Georgia,serif}
+.writer-profile-top{display:flex;align-items:center;gap:13px}
+.writer-monogram{width:58px;height:58px;flex:none;display:grid;place-items:center;border-radius:18px 18px 18px 5px;background:linear-gradient(145deg,var(--writer-tone,#253342),#111a23);border:1px solid rgba(255,255,255,.19);box-shadow:inset 0 0 0 4px rgba(255,255,255,.05),0 10px 22px rgba(0,0,0,.22);color:#fff;font:850 17px/1 var(--font-inter),Arial,sans-serif;letter-spacing:.6px}
+.writer-tone-1{--writer-tone:#a51b25}.writer-tone-2{--writer-tone:#8b5b45}.writer-tone-3{--writer-tone:#3c5874}.writer-tone-4{--writer-tone:#624652}
+.writer-profile-meta{min-width:0;display:grid;gap:6px}
+.writer-profile-meta span{color:#ff6268;font-size:7px;font-weight:950;letter-spacing:1.3px}
+.writer-profile-meta small{color:#788591;font-size:7px;font-weight:850;letter-spacing:.8px}
+.writer-profile h3{margin:18px 0 8px;color:#fff;font:800 17px/1.15 var(--font-serif),Georgia,serif;letter-spacing:-.2px;overflow-wrap:anywhere}
+.writer-profile>p{margin:0;color:#bdc5cc;font:650 12px/1.42 var(--font-serif),Georgia,serif;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.writer-profile-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;padding-top:17px;color:#7e8993;font-size:7px;font-weight:900;letter-spacing:.8px;text-transform:uppercase}
+.writer-profile-foot b{display:flex;align-items:center;gap:6px;color:#e8ecef;font-size:8px}
+.writer-profile-foot i{color:#ff424a;font-style:normal;font-size:12px}
+.writer-profile:focus-visible{outline:3px solid #fff;outline-offset:3px}
+@media(hover:hover){
+  .writers-showcase-head>a:hover{background:#fff;color:#101820;border-color:#fff}
+  .writer-profile:hover{transform:translateY(-5px);background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.25)}
+}
+@media(max-width:1000px){
+  .writers-showcase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:600px){
+  .home .writers-showcase{padding:20px 18px 22px}
+  .writers-showcase-head{display:block;margin-bottom:18px}
+  .writers-showcase-head h2{font-size:25px}
+  .writers-showcase-head>a{margin-top:16px}
+  .writers-showcase-grid{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(255px,86%);gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-inline:contain;scrollbar-width:none;padding:3px 2px 8px}
+  .writers-showcase-grid::-webkit-scrollbar{display:none}
+  .writer-profile{min-height:215px;scroll-snap-align:start}
+}
+@media(prefers-reduced-motion:reduce){
+  .writer-profile,.writers-showcase-head>a{transition:none!important}
+}

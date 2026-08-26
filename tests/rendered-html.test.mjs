@@ -1292,3 +1292,22 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
   assert.match(styles, /\.home \.lead\{[^}]*width:100%[^}]*align-self:start/, "Masaüstü slider sağ akışın altında taşmamalı");
   assert.match(styles, /@media\(max-width:760px\)[\s\S]*?\.home \.lead-slides\{[^}]*aspect-ratio:735\/410/, "Mobil manşet görseli kırpılmadan kendi oranında kalmalı");
 });
+
+
+test("ana sayfa imza vitrini kırık görsele ihtiyaç duymadan servisleri ve yazarları sunar", async () => {
+  const home = await html("/");
+  const section = home.match(/<section class="writers-showcase"[\s\S]*?<\/section>/)?.[0] ?? "";
+  assert.ok(section, "Ana sayfada yeni imza vitrini bulunmalı");
+  assert.match(section, /Köşe Yazarları &amp; Haber Servisleri/);
+  assert.equal((section.match(/class="writer-profile /g) ?? []).length, 4, "Vitrin dört güncel imza göstermeli");
+  assert.equal((section.match(/class="writer-monogram"/g) ?? []).length, 4, "Her imza için kırılmayan metin monogramı bulunmalı");
+  assert.doesNotMatch(section, /<img\b/, "İmza vitrini harici ve kırılabilir portre dosyasına bağlı olmamalı");
+  assert.doesNotMatch(section, /Administrator Administrator/, "Teknik kullanıcı adı ziyaretçiye gösterilmemeli");
+  assert.match(section, /HABER SERVİSİ/, "Servis hesapları köşe yazarı gibi sunulmamalı");
+
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /\.writers-showcase-grid\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(max-width:1000px\)[\s\S]*?\.writers-showcase-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(max-width:600px\)[\s\S]*?grid-auto-flow:column[^}]*overflow-x:auto/, "Mobil imza vitrini sayfayı taşırmadan kendi içinde kaymalı");
+  assert.match(styles, /\.writer-profile:focus-visible\{[^}]*outline:3px solid #fff/, "Klavye odağı belirgin olmalı");
+});

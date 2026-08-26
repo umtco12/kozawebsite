@@ -21,6 +21,20 @@ function dayStamp(value: number | null) {
   return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }).format(value);
 }
 
+function authorName(value: string) {
+  const normalized = value.trim();
+  if (/^administrator administrator$/i.test(normalized)) return "Koza TV Editör Masası";
+  if (/^koza\s*tv$/i.test(normalized)) return "Koza TV";
+  return normalized;
+}
+
+function authorInitials(value: string) {
+  return authorName(value).split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toLocaleUpperCase("tr-TR") || "KT";
+}
+
+function authorKind(value: string) {
+  return /haber merkezi|koza\s*tv|administrator|haber servisi/i.test(value) ? "HABER SERVİSİ" : "KÖŞE YAZARI";
+}
 export default async function Home() {
   const categories = navCategories();
   const featured = listPublishedArticles(20).filter((article) => article.isFeatured);
@@ -159,17 +173,28 @@ export default async function Home() {
         </section>
 
         {authors.length > 0 && (
-          <section className="writers-strip">
-            <div className="section-title vertical"><span>KÖŞE</span><strong>YAZARLARI</strong></div>
-            <div className="writer-list">
+          <section className="writers-showcase" aria-labelledby="writers-showcase-title">
+            <header className="writers-showcase-head">
+              <div>
+                <span>KÖŞE YAZARLARI · HABER SERVİSLERİ</span>
+                <h2 id="writers-showcase-title">Köşe Yazarları &amp; Haber Servisleri</h2>
+                <p>Gündemi hazırlayan kalemler ve haber masalarının son çalışmaları.</p>
+              </div>
+              <a href="/yazarlar">Tüm imzaları gör <i aria-hidden="true">→</i></a>
+            </header>
+            <div className="writers-showcase-grid">
               {authors.map((author, index) => (
-                <a href={`/yazar/${author.slug}`} className="writer" key={author.slug}>
-                  <div className={`avatar avatar-${index + 1}`}>{author.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</div>
-                  <div><strong>{author.name}</strong><p>{displayTitle(author.latestTitle)}</p></div>
+                <a href={`/yazar/${author.slug}`} className={`writer-profile writer-tone-${(index % 4) + 1}`} key={author.slug}>
+                  <div className="writer-profile-top">
+                    <div className="writer-monogram" aria-hidden="true">{authorInitials(author.name)}</div>
+                    <div className="writer-profile-meta"><span>{authorKind(author.name)}</span><small>{author.articleCount} HABER</small></div>
+                  </div>
+                  <h3>{authorName(author.name)}</h3>
+                  <p>{displayTitle(author.latestTitle) || "Yeni içerik hazırlanıyor."}</p>
+                  <div className="writer-profile-foot"><span>{author.topCategory || "Koza TV"}</span><b>Arşivi gör <i aria-hidden="true">↗</i></b></div>
                 </a>
               ))}
             </div>
-            <a href="/yazarlar" className="round-arrow" aria-label="Tüm yazarlar">→</a>
           </section>
         )}
       </div>
