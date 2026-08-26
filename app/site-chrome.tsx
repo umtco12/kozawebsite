@@ -14,15 +14,31 @@ function istanbulDate() {
   return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric", weekday: "long", timeZone: "Europe/Istanbul" }).format(new Date());
 }
 
+function SocialIcon({ label }: { label: string }) {
+  if (label === "Facebook") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13.5 22v-8.2h2.75l.41-3.2H13.5V8.55c0-.93.26-1.56 1.61-1.56h1.72V4.13c-.3-.04-1.32-.13-2.51-.13-2.49 0-4.2 1.52-4.2 4.31v2.29H7.3v3.2h2.82V22h3.38Z" /></svg>;
+  }
+  if (label === "X") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.9 2H22l-6.77 7.73L23.2 22h-6.24l-4.89-6.39L6.48 22H3.36l7.27-8.31L3 2h6.4l4.42 5.84L18.9 2Zm-1.09 17.84h1.72L8.46 4.05H6.61l11.2 15.79Z" /></svg>;
+  }
+  if (label === "YouTube") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.12C19.55 3.58 12 3.58 12 3.58s-7.55 0-9.4.5A3 3 0 0 0 .5 6.2 31.2 31.2 0 0 0 0 12a31.2 31.2 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.12c1.85.5 9.4.5 9.4.5s7.55 0 9.4-.5a3 3 0 0 0 2.1-2.12A31.2 31.2 0 0 0 24 12a31.2 31.2 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.27 3.6-6.27 3.6Z" /></svg>;
+  }
+  return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7.2 2h9.6A5.2 5.2 0 0 1 22 7.2v9.6a5.2 5.2 0 0 1-5.2 5.2H7.2A5.2 5.2 0 0 1 2 16.8V7.2A5.2 5.2 0 0 1 7.2 2Zm-.18 2A3.02 3.02 0 0 0 4 7.02v9.96A3.02 3.02 0 0 0 7.02 20h9.96A3.02 3.02 0 0 0 20 16.98V7.02A3.02 3.02 0 0 0 16.98 4H7.02Zm10.73 1.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" /></svg>;
+}
+
 function SocialCluster() {
   const settings = getSiteSettings();
+  const accounts = socialLinks(settings).filter((item) => item.href);
+  if (accounts.length === 0) return null;
+
   return (
-    <span className="social">
-      {socialLinks(settings).map((item) =>
-        item.href
-          ? <a href={item.href} key={item.label} target="_blank" rel="noreferrer" aria-label={`Koza TV ${item.label}`}>{item.short}</a>
-          : <span key={item.label} aria-hidden="true">{item.short}</span>,
-      )}
+    <span className="social" role="group" aria-label="Koza TV sosyal medya hesapları">
+      {accounts.map((item) => (
+        <a className="social-link" href={item.href} key={item.label} target="_blank" rel="noreferrer" aria-label={`Koza TV ${item.label}`}>
+          <SocialIcon label={item.label} />
+        </a>
+      ))}
     </span>
   );
 }

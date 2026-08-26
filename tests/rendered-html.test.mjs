@@ -462,9 +462,10 @@ test("içerik API kalıcı SQLite verisini yazar ve yeniden okur", async () => {
 });
 
 test("ana sayfa tarih, mobil ve hareket azaltma kurallarını kaynakta korur", async () => {
-  const [page, css] = await Promise.all([
+  const [page, css, chrome] = await Promise.all([
     readFile(new URL("app/page.tsx", projectRoot), "utf8"),
     readFile(new URL("app/globals.css", projectRoot), "utf8"),
+    readFile(new URL("app/site-chrome.tsx", projectRoot), "utf8"),
   ]);
 
   assert.match(page, /Intl\.DateTimeFormat\("tr-TR"/);
@@ -474,6 +475,10 @@ test("ana sayfa tarih, mobil ve hareket azaltma kurallarını kaynakta korur", a
   assert.match(css, /@media\(max-width:600px\)/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion:reduce/);
+  assert.match(css, /\.nav-inner>a:active/, "Ana menü tıklama anında görsel geri bildirim vermeli");
+  assert.match(css, /\.section-card:active/, "Haber kartları tıklama anında görsel geri bildirim vermeli");
+  assert.match(css, /@media\(hover:hover\)/, "Hover efektleri yalnız destekleyen cihazlarda uygulanmalı");
+  assert.match(chrome, /socialLinks\(settings\)\.filter\(\(item\) => item\.href\)/, "Tanımsız sosyal hesap simgeleri basılmamalı");
 });
 
 test("kritik marka ve haber görselleri projede bulunur ve boş değildir", async () => {
@@ -850,6 +855,8 @@ test("site ayarları panelden kaydedilir ve ziyaretçi sayfalarına yansır", as
 
   const home = await html("/");
   assert.match(home, /href="https:\/\/x\.com\/kozatvtest"/, "Tanımlı sosyal hesap bağlantı olmalı");
+  assert.match(home, /class="social-link"[^>]+aria-label="Koza TV X"/, "Tanımlı sosyal hesap ayrı ve erişilebilir ikon düğmesi olmalı");
+  assert.doesNotMatch(home, /aria-label="Koza TV Facebook"/, "Adresi tanımlanmamış sosyal hesap arayüzde yer kaplamamalı");
   assert.match(home, /Türksat 4A/);
 
   const invalid = await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ liveHlsUrl: "javascript:alert(1)" }) });
