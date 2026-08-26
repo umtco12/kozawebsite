@@ -782,3 +782,42 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
   .live-data .weather-chip>span{display:block!important}
   .masthead .live-button{width:auto;min-width:66px;padding:0 11px;font-size:8px;letter-spacing:.45px}
 }
+
+
+/* Legacy Koza images are authored at 735x410. Preserve that composition in the lead. */
+@media(min-width:1101px){
+  .home .lead{width:100%;height:auto;min-height:0;aspect-ratio:735/410;align-self:start}
+  .home .hero-flow-head{min-height:78px;padding-top:12px}
+  .home .flow-item{padding:10px 0}
+  .home .flow-item h2,.home .flow-item.active h2{font-size:13px;line-height:1.25}
+  .home .flow-more{min-height:44px}
+  .home .hero-flow{height:auto;min-height:0}
+  .home .lead-copy h1{font-size:clamp(36px,3.25vw,52px)}
+}
+@media(min-width:761px) and (max-width:1100px){
+  .home .lead{height:auto;min-height:0;aspect-ratio:735/410}
+}
+@media(max-width:760px){
+  .home .lead{height:560px;min-height:560px;aspect-ratio:auto}
+  .home .lead-slides{bottom:auto;height:auto;aspect-ratio:735/410;background:#080f17}
+  .home .lead-slide{object-position:center center}
+}
+@media(max-width:500px){
+  .home .lead{height:500px;min-height:500px}
+  .home .lead-copy h1{font-size:27px}
+}
+
+/* Breaking marker sits on the right like the live Koza TV presentation. */
+.breaking-ribbon{left:auto;right:14px;animation:koza-breaking-pulse 1.15s ease-in-out infinite}
+.breaking-ribbon-hero{left:auto;right:25px}
+@keyframes koza-breaking-pulse{
+  0%,100%{box-shadow:0 8px 22px rgba(128,0,6,.28),0 0 0 0 rgba(240,20,29,.42);filter:brightness(1)}
+  50%{box-shadow:0 10px 28px rgba(128,0,6,.38),0 0 0 7px rgba(240,20,29,0);filter:brightness(1.13)}
+}
+@media(max-width:500px){
+  .breaking-ribbon{left:auto;right:10px}
+  .breaking-ribbon-hero{left:auto;right:16px}
+}
+@media(prefers-reduced-motion:reduce){
+  .breaking-ribbon{animation:none!important}
+}

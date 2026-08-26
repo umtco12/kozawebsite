@@ -1183,7 +1183,7 @@ test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async (
   assert.equal(selectHomepageLeads({ featured: [], latest: [latest[2]], limit: 1 })[0].id, 12, "Başka içerik yoksa görselsiz haber de kaybolmamalı");
 
   const slider = await readFile(new URL("../app/site-client.tsx", import.meta.url), "utf8");
-  assert.match(slider, /const ROTATION_MS = 6000/);
+  assert.match(slider, /const ROTATION_MS = 5000/);
   assert.match(slider, /window\.setTimeout/, "Manşet belirli aralıkla otomatik ilerlemeli");
   assert.match(slider, /prefers-reduced-motion: reduce/, "Hareket azaltma tercihi otomatik geçişi durdurmalı");
   assert.match(slider, /Otomatik geçişi sürdür/);
@@ -1264,6 +1264,8 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
   const home = await html("/");
   const latestItems = home.match(/class="latest-item"/g) ?? [];
   assert.ok(latestItems.length > 0 && latestItems.length <= 5, `Son dakika sütunu en fazla 5 kompakt satır göstermeli; bulunan: ${latestItems.length}`);
+  const flowItems = home.match(/class="flow-item/g) ?? [];
+  assert.equal(flowItems.length, 4, "Günün Akışı masaüstü manşet oranını bozmayacak dört kompakt gelişme göstermeli");
   assert.match(home, /class="latest-more"[^>]*><span>Tüm son dakika haberleri<\/span>/, "Çağrı bağlantısı tek bir anlamlı metin taşımalı");
   assert.match(home, /class="breaking-ribbon/, "Admin tarafından işaretlenen haber kırmızı şerit taşımalı");
 
@@ -1284,4 +1286,9 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
   assert.match(styles, /@media\(max-width:500px\)[\s\S]*\.breaking-ribbon/, "Haber şeridinin mobil boyutu tanımlanmalı");
   assert.match(styles, /\.weather-chip>span\{display:block!important\}/, "Mobilde sıcaklık metni güneş simgesiyle birlikte görünmeli");
   assert.match(styles, /\.masthead \.live-button\{[^}]*font-size:8px/, "Mobil canlı yayın düğmesi anlaşılır metnini korumalı");
+  assert.match(styles, /\.breaking-ribbon\{[^}]*right:14px[^}]*animation:koza-breaking-pulse/s, "Son dakika şeridi görselin sağında ve hareketli olmalı");
+  assert.match(styles, /@keyframes koza-breaking-pulse/, "Son dakika şeridinin dikkat animasyonu tanımlanmalı");
+  assert.match(styles, /@media\(min-width:1101px\)[\s\S]*?\.home \.lead\{[^}]*aspect-ratio:735\/410/, "Masaüstü manşet eski Koza görsel oranını korumalı");
+  assert.match(styles, /\.home \.lead\{[^}]*width:100%[^}]*align-self:start/, "Masaüstü slider sağ akışın altında taşmamalı");
+  assert.match(styles, /@media\(max-width:760px\)[\s\S]*?\.home \.lead-slides\{[^}]*aspect-ratio:735\/410/, "Mobil manşet görseli kırpılmadan kendi oranında kalmalı");
 });

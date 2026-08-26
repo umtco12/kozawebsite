@@ -64,7 +64,7 @@ type Lead = {
   isBreaking?: boolean;
 };
 
-const ROTATION_MS = 6000;
+const ROTATION_MS = 5000;
 
 /* Arama, tarayıcının kendi GET gönderimini kullanır; JavaScript yüklenmese de çalışır. */
 export function SearchBox() {

@@ -57,7 +57,7 @@ export default async function Home() {
      manşet tekrar edilmez ve tasarım yeni sitenin premium diliyle sunulur. */
   const spotlight = leadPool.slice(1, 5);
   if (spotlight.length < 4) spotlight.push(...take(4 - spotlight.length));
-  const flow = take(6);
+  const flow = take(4);
   const grid = take(8);
   const breakingPool = latest.filter((article) => article.isBreaking);
   const sidebar = [...breakingPool, ...latest.filter((article) => !article.isBreaking)].slice(0, 5);
