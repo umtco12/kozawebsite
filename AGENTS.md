@@ -373,3 +373,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/globals.css`, `app/page.tsx`, `app/site-client.tsx`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: `npm test` production build ile **57 test geçti; 0 başarısız, 0 atlandı**. `npx tsc --noEmit` başarılı; `npm run lint` **0 hata** ve mevcut **33** ham görsel performans uyarısıyla tamamlandı. Gerçek Chrome motorunda 1440 ve 900 px ekran görüntüleri incelendi; iki sütun çakışmadan hizalandı ve görsel kompozisyonu korundu. Gerçek cihaz emülasyonunda 390 px için `scrollWidth == innerWidth == 390`; sağ şerit 33×105 px, animasyon 1,15 saniye ve slider otomatik geçişi aktif ölçüldü.
 - Kalan karar veya risk: Browser becerisi çalışma alanındaki bağlantılı klasör kısıtı nedeniyle açılamadı; canlı kaynak incelemesi ve görsel kabul gerçek yerel Chrome ile tamamlandı. Değişiklikler kullanıcı isteğiyle commit ve Hetzner staging dağıtımı kapsamına alındı. Ham `<img>` performans uyarıları ayrıca ele alınmalıdır.
+
+### 2026-08-26 — Kaynak oranlı manşetin staging dağıtımı
+
+- İstek: Sağdaki hareketli son dakika şeridinin ve `735×410` kaynak oranını koruyan yeni ana sliderın commit edilip Hetzner staging ortamına dağıtılması.
+- Yapılanlar: `22a08e0` uygulama commit'i fast-forward olarak `main` branch'ine push edildi. GitHub Actions üzerindeki **Koza TV Staging** iş akışı test, aktarım ve atomik dağıtım adımlarını başarıyla tamamladı.
+- Değişen ana dosyalar: Dağıtılan uygulama sürümü `22a08e0`; dağıtım kaydı için `AGENTS.md`.
+- Doğrulama: Push öncesinde `npm test` production build ile **57 test geçti; 0 başarısız, 0 atlandı**. GitHub Actions çalışması `32946105334` başarılı oldu. Dış kontrolde `/`, `/kategori/gundem`, `/son-dakika`, `/canli`, `/yazarlar` ve `/admin/giris` HTTP 200; `/admin` HTTP 307 ve `/api/auth/me` HTTP 401 döndürdü. Staging HTML'inde dört Günün Akışı satırı ve son dakika şeridi; yayın CSS'inde `aspect-ratio:735/410`, sağ konum ve `koza-breaking-pulse` animasyonu doğrulandı.
+- Kalan karar veya risk: Staging IP üzerinden HTTP çalışmaktadır; canlı alan adı ve DNS geçişi bu dağıtımın kapsamında değildir. Ham `<img>` performans uyarıları ayrıca ele alınmalıdır.
