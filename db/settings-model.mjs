@@ -7,6 +7,13 @@ export const settingGroups = [
   { id: "kunye", label: "Künye ve iletişim", description: "Künye, iletişim ve KVKK sayfalarında yayımlanan resmî bilgiler." },
 ];
 
+export const officialSocialAccounts = {
+  socialFacebook: "https://www.facebook.com/kozatv/",
+  socialX: "https://x.com/kozatv01",
+  socialYoutube: "https://www.youtube.com/@KozaTv",
+  socialInstagram: "https://www.instagram.com/kozatelevizyon/",
+};
+
 export const settingFields = [
   { key: "liveHlsUrl", group: "yayin", type: "url", label: "Canlı yayın kaynağı", hint: "YouTube canlı yayın bağlantısı veya HLS (.m3u8) adresi. YouTube kanal adresi verilirse o kanalın o anda açık olan yayını gösterilir. Boş bırakılırsa kesinti ekranı çıkar.", placeholder: "https://www.youtube.com/watch?v=... veya https://yayin.example.com/koza.m3u8", default: "" },
   { key: "liveBackupUrl", group: "yayin", type: "url", label: "Yedek yayın kaynağı", hint: "Ana kaynak açılmazsa izleyiciye bu adres sunulur. YouTube veya HLS olabilir.", placeholder: "https://www.youtube.com/watch?v=… veya https://yedek.example.com/koza.m3u8", default: "" },
@@ -14,10 +21,10 @@ export const settingFields = [
   { key: "platformInfo", group: "yayin", type: "text", label: "Platform bilgisi", maxLength: 120, default: "Digitürk 614 • D-Smart 108" },
   { key: "showMarketTicker", group: "yayin", type: "bool", label: "Üst bantta döviz ve hava durumu göster", hint: "Veri alınamazsa gösterge kendiliğinden gizlenir; sabit değer gösterilmez.", default: "1" },
 
-  { key: "socialFacebook", group: "sosyal", type: "url", label: "Facebook", placeholder: "https://www.facebook.com/kozatv", default: "" },
-  { key: "socialX", group: "sosyal", type: "url", label: "X (Twitter)", placeholder: "https://x.com/kozatv", default: "" },
-  { key: "socialYoutube", group: "sosyal", type: "url", label: "YouTube", placeholder: "https://www.youtube.com/@kozatv", default: "" },
-  { key: "socialInstagram", group: "sosyal", type: "url", label: "Instagram", placeholder: "https://www.instagram.com/kozatv", default: "" },
+  { key: "socialFacebook", group: "sosyal", type: "url", label: "Facebook", placeholder: officialSocialAccounts.socialFacebook, default: officialSocialAccounts.socialFacebook },
+  { key: "socialX", group: "sosyal", type: "url", label: "X (Twitter)", placeholder: officialSocialAccounts.socialX, default: officialSocialAccounts.socialX },
+  { key: "socialYoutube", group: "sosyal", type: "url", label: "YouTube", placeholder: officialSocialAccounts.socialYoutube, default: officialSocialAccounts.socialYoutube },
+  { key: "socialInstagram", group: "sosyal", type: "url", label: "Instagram", placeholder: officialSocialAccounts.socialInstagram, default: officialSocialAccounts.socialInstagram },
 
   { key: "legalName", group: "kunye", type: "text", label: "Ticari unvan", maxLength: 200, default: "" },
   { key: "responsibleManager", group: "kunye", type: "text", label: "Sorumlu müdür", maxLength: 120, default: "" },

@@ -683,3 +683,102 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 @media(prefers-reduced-motion:reduce){
   .social-link,.top-links>a,.nav-inner>a,.nav-inner>a:after,.nav-search button,.mobile-panel a,.aside-chips a,.search-suggestions a,.article-tags a,.error-links a,.pager a,.section-card,.section-lead,.aside-row,.feed-row,.timeline-row,.spotlight-card,.news-card,.writer,.video-card,.live-news-list a,.related a{transition:none!important}
 }
+
+
+/* ============================================================
+   Canlı bilgi bandı, kompakt son dakika akışı ve editoryal şerit
+   ============================================================ */
+.topbar{position:relative;background:#0d141c;border:0;color:#c5ccd3;box-shadow:inset 0 -3px 0 var(--red)}
+.topbar-inner{height:52px;gap:20px}
+.topbar-inner>span:first-child{flex:0 0 auto;color:#9ba5af;font-size:10px;font-weight:700;letter-spacing:.15px}
+.live-data{align-self:stretch;display:flex;align-items:stretch;gap:0;margin-left:auto}
+.weather-chip,.market-chip{display:flex;align-items:center;gap:9px;min-width:96px;padding:0 15px;border-left:1px solid #27313b;color:#fff;font-variant-numeric:tabular-nums}
+.weather-chip>i{width:27px;height:27px;display:grid;place-items:center;color:#ffc928}
+.weather-chip svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.weather-chip svg circle{fill:#ffc928;stroke:#ffc928}
+.weather-chip>span,.market-chip{line-height:1.05}
+.weather-chip small,.market-chip small{display:flex;align-items:center;gap:5px;color:#89949f;font-size:8px;font-weight:800;letter-spacing:.75px;text-transform:uppercase}
+.weather-chip b,.market-chip b{display:block;margin-top:4px;color:#f8fafb!important;font-size:13px;font-weight:850}
+.weather-chip b{font-size:17px}
+.market-chip small i{width:17px;height:17px;display:grid;place-items:center;border-radius:50%;background:#202b35;color:#e9edf0;font-style:normal;font-size:9px}
+.live-data-source{align-self:center;display:grid;gap:2px;padding:0 14px;border-left:1px solid #27313b;color:#7d8994;font-size:7px;letter-spacing:.45px}
+.live-data-source b{color:#dce2e7!important;font-size:8px}
+.live-data-source span{white-space:nowrap}
+.top-links{color:#d3d9df}
+.topbar .social-link{width:27px;height:27px;background:#18222c;border-color:#303c47;color:#dce2e7}
+.topbar .social-link svg{width:12px;height:12px}
+
+/* Kırmızı şerit yalnız admin panelinde Son dakika seçilen haberlerde görünür. */
+.breaking-ribbon{position:absolute;z-index:5;top:0;left:14px;height:116px;min-width:38px;padding:13px 9px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#f0141d,#cc0f17);color:#fff!important;font-family:var(--font-inter),Arial,sans-serif;font-size:9px!important;font-weight:950!important;line-height:1!important;letter-spacing:1.2px!important;text-transform:uppercase;writing-mode:vertical-rl;transform:rotate(180deg);box-shadow:0 8px 22px rgba(128,0,6,.28)}
+.breaking-ribbon-hero{top:24px;left:25px;height:144px;min-width:42px;font-size:10px!important}
+.section-lead-thumb,.section-card-thumb,.article-figure>div{position:relative;overflow:hidden}
+.article-figure{margin:28px 0}
+.article-figure>div img{width:100%;max-height:570px;aspect-ratio:16/9}
+.article-figure figcaption{margin-top:8px;color:#8c949c;font-size:8px}
+
+/* Son dakika sütunu: yalnız satırlar grid olur; çağrı düğmesi asla kelime kelime kırılmaz. */
+.home .latest{align-self:start;padding-bottom:14px;background:linear-gradient(180deg,#111923,#0d151d);border-top:5px solid var(--red);border-radius:4px;box-shadow:0 18px 40px rgba(15,23,32,.18)}
+.home .latest-title{height:auto;min-height:100px;padding:18px 20px;display:grid;grid-template-columns:1fr auto;align-content:center;gap:4px 12px;background:radial-gradient(circle at 100% 0,rgba(220,21,29,.23),transparent 47%),#111923;border-bottom:1px solid #2b3540;color:#fff}
+.home .latest-title>span{grid-column:1/-1;display:flex;align-items:center;gap:9px;color:#ff5960;font-size:8px;font-weight:950;letter-spacing:1.8px}
+.home .latest-title>span i{width:7px;height:7px;flex:none;background:var(--red);box-shadow:0 0 0 5px rgba(220,21,29,.16)}
+.home .latest-title>strong{font-family:var(--font-serif),Georgia,serif;font-size:24px;line-height:1.05;letter-spacing:-.4px}
+.home .latest-title>small{align-self:end;color:#7f8a95;font-size:8px;font-weight:800;white-space:nowrap}
+.home .latest-list{display:block}
+.home .latest .latest-item{min-height:76px;display:grid;grid-template-columns:48px minmax(0,1fr) 22px;align-items:start;gap:10px;padding:14px 18px;border-bottom:1px solid #29333e;color:#fff}
+.home .latest .latest-item time{padding-top:16px;color:#ff3e46;font-size:11px;font-weight:900;font-variant-numeric:tabular-nums}
+.home .latest .latest-item p{margin:0;color:#f3f5f7;font-family:var(--font-serif),Georgia,serif;font-size:13px;line-height:1.32;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.home .latest .latest-item p span{display:block;margin-bottom:5px;color:#7f8a95;font-family:var(--font-inter),Arial,sans-serif;font-size:7px;font-weight:950;line-height:1;letter-spacing:1.1px;text-transform:uppercase}
+.home .latest .latest-item>b{padding-top:16px;color:#3a4652;font-size:9px;font-weight:900;text-align:right}
+.home .latest .latest-more{width:calc(100% - 28px);height:48px;margin:14px 14px 0;padding:0 16px!important;display:flex!important;grid-template-columns:none!important;align-items:center;justify-content:space-between;gap:12px;border:1px solid #3b4753;border-radius:2px;background:#151f29;color:#fff;line-height:1.1;text-align:left;font-size:10px;font-weight:900;letter-spacing:.25px;white-space:nowrap}
+.home .latest .latest-more b{width:25px;height:25px;display:grid;place-items:center;border-radius:50%;background:var(--red);color:#fff;font-size:13px}
+@media(hover:hover){
+  .home .latest .latest-item:hover{background:#17222c;transform:none}
+  .home .latest .latest-item:hover p{color:#fff}
+  .home .latest .latest-item:hover p span{color:#ff5960}
+  .home .latest .latest-more:hover{border-color:#ff5960;background:#1b2631;color:#fff;transform:translateY(-1px)}
+}
+
+@media(min-width:761px) and (max-width:1100px){
+  .home .latest-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .home .latest .latest-item{border-right:1px solid #29333e}
+  .home .latest .latest-item:last-child{grid-column:1/-1}
+}
+
+@media(max-width:900px){
+  .topbar-inner{width:100%;height:50px;overflow:hidden}
+  .topbar-inner>span:first-child{display:none}
+  .live-data{width:100%;margin:0;overflow-x:auto;overflow-y:hidden;justify-content:flex-start;scrollbar-width:none}
+  .live-data::-webkit-scrollbar{display:none}
+  .live-data span.weather-chip,.live-data span.market-chip{display:flex;flex:0 0 auto;padding-inline:12px}
+  .live-data-source{display:none}
+}
+
+@media(max-width:500px){
+  .topbar-inner{width:100%;padding:0}
+  .weather-chip,.market-chip{min-width:0}
+  .weather-chip{padding-left:4px!important}
+  .weather-chip>i{width:23px}
+  .weather-chip small,.market-chip small{font-size:7px}
+  .weather-chip b{font-size:15px}
+  .market-chip b{font-size:12px}
+  .live-data .market-chip:nth-of-type(4){display:none}
+  .breaking-ribbon{left:10px;height:92px;min-width:33px;padding:10px 7px;font-size:8px!important}
+  .breaking-ribbon-hero{top:17px;left:16px;height:105px}
+  .home .latest{margin-top:4px}
+  .home .latest-title{min-height:88px;padding:15px 17px}
+  .home .latest-title>strong{font-size:22px}
+  .home .latest .latest-item{min-height:70px;grid-template-columns:44px minmax(0,1fr);padding:12px 16px}
+  .home .latest .latest-item>b{display:none}
+  .home .latest .latest-item time{padding-top:15px}
+  .home .latest .latest-more{height:46px;font-size:9px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .home .latest .latest-item,.home .latest .latest-more{transition:none!important}
+}
+
+
+@media(max-width:500px){
+  .live-data .weather-chip>span{display:block!important}
+  .masthead .live-button{width:auto;min-width:66px;padding:0 11px;font-size:8px;letter-spacing:.45px}
+}

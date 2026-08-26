@@ -68,7 +68,7 @@ export default async function BreakingPage() {
               <a className="section-lead" href={`/haber/${lead.slug}`}>
                 <div className="section-lead-thumb">
                   <img src={lead.heroImage} alt={lead.imageAlt} />
-                  {lead.isBreaking && <b className="lead-flag">SON DAKİKA</b>}
+                  {lead.isBreaking && <b className="breaking-ribbon">SON DAKİKA</b>}
                 </div>
                 <div>
                   <span style={{ background: "var(--red)" }}>{lead.isBreaking ? "SON DAKİKA" : lead.category}</span>
@@ -85,7 +85,7 @@ export default async function BreakingPage() {
                   <a className="section-card" href={`/haber/${article.slug}`} key={article.id}>
                     <div className="section-card-thumb">
                       <img src={article.heroImage} alt={article.imageAlt} loading="lazy" />
-                      {article.isBreaking && <b className="lead-flag">SON DAKİKA</b>}
+                      {article.isBreaking && <b className="breaking-ribbon">SON DAKİKA</b>}
                     </div>
                     <span>{article.category}</span>
                     <h3>{displayTitle(article.title)}</h3>

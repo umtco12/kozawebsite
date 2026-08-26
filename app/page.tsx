@@ -39,6 +39,7 @@ export default async function Home() {
     imageAlt: article.imageAlt,
     href: `/haber/${article.slug}`,
     published: stamp(article.publishedAt),
+    isBreaking: Boolean(article.isBreaking),
   }));
 
   /* Bölümler sırayla doldurulur. Yeni kurulumda ya da az haber varken havuz tükenirse
@@ -58,8 +59,9 @@ export default async function Home() {
   if (spotlight.length < 4) spotlight.push(...take(4 - spotlight.length));
   const flow = take(6);
   const grid = take(8);
-  const sidebar = take(8);
-  const breaking = latest.find((article) => article.isBreaking) ?? latest[0];
+  const breakingPool = latest.filter((article) => article.isBreaking);
+  const sidebar = [...breakingPool, ...latest.filter((article) => !article.isBreaking)].slice(0, 5);
+  const breaking = breakingPool[0];
   const gundemHref = categories.find((category) => category.slug === "gundem") ? "/kategori/gundem" : "/son-dakika";
   const videoLead = videos[0];
 
@@ -126,7 +128,7 @@ export default async function Home() {
             <div className="news-grid">
               {grid.map((article, index) => (
                 <a href={`/haber/${article.slug}`} className={index === 0 ? "news-card featured" : "news-card"} key={article.id}>
-                  <div className="news-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" /></div>
+                  <div className="news-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <div className="card-body">
                     <span>{article.category}</span>
                     <h3>{displayTitle(article.title)}</h3>
@@ -137,15 +139,22 @@ export default async function Home() {
               ))}
             </div>
           </div>
-          <aside className="latest">
-            <div className="latest-title"><i /> SON DAKİKA</div>
-            {sidebar.map((article) => (
-              <a href={`/haber/${article.slug}`} key={article.id}>
+          <aside className="latest" aria-label="Son dakika haber akışı">
+            <div className="latest-title">
+              <span><i /> CANLI AKIŞ</span>
+              <strong>Son Dakika</strong>
+              <small>{sidebar.length} güncel gelişme</small>
+            </div>
+            <div className="latest-list">
+            {sidebar.map((article, index) => (
+              <a className="latest-item" href={`/haber/${article.slug}`} key={article.id}>
                 <time>{clock(article.publishedAt)}</time>
-                <p>{displayTitle(article.title)}</p>
+                <p><span>{article.isBreaking ? "SON DAKİKA" : article.category}</span>{displayTitle(article.title)}</p>
+                <b aria-hidden="true">{String(index + 1).padStart(2, "0")}</b>
               </a>
             ))}
-            <a className="latest-more" href="/son-dakika">Daha Fazla Haber</a>
+            </div>
+            <a className="latest-more" href="/son-dakika"><span>Tüm son dakika haberleri</span><b aria-hidden="true">→</b></a>
           </aside>
         </section>
 

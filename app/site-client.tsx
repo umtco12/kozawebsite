@@ -27,14 +27,28 @@ export function LiveData() {
   if (!data) return <div className="live-data" aria-hidden="true" />;
 
   const rateTitle = data.rateSource && data.rateDate ? `${data.rateSource} döviz satış kuru · ${data.rateDate}` : undefined;
+  const rateNames: Record<string, string> = { USD: "Dolar", EUR: "Euro", GBP: "Sterlin" };
 
   return (
-    <div className="live-data">
-      {data.weather && <span>☀ {data.weather.label} {data.weather.value}</span>}
+    <div className="live-data" role="region" aria-label="Hava durumu ve döviz kurları">
+      {data.weather && (
+        <span className="weather-chip">
+          <i aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M19.8 4.2l-2.1 2.1M6.3 17.7l-2.1 2.1" /></svg></i>
+          <span><small>{data.weather.label}</small><b>{data.weather.value}</b></span>
+        </span>
+      )}
       {data.rates.map((rate) => (
-        <span key={rate.code} title={rateTitle}>{rate.label} {rate.value}</span>
+        <span className="market-chip" key={rate.code} title={rateTitle}>
+          <small><i aria-hidden="true">{rate.label}</i>{rateNames[rate.code] ?? rate.code}</small>
+          <b>{rate.value}</b>
+        </span>
       ))}
-      {data.rateSource && <small className="live-data-source">{data.rateSource}</small>}
+      {data.rateSource && (
+        <small className="live-data-source" title={rateTitle}>
+          <b>{data.rateSource}</b>
+          {data.rateDate && <span>{data.rateDate}</span>}
+        </small>
+      )}
     </div>
   );
 }
@@ -47,6 +61,7 @@ type Lead = {
   imageAlt: string;
   href?: string;
   published?: string;
+  isBreaking?: boolean;
 };
 
 const ROTATION_MS = 6000;
@@ -130,6 +145,7 @@ export function LeadSlider({ items }: { items: Lead[] }) {
         ))}
       </div>
       <div className="lead-shade" />
+      {item.isBreaking && <b className="breaking-ribbon breaking-ribbon-hero">SON DAKİKA</b>}
       <div className="lead-copy" key={item.href} aria-live={pausedByUser ? "polite" : "off"}>
         <div className="lead-eyebrow"><span>{item.category}</span><b>KOZA TV MANŞET</b></div>
         <h1><a href={item.href ?? "/son-dakika"}>{item.title}</a></h1>

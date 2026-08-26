@@ -30,7 +30,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const page = Math.max(Number((await searchParams).sayfa ?? 1) || 1, 1);
   const { articles, total, pageCount } = listCategoryPage(category.name, page, 18);
   const [lead, ...others] = articles;
-  const sidebar = listLatestArticles(20).filter((article) => article.category !== category.name).slice(0, 6);
+  const latest = listLatestArticles(30).filter((article) => article.category !== category.name);
+  const sidebar = [...latest.filter((article) => article.isBreaking), ...latest.filter((article) => !article.isBreaking)].slice(0, 6);
   const siblings = navItems.filter((item) => item.slug !== category.slug).slice(0, 8);
 
   return (
@@ -58,7 +59,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           <div>
             {page === 1 && lead && (
               <a className="section-lead" href={`/haber/${lead.slug}`}>
-                <div className="section-lead-thumb"><img src={lead.heroImage} alt={lead.imageAlt} /></div>
+                <div className="section-lead-thumb"><img src={lead.heroImage} alt={lead.imageAlt} />{lead.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                 <div>
                   <span style={{ background: category.color }}>{lead.category}</span>
                   <h2>{displayTitle(lead.title)}</h2>
@@ -71,7 +72,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             <div className="section-grid">
               {(page === 1 ? others : articles).map((article) => (
                 <a className="section-card" href={`/haber/${article.slug}`} key={article.id}>
-                  <div className="section-card-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" /></div>
+                  <div className="section-card-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <span style={{ color: category.color }}>{article.category}</span>
                   <h3>{displayTitle(article.title)}</h3>
                   <time>{stamp(article.publishedAt)}</time>

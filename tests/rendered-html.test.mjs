@@ -13,7 +13,7 @@ import {
 import { slugify, validateArticleInput } from "../db/article-model.mjs";
 import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
 import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "../db/demo-content-model.mjs";
-import { normalizePath, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
+import { defaultSettings, normalizePath, officialSocialAccounts, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
 import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseHomepageEntries, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
 import { selectHomepageLeads } from "../db/homepage-model.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
@@ -856,7 +856,7 @@ test("site ayarları panelden kaydedilir ve ziyaretçi sayfalarına yansır", as
   const home = await html("/");
   assert.match(home, /href="https:\/\/x\.com\/kozatvtest"/, "Tanımlı sosyal hesap bağlantı olmalı");
   assert.match(home, /class="social-link"[^>]+aria-label="Koza TV X"/, "Tanımlı sosyal hesap ayrı ve erişilebilir ikon düğmesi olmalı");
-  assert.doesNotMatch(home, /aria-label="Koza TV Facebook"/, "Adresi tanımlanmamış sosyal hesap arayüzde yer kaplamamalı");
+  assert.match(home, /href="https:\/\/www\.facebook\.com\/kozatv\/"[^>]+aria-label="Koza TV Facebook"/, "Resmî Facebook hesabı ayrı ikonla görünmeli");
   assert.match(home, /Türksat 4A/);
 
   const invalid = await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ liveHlsUrl: "javascript:alert(1)" }) });
@@ -1247,4 +1247,41 @@ test("kapak görseli onarım aracı depolama kurallarını uygulamayla aynı tut
   assert.match(script, /hero_image=\?[\s\S]{0,40}source_url<>''/, "Yalnız yer tutuculu kayıtlar seçilmeli");
   assert.match(script, /PLACEHOLDER = "\/news\/gorsel-yok\.svg"/);
   assert.doesNotMatch(script, /DELETE|DROP/i, "Onarım aracı veri silmemeli");
+});
+
+test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir haber şeridi korunur", async () => {
+  const defaults = defaultSettings();
+  assert.deepEqual(
+    Object.fromEntries(Object.keys(officialSocialAccounts).map((key) => [key, defaults[key]])),
+    officialSocialAccounts,
+    "Dört resmî sosyal hesap yeni kurulum varsayılanı olmalı",
+  );
+
+  const databaseSource = await readFile(new URL("../db/index.ts", import.meta.url), "utf8");
+  assert.match(databaseSource, /_official_social_accounts_v1/, "Mevcut boş ayarlar için bir defalık geçiş bulunmalı");
+  assert.match(databaseSource, /TRIM\(site_settings\.value\)=''/, "Yönetici tarafından değiştirilmiş sosyal hesap ezilmemeli");
+
+  const home = await html("/");
+  const latestItems = home.match(/class="latest-item"/g) ?? [];
+  assert.ok(latestItems.length > 0 && latestItems.length <= 5, `Son dakika sütunu en fazla 5 kompakt satır göstermeli; bulunan: ${latestItems.length}`);
+  assert.match(home, /class="latest-more"[^>]*><span>Tüm son dakika haberleri<\/span>/, "Çağrı bağlantısı tek bir anlamlı metin taşımalı");
+  assert.match(home, /class="breaking-ribbon/, "Admin tarafından işaretlenen haber kırmızı şerit taşımalı");
+
+  const breakingArticle = await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde");
+  assert.match(breakingArticle, /class="article-breaking"/, "Son dakika haberi detay bandı taşımalı");
+  assert.match(breakingArticle, /class="breaking-ribbon"/, "Son dakika haberi görsel şeridi taşımalı");
+  assert.match(breakingArticle, /#SonDakika/);
+
+  const regularArticle = await html("/haber/piyasalar-yeni-karara-odaklandi");
+  assert.doesNotMatch(regularArticle, /class="article-breaking"/, "Normal habere yanlış son dakika bandı basılmamalı");
+  assert.doesNotMatch(regularArticle, /#SonDakika/, "Normal habere yanlış son dakika etiketi basılmamalı");
+
+  const client = await readFile(new URL("../app/site-client.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(client, /className="weather-chip"/);
+  assert.match(client, /className="market-chip"/);
+  assert.match(styles, /\.home \.latest \.latest-more\{[^}]*display:flex!important[^}]*white-space:nowrap/s, "Daha fazla bağlantısı kelime kelime kırılmamalı");
+  assert.match(styles, /@media\(max-width:500px\)[\s\S]*\.breaking-ribbon/, "Haber şeridinin mobil boyutu tanımlanmalı");
+  assert.match(styles, /\.weather-chip>span\{display:block!important\}/, "Mobilde sıcaklık metni güneş simgesiyle birlikte görünmeli");
+  assert.match(styles, /\.masthead \.live-button\{[^}]*font-size:8px/, "Mobil canlı yayın düğmesi anlaşılır metnini korumalı");
 });

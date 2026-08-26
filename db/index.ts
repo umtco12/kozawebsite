@@ -5,7 +5,7 @@ import Database from "better-sqlite3";
 import { slugify } from "./article-model.mjs";
 import { hashPassword, verifyPassword } from "./auth-model.mjs";
 import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "./demo-content-model.mjs";
-import { defaultSettings, normalizePath, normalizeSchedule, scheduleDefault } from "./settings-model.mjs";
+import { defaultSettings, normalizePath, normalizeSchedule, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
 import { legacyPath } from "./import-model.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
@@ -82,6 +82,22 @@ function ensureSchema(db: InstanceType<typeof Database>) {
   ensureColumn(db, "articles", "withdrawn_at", "INTEGER");
   ensureColumn(db, "articles", "homepage_order", "INTEGER NOT NULL DEFAULT 100");
   db.exec("CREATE INDEX IF NOT EXISTS idx_workflow_state_assignee ON articles(workflow_state,assigned_to,updated_at DESC)");
+
+  /* Resmî sosyal hesaplar ilk kez tanımlandığında yalnız boş ayarlar doldurulur.
+     Bir defalık işaret, yöneticinin daha sonra panelden hesabı kaldırma kararını korur. */
+  const socialSeedKey = "_official_social_accounts_v1";
+  const socialSeeded = db.prepare("SELECT 1 FROM site_settings WHERE key=?").get(socialSeedKey);
+  if (!socialSeeded) {
+    const now = Date.now();
+    const upsert = db.prepare(`INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES (?,?,?,'Koza TV resmî hesapları')
+      ON CONFLICT(key) DO UPDATE SET value=CASE WHEN TRIM(site_settings.value)='' THEN excluded.value ELSE site_settings.value END,
+      updated_at=CASE WHEN TRIM(site_settings.value)='' THEN excluded.updated_at ELSE site_settings.updated_at END`);
+    db.transaction(() => {
+      for (const [key, value] of Object.entries(officialSocialAccounts)) upsert.run(key, value, now);
+      db.prepare("INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES (?,?,?,'Sistem')").run(socialSeedKey, "1", now);
+    })();
+  }
+
   /* Aktarımın ilk sürümü kapak görseli bulunamayan haberlere gerçek bir haber karesini
      (`/news/gundem.jpg`) yedek olarak yazıyordu; bu, okura yanlış görsel gösteriyordu.
      Yalnızca aktarılan kayıtlar tarafsız yer tutucuya çevrilir. */
