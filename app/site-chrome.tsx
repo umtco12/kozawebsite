@@ -44,6 +44,7 @@ function SocialCluster() {
 }
 
 export function SiteHeader({ categories, active = "" }: { categories: NavCategory[]; active?: string }) {
+  const settings = getSiteSettings();
   return (
     <>
       <div className="topbar">
@@ -61,7 +62,7 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
       <header className="site-header">
         <div className="wrap masthead">
           <a className="brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></a>
-          <div className="masthead-claim"><span>TÜRKİYE&apos;NİN HABER MERKEZİ</span><strong>Doğru haber. Güçlü yorum.</strong></div>
+          <div className="masthead-claim"><span>TÜRKİYE&apos;NİN HABER MERKEZİ</span><strong>{settings.siteMotto}</strong></div>
           <a className="live-button" href="/canli"><i /> CANLI YAYIN</a>
           <MobileMenu categories={categories.map(({ name, slug }) => ({ name, slug }))} />
         </div>

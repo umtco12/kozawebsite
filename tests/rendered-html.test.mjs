@@ -790,8 +790,10 @@ test("gezinme bağlantıları çerçeveye bağlı olmayan gerçek bağlantılard
 });
 
 test("site ayarları modeli adres, e-posta ve yayın akışı kurallarını uygular", () => {
-  const good = validateSettings({ liveHlsUrl: "https://yayin.example.com/koza.m3u8", newsEmail: "Haber@KozaTV.com.tr", satelliteInfo: "Türksat 3A", showMarketTicker: false });
+  assert.equal(defaultSettings().siteMotto, "Şimdi konuşma zamanı", "Yeni kurulumun marka mottosu doğru olmalı");
+  const good = validateSettings({ siteMotto: "  Şimdi konuşma zamanı  ", liveHlsUrl: "https://yayin.example.com/koza.m3u8", newsEmail: "Haber@KozaTV.com.tr", satelliteInfo: "Türksat 3A", showMarketTicker: false });
   assert.equal(good.valid, true);
+  assert.equal(good.values.siteMotto, "Şimdi konuşma zamanı", "Motto çevresindeki boşluklar temizlenmeli");
   assert.equal(good.values.newsEmail, "haber@kozatv.com.tr");
   assert.equal(good.values.showMarketTicker, "0");
 
@@ -804,6 +806,8 @@ test("site ayarları modeli adres, e-posta ve yayın akışı kurallarını uygu
   const schedule = normalizeSchedule([{ time: "19:00", title: "Ana Haber", host: "Merkez" }, { time: "7:5", title: "Bozuk" }, { time: "07:00", title: "Günaydın", host: "" }]);
   assert.deepEqual(schedule.map((row) => row.time), ["07:00", "19:00"], "Geçersiz saat atılmalı ve sıralanmalı");
   assert.equal(validateSettings({ broadcastSchedule: [{ time: "bozuk", title: "x" }] }).valid, false);
+  assert.equal(validateSettings({ siteMotto: "" }).valid, false, "Motto boş bırakılamamalı");
+  assert.equal(validateSettings({ siteMotto: "x".repeat(81) }).valid, false, "Motto 80 karakteri aşmamalı");
 });
 
 test("yönlendirme modeli adresleri tek biçime indirir ve korumalı yolları reddeder", () => {
@@ -825,6 +829,7 @@ test("yönlendirme modeli adresleri tek biçime indirir ve korumalı yolları re
 test("site ayarları panelden kaydedilir ve ziyaretçi sayfalarına yansır", async () => {
   const payload = {
     liveHlsUrl: "https://yayin.example.com/kozatv/index.m3u8",
+    siteMotto: "Şimdi test konuşma zamanı",
     liveBackupUrl: "https://yedek.example.com/kozatv.m3u8",
     satelliteInfo: "Türksat 4A • 11919 H",
     platformInfo: "Digitürk 615 • D-Smart 109",
@@ -855,6 +860,8 @@ test("site ayarları panelden kaydedilir ve ziyaretçi sayfalarına yansır", as
 
   const home = await html("/");
   assert.match(home, /href="https:\/\/x\.com\/kozatvtest"/, "Tanımlı sosyal hesap bağlantı olmalı");
+  assert.match(home, /Şimdi test konuşma zamanı/, "Panelden kaydedilen motto site üst bölümüne yansımalı");
+  assert.doesNotMatch(home, /Doğru haber\. Güçlü yorum\./, "Eski sabit motto ziyaretçiye gösterilmemeli");
   assert.match(home, /class="social-link"[^>]+aria-label="Koza TV X"/, "Tanımlı sosyal hesap ayrı ve erişilebilir ikon düğmesi olmalı");
   assert.match(home, /href="https:\/\/www\.facebook\.com\/kozatv\/"[^>]+aria-label="Koza TV Facebook"/, "Resmî Facebook hesabı ayrı ikonla görünmeli");
   assert.match(home, /Türksat 4A/);
@@ -863,7 +870,7 @@ test("site ayarları panelden kaydedilir ve ziyaretçi sayfalarına yansır", as
   assert.equal(invalid.status, 400);
   assert.ok((await invalid.json()).fields.liveHlsUrl);
 
-  const anonymous = await anonymousRequest("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ liveHlsUrl: "" }) });
+  const anonymous = await anonymousRequest("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ siteMotto: "Yetkisiz motto" }) });
   assert.equal(anonymous.status, 401, "Oturumsuz ayar değişikliği kapalı olmalı");
 });
 

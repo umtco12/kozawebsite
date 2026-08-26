@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
-type Field = { key: string; group: string; type: string; label: string; hint?: string; placeholder?: string; maxLength?: number };
+type Field = { key: string; group: string; type: string; label: string; hint?: string; placeholder?: string; minLength?: number; maxLength?: number; required?: boolean };
 type Group = { id: string; label: string; description: string };
 type ScheduleRow = { time: string; title: string; host: string };
 
@@ -58,12 +58,12 @@ export function SiteSettingsPanel({ canEdit }: { canEdit: boolean }) {
                   </label>
                 ) : field.type === "textarea" ? (
                   <label className="wide" key={field.key}>{field.label}
-                    <textarea rows={2} value={values[field.key] ?? ""} maxLength={field.maxLength} disabled={!canEdit} placeholder={field.placeholder} onChange={(event) => update(field.key, event.target.value)} />
+                    <textarea rows={2} value={values[field.key] ?? ""} minLength={field.minLength} maxLength={field.maxLength} required={field.required} disabled={!canEdit} placeholder={field.placeholder} onChange={(event) => update(field.key, event.target.value)} />
                     {field.hint && <small>{field.hint}</small>}{errors[field.key] && <em>{errors[field.key]}</em>}
                   </label>
                 ) : (
                   <label className={field.type === "url" ? "wide" : ""} key={field.key}>{field.label}
-                    <input type={field.type === "email" ? "email" : field.type === "url" ? "url" : "text"} value={values[field.key] ?? ""} maxLength={field.maxLength} disabled={!canEdit} placeholder={field.placeholder} onChange={(event) => update(field.key, event.target.value)} />
+                    <input type={field.type === "email" ? "email" : field.type === "url" ? "url" : "text"} value={values[field.key] ?? ""} minLength={field.minLength} maxLength={field.maxLength} required={field.required} disabled={!canEdit} placeholder={field.placeholder} onChange={(event) => update(field.key, event.target.value)} />
                     {field.hint && <small>{field.hint}</small>}{errors[field.key] && <em>{errors[field.key]}</em>}
                   </label>
                 )
@@ -96,6 +96,7 @@ export function SiteSettingsPanel({ canEdit }: { canEdit: boolean }) {
       <aside className="settings-aside">
         <strong>Bu ayarlar nereye yansır?</strong>
         <ul>
+          <li><b>Site mottosu</b> → tüm ziyaretçi sayfalarının üst bölümünde, Koza TV logosunun yanında gösterilir.</li>
           <li><b>Canlı yayın adresi</b> → <code>/canli</code> oynatıcısı. Boşsa kesinti ekranı gösterilir.</li>
           <li><b>Yedek yayın adresi</b> → ana kaynak açılmazsa devreye girer.</li>
           <li><b>Sosyal hesaplar</b> → üst bant ve alt bölüm simgeleri. Boş hesap bağlantı olarak gösterilmez.</li>

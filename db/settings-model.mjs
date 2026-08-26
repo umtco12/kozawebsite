@@ -15,6 +15,7 @@ export const officialSocialAccounts = {
 };
 
 export const settingFields = [
+  { key: "siteMotto", group: "yayin", type: "text", label: "Site mottosu", hint: "Koza TV logosunun yanında, sitenin üst bölümünde gösterilir.", placeholder: "Şimdi konuşma zamanı", minLength: 3, maxLength: 80, required: true, default: "Şimdi konuşma zamanı" },
   { key: "liveHlsUrl", group: "yayin", type: "url", label: "Canlı yayın kaynağı", hint: "YouTube canlı yayın bağlantısı veya HLS (.m3u8) adresi. YouTube kanal adresi verilirse o kanalın o anda açık olan yayını gösterilir. Boş bırakılırsa kesinti ekranı çıkar.", placeholder: "https://www.youtube.com/watch?v=... veya https://yayin.example.com/koza.m3u8", default: "" },
   { key: "liveBackupUrl", group: "yayin", type: "url", label: "Yedek yayın kaynağı", hint: "Ana kaynak açılmazsa izleyiciye bu adres sunulur. YouTube veya HLS olabilir.", placeholder: "https://www.youtube.com/watch?v=… veya https://yedek.example.com/koza.m3u8", default: "" },
   { key: "satelliteInfo", group: "yayin", type: "text", label: "Uydu bilgisi", maxLength: 120, default: "Türksat 3A • 12685 V" },
@@ -92,7 +93,11 @@ export function validateSettings(payload) {
     }
 
     const value = String(raw ?? "").trim();
-    if (!value) { values[field.key] = ""; continue; }
+    if (!value) {
+      if (field.required) errors[field.key] = `${field.label} boş bırakılamaz.`;
+      else values[field.key] = "";
+      continue;
+    }
 
     if (field.type === "url") {
       if (!isSafeUrl(value)) { errors[field.key] = "Adres http veya https ile başlayan geçerli bir bağlantı olmalıdır."; continue; }
@@ -113,6 +118,8 @@ export function validateSettings(payload) {
     }
 
     const limit = field.maxLength ?? 200;
+    const minimum = field.minLength ?? 0;
+    if (value.length < minimum) { errors[field.key] = `En az ${minimum} karakter girilmelidir.`; continue; }
     if (value.length > limit) { errors[field.key] = `En fazla ${limit} karakter girilebilir.`; continue; }
     values[field.key] = value;
   }
