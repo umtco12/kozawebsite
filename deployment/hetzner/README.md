@@ -50,6 +50,15 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 - Hatalar systemd günlüğüne yazılır; `/etc/kozatv/alerts.env` içinde `KOZA_ALERT_WEBHOOK` verilirse webhook'a da gönderilir.
 - Stage sunucusunda UFW yalnız 22, 80 ve 443 TCP portlarını açar. SSH parola ve root girişi kapalıdır; operasyon erişimi yalnız anahtarlı `koza-admin` hesabıyla yapılır.
 
+## Yetkili haber ajansı akışları
+
+- Ajans akışları yalnız AA, İHA, DHA veya başka bir sağlayıcıyla yapılmış kurumsal abonelik kapsamında çalıştırılır. Herkese açık haber sayfalarını kazıyan bir görev kurulmaz.
+- `/etc/kozatv/agency.env` dosyası `root:kozatv`, `640` izinleriyle oluşturulur. Dosyada en az güçlü ve rastgele bir `KOZA_AGENCY_CRON_TOKEN` bulunur; ajansların verdiği anahtarlar panelde yazan değişken adlarıyla (örneğin `KOZA_AGENCY_AA_TOKEN`) aynı dosyaya eklenir.
+- `kozatv.service` bu dosyayı okuyarak ajans kimlik bilgilerini yalnız belleğe alır. API ve yönetim ekranı gizli değerleri hiçbir zaman döndürmez.
+- `kozatv-agency-pull.timer` beş dakikada bir yerel API'yi çağırır; her kaynak kendi 5–1440 dakika aralığına göre vadesi geldiğinde çalışır.
+- Kurulumdan sonra `kozatv-agency-pull.service` ve `kozatv-agency-pull.timer` dosyaları `/etc/systemd/system/` altına kurulur; `systemctl daemon-reload && systemctl enable --now kozatv-agency-pull.timer` uygulanır.
+- İlk canlı çalıştırmadan önce yönetim panelinde **Bağlantıyı test et** kullanılmalı, algılanan alanlar örnek ajans bülteniyle karşılaştırılmalı ve doğrudan yayın seçeneği ancak sözleşme/yayın politikası doğrulandıktan sonra açılmalıdır.
+
 ## Canlıya çıkmadan önce kalan güvenlik işleri
 
 - Çok faktörlü giriş, IP tabanlı giriş hız sınırı ve şüpheli giriş alarmı

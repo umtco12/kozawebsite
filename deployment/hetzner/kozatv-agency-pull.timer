@@ -1,0 +1,11 @@
+[Unit]
+Description=Koza TV ajans akışlarını beş dakikada bir kontrol et
+
+[Timer]
+OnBootSec=3m
+OnUnitActiveSec=5m
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Koza TV yetkili ajans akışlarını çek
+After=network-online.target kozatv.service
+Wants=network-online.target
+OnFailure=kozatv-alert@%n.service
+
+[Service]
+Type=oneshot
+User=kozatv
+Group=kozatv
+EnvironmentFile=/etc/kozatv/agency.env
+ExecStart=/usr/bin/node --input-type=module --eval "const response=await fetch('http://127.0.0.1:8201/api/agency',{method:'POST',headers:{'content-type':'application/json','x-koza-agency-token':process.env.KOZA_AGENCY_CRON_TOKEN},body:JSON.stringify({action:'run-due'}),signal:AbortSignal.timeout(240000)}); if(!response.ok) throw new Error(await response.text()); console.log(await response.text())"
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict

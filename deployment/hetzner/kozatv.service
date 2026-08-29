@@ -14,6 +14,7 @@ Environment=PORT=8201
 Environment=KOZA_DB_PATH=/srv/kozatv/data/koza.sqlite
 Environment=KOZA_MEDIA_PATH=/srv/kozatv/data/media
 Environment=KOZA_MEDIA_QUOTA_BYTES=10737418240
+EnvironmentFile=-/etc/kozatv/agency.env
 ExecStart=/usr/bin/node /srv/kozatv/current/dist/standalone/server.js
 Restart=always
 RestartSec=3

@@ -18,6 +18,8 @@ import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parse
 import { selectHomepageLeads } from "../db/homepage-model.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { parseMynetMarketPayload } from "../app/api/piyasa/market-model.mjs";
+import { agencyUpdateDecision, applyCategoryMap, buildAgencyHeaders, normalizeAgencyPayload, renderAgencyDisclaimer, validateAgencySource } from "../db/agency-model.mjs";
+import { canAccessArticle, canEditArticle, canManageAgencyMetadata, canPublish, canWriteStatus } from "../db/editorial-permissions.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -35,10 +37,14 @@ process.env.KOZA_BOOTSTRAP_ADMIN_PASSWORD = "Koza!Test2026Secure";
 process.env.KOZA_BOOTSTRAP_ADMIN_NAME = "Koza Test Yöneticisi";
 process.env.KOZA_BOOTSTRAP_ADMIN_FORCE_CHANGE = "0";
 process.env.KOZA_ENABLE_DEMO_CONTENT = "1";
+process.env.KOZA_AGENCY_TEST_TOKEN = "test-gizli-ajans-anahtari";
 const port = 32000 + (process.pid % 10000);
 const baseUrl = `http://127.0.0.1:${port}`;
 let productionServer;
 let adminCookie = "";
+let testAgencySourceId = 0;
+let testAgencyArticleId = 0;
+let testAgencyArticleSlug = "";
 
 before(async () => {
   productionServer = spawn(
@@ -86,6 +92,22 @@ function request(path, init = {}) {
 }
 
 function anonymousRequest(path, init = {}) { return fetch(`${baseUrl}${path}`, init); }
+
+async function createRoleSession(role, label) {
+  const email = `${label}-${process.pid}@koza.test`;
+  const temporaryPassword = `Koza!${label}2026Temp`;
+  const nextPassword = `Koza!${label}2026Kalici`;
+  const created = await request("/api/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fullName: `${label} Test Kullanıcısı`, email, role, password: temporaryPassword }) });
+  assert.equal(created.status, 201);
+  const user = (await created.json()).user;
+  const login = await anonymousRequest("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password: temporaryPassword }) });
+  const temporaryCookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
+  const changed = await anonymousRequest("/api/auth/password", { method: "POST", headers: { "content-type": "application/json", cookie: temporaryCookie }, body: JSON.stringify({ currentPassword: temporaryPassword, nextPassword }) });
+  assert.equal(changed.status, 200);
+  const relogin = await anonymousRequest("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password: nextPassword }) });
+  assert.equal(relogin.status, 200);
+  return { user, cookie: relogin.headers.get("set-cookie")?.split(";")[0] ?? "" };
+}
 
 async function notFoundHtml(path) {
   const response = await request(path, { headers: { accept: "text/html" } });
@@ -185,6 +207,58 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(body, /Koza Test Yöneticisi/);
   assert.match(body, /Kullanıcılar/);
   assert.match(body, /Yayın Stüdyosu/);
+  assert.match(await readFile(new URL("../app/admin/agency-sources.tsx", import.meta.url), "utf8"), /Ajans Akış Merkezi/);
+});
+
+test("ajans modeli güvenli bağlantıyı ve eksiksiz RSS/JSON alanlarını doğrular", () => {
+  const invalid = validateAgencySource({ name: "AA", url: "http://127.0.0.1/feed", authType: "bearer", secretEnv: "gercek-parola" });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.url);
+  assert.ok(invalid.errors.secretEnv);
+  const source = validateAgencySource({ name: "Test Ajansı", url: "https://feed.example.com/news", provider: "other", feedFormat: "json", authType: "bearer", secretEnv: "KOZA_AGENCY_TEST_TOKEN", publishMode: "review", pollIntervalMinutes: 15, defaultCategory: "Gündem" });
+  assert.equal(source.valid, true);
+  const headers = buildAgencyHeaders(source.value, process.env);
+  assert.equal(headers.authorization, `Bearer ${process.env.KOZA_AGENCY_TEST_TOKEN}`);
+  assert.doesNotMatch(JSON.stringify(source.value), /test-gizli-ajans-anahtari/, "Gerçek erişim anahtarı kaynak kaydına girmemeli");
+
+  const jsonItems = normalizeAgencyPayload(JSON.stringify({ items: [{ id: "AJ-42", headline: "Ajans bağlantısı için yeterince uzun örnek haber", summary: "Ajans haberinin ayrıntılı özeti ve öne çıkan bilgileri.", articleBody: "Ajansın sağladığı tam haber metni burada yer alıyor. İkinci cümle, içerik doğrulama sınırını güvenli biçimde tamamlıyor.", articleSection: "POLITIKA", byline: "Ajans Haber Merkezi", datePublished: "2026-08-29T09:30:00+03:00", dateModified: "2026-08-29T09:35:00+03:00", status: "updated", keywords: ["Meclis", "Ankara"], location: "Ankara", rights: "Abonelik kapsamında", images: [{ url: "https://cdn.example.com/photo.jpg", caption: "Haber fotoğrafı", credit: "Test Ajansı" }], videos: [{ url: "https://cdn.example.com/video.m3u8", caption: "Haber videosu" }] }] }), source.value);
+  assert.equal(jsonItems.length, 1);
+  assert.equal(jsonItems[0].externalId, "AJ-42");
+  assert.equal(jsonItems[0].status, "updated");
+  assert.equal(jsonItems[0].media.length, 2);
+  assert.deepEqual(jsonItems[0].tags, ["Meclis", "Ankara"]);
+  assert.equal(applyCategoryMap("POLITIKA", '{"POLITIKA":"Siyaset"}', "Gündem"), "Siyaset");
+
+  const rssItems = normalizeAgencyPayload(`<?xml version="1.0"?><rss><channel><item><guid>AA-99</guid><title><![CDATA[RSS üzerinden gelen yeterince uzun ajans haberi]]></title><link>https://agency.example.com/haber/99</link><description><![CDATA[Habere ilişkin ayrıntılı ve açıklayıcı spot metni burada bulunuyor.]]></description><content:encoded><![CDATA[<p>Ajansın gönderdiği tam haber metninin ilk paragrafı.</p><p>İkinci paragraf da eksiksiz biçimde korunur ve aktarılır.</p>]]></content:encoded><category>Gündem</category><pubDate>Sat, 29 Aug 2026 08:00:00 GMT</pubDate><media:content url="https://cdn.example.com/aa99.jpg" type="image/jpeg" /></item></channel></rss>`, { ...source.value, feedFormat: "rss" });
+  assert.equal(rssItems.length, 1);
+  assert.equal(rssItems[0].externalId, "AA-99");
+  assert.match(rssItems[0].body, /İkinci paragraf/);
+  assert.equal(rssItems[0].media[0].kind, "image");
+  const newsmlItems = normalizeAgencyPayload(`<newsItem guid="urn:newsml:aa.test:2026:100"><itemMeta><pubStatus qcode="stat:usable"/><versionCreated>2026-08-29T10:05:00Z</versionCreated></itemMeta><contentMeta><contentCreated>2026-08-29T10:00:00Z</contentCreated><headline>NewsML ile gelen yeterince uzun ajans haberi</headline><description>NewsML haberinin yeterince açıklayıcı örnek spot metni.</description><by>Ajans Haber Merkezi</by><subject><name>Ekonomi</name></subject></contentMeta><contentSet><inlineXML><html><body><p>NewsML tam metninin ilk ve yeterince uzun paragrafı burada.</p><p>İkinci paragraf da veri kaybı olmadan aktarılır.</p></body></html></inlineXML><remoteContent href="https://cdn.example.com/newsml.jpg" contenttype="image/jpeg"/></contentSet></newsItem>`, { ...source.value, feedFormat: "newsml" });
+  assert.equal(newsmlItems.length, 1);
+  assert.equal(newsmlItems[0].externalId, "urn:newsml:aa.test:2026:100");
+  assert.equal(newsmlItems[0].category, "Ekonomi");
+  assert.match(newsmlItems[0].body, /İkinci paragraf/);
+  assert.match(renderAgencyDisclaimer("{agency} otomatik akışı.", "Anadolu Ajansı"), /Anadolu Ajansı/);
+  assert.equal(renderAgencyDisclaimer("", "Anadolu Ajansı"), "", "Boş ajans bilgilendirmesi zorla varsayılan metne çevrilmemeli");
+  assert.equal(validateAgencySource({ ...source.value, disclaimer: "" }).valid, true, "Ajans bilgilendirmesi isteğe bağlı olmalı");
+});
+
+test("ajans güncellemeleri editör korumasını ve rol sınırlarını gözetir", () => {
+  assert.equal(agencyUpdateDecision({ payloadHash: "eski", pendingHash: "" }, "yeni", true), "queue");
+  assert.equal(agencyUpdateDecision({ payloadHash: "eski", pendingHash: "yeni" }, "yeni", true), "pending");
+  assert.equal(agencyUpdateDecision({ payloadHash: "eski", pendingHash: "" }, "yeni", false), "apply");
+  assert.equal(agencyUpdateDecision({ payloadHash: "aynı", pendingHash: "" }, "aynı", true), "unchanged");
+  const assigned = { assignedTo: 42, status: "review", workflowState: "editor_review" };
+  assert.equal(canAccessArticle("reporter", 42, assigned), true);
+  assert.equal(canAccessArticle("reporter", 7, assigned), false);
+  assert.equal(canEditArticle("reporter", 42, assigned), true);
+  assert.equal(canEditArticle("editor", 7, { ...assigned, status: "published", workflowState: "published" }), false);
+  assert.equal(canWriteStatus("editor", "scheduled"), false);
+  assert.equal(canWriteStatus("publisher", "scheduled"), true);
+  assert.equal(canPublish("publisher"), true);
+  assert.equal(canManageAgencyMetadata("editor"), true);
+  assert.equal(canManageAgencyMetadata("reporter"), false);
 });
 
 test("admin girişi güvenli oturum çerezi üretir ve yetkisiz sayfayı yönlendirir", async () => {
@@ -301,8 +375,88 @@ test("haber API geçersiz içerik ve kaynak adreslerini reddeder", async () => {
 
   const invalidSource = await request("/api/sources", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Güvensiz", url: "javascript:alert(1)" }) });
   assert.equal(invalidSource.status, 400);
-  const source = await request("/api/sources", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Koza Test Kaynağı", url: "https://example.com/koza-feed", type: "rss" }) });
+  const source = await request("/api/sources", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Koza Test Ajansı", url: "https://example.com/koza-feed", provider: "other", feedFormat: "json", authType: "bearer", secretEnv: "KOZA_AGENCY_TEST_TOKEN", publishMode: "review", pollIntervalMinutes: 15, defaultCategory: "Gündem" }) });
   assert.equal(source.status, 201);
+  const sourceBody = await source.json();
+  testAgencySourceId = sourceBody.source.id;
+  assert.equal(sourceBody.source.credentialReady, true);
+  assert.equal(sourceBody.source.publishMode, "review");
+  assert.doesNotMatch(JSON.stringify(sourceBody), /test-gizli-ajans-anahtari/, "API gerçek ajans anahtarını döndürmemeli");
+  const updated = await request("/api/sources", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...sourceBody.source, publishMode: "auto", active: 0 }) });
+  assert.equal(updated.status, 200);
+  assert.equal((await updated.json()).source.publishMode, "auto");
+  const blockedPull = await anonymousRequest("/api/agency", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "pull", sourceId: sourceBody.source.id }) });
+  assert.equal(blockedPull.status, 401);
+});
+
+test("ajans haberi yalnız kendi kaynağına ait bilgilendirme ve kayıt kimliğini gösterir", async () => {
+  assert.ok(testAgencySourceId > 0);
+  const article = { slug: "", title: "Ajans bilgilendirmesi görünürlük test haberi", spot: "Ajans kaynağına özel açıklamanın ziyaretçi sayfasında görünmesini doğrulayan ayrıntılı spot.", body: "Bu haber metni ajans kaynağına bağlı yasal bilgilendirme alanını doğrulamak için hazırlanmıştır. Kaynak kimliği ve sisteme alınma zamanı yalnız ilgili ajans haberinde gösterilir.", category: "Gündem", status: "draft", heroImage: "/news/gorsel-yok.svg", imageAlt: "Ajans haberi için tarafsız görsel", videoUrl: "", author: "Test Ajansı", sourceName: "Koza Test Ajansı", sourceUrl: "https://example.com/original", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0 };
+  const created = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(article) });
+  assert.equal(created.status, 201);
+  const record = (await created.json()).article;
+  testAgencyArticleId = record.id;
+  testAgencyArticleSlug = record.slug;
+  for (const action of ["submit_review", "approve", "publish"]) {
+    const transition = await request("/api/editorial", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "workflow", articleId: record.id, action }) });
+    assert.equal(transition.status, 200);
+  }
+  await execFileAsync("sqlite3", [process.env.KOZA_DB_PATH, `UPDATE articles SET agency_source_id=${testAgencySourceId},agency_external_id='AJANS-TEST-42',agency_credit='Koza Test Ajansı',agency_received_at=${Date.now()} WHERE id=${record.id};`]);
+  const body = await html(`/haber/${record.slug}`);
+  assert.match(body, /AJANS HABERİ/);
+  assert.match(body, /Ajans kayıt no:[\s\S]{0,80}AJANS-TEST-42/);
+  assert.match(body, /Koza Test Ajansı tarafından servis edilmiş/);
+  const normal = await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde");
+  assert.doesNotMatch(normal, /Ajans kayıt no:/, "Koza TV'nin kendi haberinde blanket ajans metni gösterilmemeli");
+});
+
+test("ajans kimliği, kredi ve kaynak bağlantısı haber bazında isteğe bağlı düzenlenir", async () => {
+  assert.ok(testAgencyArticleId > 0 && testAgencyArticleSlug);
+  const articles = await request("/api/articles?limit=100");
+  const current = (await articles.json()).articles.find((item) => item.id === testAgencyArticleId);
+  assert.equal(current.agencySourceId, testAgencySourceId);
+  const detached = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...current, sourceName: "", sourceUrl: "", agencySourceId: null, agencyExternalId: "", agencyCredit: "", agencyEditorialLock: 0, status: "published" }) });
+  assert.equal(detached.status, 200);
+  const detachedArticle = (await detached.json()).article;
+  assert.equal(detachedArticle.agencySourceId, null);
+  assert.equal(detachedArticle.agencyExternalId, "");
+  assert.equal(detachedArticle.sourceName, "");
+  const detachedPage = await html(`/haber/${testAgencyArticleSlug}`);
+  assert.doesNotMatch(detachedPage, /AJANS HABERİ|Ajans kayıt no:|class="source-box"/, "Ajans bağlantısı kaldırılan haberde zorunlu kaynak kutusu kalmamalı");
+
+  const sourceResponse = await request("/api/sources");
+  const source = (await sourceResponse.json()).sources.find((item) => item.id === testAgencySourceId);
+  const optionalDisclaimer = await request("/api/sources", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...source, disclaimer: "" }) });
+  assert.equal(optionalDisclaimer.status, 200);
+  const attached = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...detachedArticle, sourceName: "Koza Test Ajansı", agencySourceId: testAgencySourceId, agencyExternalId: "", agencyCredit: "", agencyEditorialLock: 1, status: "published" }) });
+  assert.equal(attached.status, 200);
+  const attachedPage = await html(`/haber/${testAgencyArticleSlug}`);
+  assert.match(attachedPage, /AJANS HABERİ/);
+  assert.doesNotMatch(attachedPage, /Ajans kayıt no:|otomatik olarak alınmıştır/, "Boş kayıt numarası ve açıklama ziyaretçiye zorla eklenmemeli");
+});
+
+test("muhabir yalnız atanmış taslağını düzenler; editör ajans akışını çalıştıramaz ve planlama yapamaz", async () => {
+  const reporter = await createRoleSession("reporter", "MuhabirYetki");
+  const editor = await createRoleSession("editor", "EditorYetki");
+  const baseArticle = { slug: "", title: "Muhabir rol sınırı için yeterince uzun test haberi", spot: "Muhabirin yalnız kendisine atanmış içeriği düzenlediğini doğrulayan ayrıntılı test spotu.", body: "Bu test haberi rol sınırlarını doğrulamak amacıyla hazırlanmıştır. Muhabir kendi taslağını düzenleyebilir ancak başka kullanıcıların haberlerini değiştiremez veya yayını planlayamaz.", category: "Gündem", status: "draft", heroImage: "/news/gorsel-yok.svg", imageAlt: "Rol sınırı test görseli", videoUrl: "", author: "Test Muhabiri", sourceName: "", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0, agencySourceId: null, agencyExternalId: "", agencyCredit: "", agencyEditorialLock: 0 };
+  const reporterCreated = await anonymousRequest("/api/articles", { method: "POST", headers: { "content-type": "application/json", cookie: reporter.cookie }, body: JSON.stringify(baseArticle) });
+  assert.equal(reporterCreated.status, 201);
+  const own = (await reporterCreated.json()).article;
+  assert.equal(own.assignedTo, reporter.user.id, "Muhabirin oluşturduğu taslak kendisine atanmalı");
+  const ownEdit = await anonymousRequest("/api/articles", { method: "PATCH", headers: { "content-type": "application/json", cookie: reporter.cookie }, body: JSON.stringify({ ...own, title: `${own.title} güncellendi`, status: "draft" }) });
+  assert.equal(ownEdit.status, 200);
+  const forbiddenAgency = await anonymousRequest("/api/articles", { method: "PATCH", headers: { "content-type": "application/json", cookie: reporter.cookie }, body: JSON.stringify({ ...(await ownEdit.json()).article, agencySourceId: testAgencySourceId, agencyExternalId: "YETKISIZ", status: "draft" }) });
+  assert.equal(forbiddenAgency.status, 403);
+  const forbiddenSchedule = await anonymousRequest("/api/articles", { method: "PATCH", headers: { "content-type": "application/json", cookie: reporter.cookie }, body: JSON.stringify({ ...(await (await anonymousRequest("/api/articles?limit=100", { headers: { cookie: reporter.cookie } })).json()).articles[0], status: "scheduled", scheduledAt: Date.now() + 60_000 }) });
+  assert.equal(forbiddenSchedule.status, 403);
+  const unassigned = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...baseArticle, title: "Başka kullanıcıya ait düzenlenemeyen test haberi" }) });
+  const other = (await unassigned.json()).article;
+  const forbiddenOther = await anonymousRequest("/api/articles", { method: "PATCH", headers: { "content-type": "application/json", cookie: reporter.cookie }, body: JSON.stringify({ ...other, title: `${other.title} müdahale`, status: "draft" }) });
+  assert.equal(forbiddenOther.status, 403);
+  const editorPull = await anonymousRequest("/api/agency", { method: "POST", headers: { "content-type": "application/json", cookie: editor.cookie }, body: JSON.stringify({ action: "pull", sourceId: testAgencySourceId }) });
+  assert.equal(editorPull.status, 403);
+  const editorSchedule = await anonymousRequest("/api/articles", { method: "PATCH", headers: { "content-type": "application/json", cookie: editor.cookie }, body: JSON.stringify({ ...other, status: "scheduled", scheduledAt: Date.now() + 60_000 }) });
+  assert.equal(editorSchedule.status, 403);
 });
 
 test("oturumsuz haber ve kaynak yazma istekleri kapalıdır", async () => {
@@ -537,7 +691,7 @@ test("canlı haber platformu yol haritası kritik ürün alanlarını kapsar", a
 });
 
 test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güvenliği sağlar", async () => {
-  const [service, caddy, deploymentNotes, workflow, deployScript, deploySudoers] = await Promise.all([
+  const [service, caddy, deploymentNotes, workflow, deployScript, deploySudoers, agencyService, agencyTimer] = await Promise.all([
     readFile(
       new URL("deployment/hetzner/kozatv.service", projectRoot),
       "utf8",
@@ -562,6 +716,8 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güve
       new URL("deployment/hetzner/kozatv-deploy.sudoers", projectRoot),
       "utf8",
     ),
+    readFile(new URL("deployment/hetzner/kozatv-agency-pull.service", projectRoot), "utf8"),
+    readFile(new URL("deployment/hetzner/kozatv-agency-pull.timer", projectRoot), "utf8"),
   ]);
 
   assert.match(service, /User=kozatv/);
@@ -570,6 +726,7 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güve
   assert.match(service, /KOZA_MEDIA_PATH=\/srv\/kozatv\/data\/media/);
   assert.match(service, /KOZA_MEDIA_QUOTA_BYTES=10737418240/);
   assert.match(service, /NoNewPrivileges=true/);
+  assert.match(service, /EnvironmentFile=-\/etc\/kozatv\/agency\.env/);
   assert.match(caddy, /kozatv\.com\.tr, www\.kozatv\.com\.tr/);
   assert.match(caddy, /reverse_proxy 127\.0\.0\.1:8201/);
   assert.doesNotMatch(caddy, /respond @admin 404/);
@@ -594,6 +751,10 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güve
   );
   assert.doesNotMatch(deploySudoers, /ALL=\(ALL(?::ALL)?\) NOPASSWD: ALL/);
   assert.match(deploymentNotes, /yalnız `kozatv` grubuna üyedir/);
+  assert.match(agencyService, /x-koza-agency-token.*process\.env\.KOZA_AGENCY_CRON_TOKEN/);
+  assert.match(agencyService, /http:\/\/127\.0\.0\.1:8201\/api\/agency/);
+  assert.match(agencyTimer, /OnUnitActiveSec=5m/);
+  assert.match(deploymentNotes, /herkese açık haber sayfalarını kazıyan/i);
 });
 
 test("SQLite ve medya yedeği üretilir, checksum ve geri yükleme ön kontrolünden geçer", async () => {
