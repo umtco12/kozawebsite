@@ -101,7 +101,7 @@ export function SiteSettingsPanel({ canEdit }: { canEdit: boolean }) {
           <li><b>Yedek yayın adresi</b> → ana kaynak açılmazsa devreye girer.</li>
           <li><b>Sosyal hesaplar</b> → üst bant ve alt bölüm simgeleri. Boş hesap bağlantı olarak gösterilmez.</li>
           <li><b>Künye alanları</b> → <code>/kurumsal/kunye</code> ve <code>/kurumsal/iletisim</code>.</li>
-          <li><b>Döviz göstergesi</b> → TCMB günlük bülteninden okunur; veri gelmezse gizlenir.</li>
+          <li><b>Piyasa göstergesi</b> → BIST 100, gram altın, Dolar ve Euro değişimleri otomatik okunur; ana akış kesilirse TCMB döviz verisi güvenli yedektir.</li>
           <li><b>Yayın akışı</b> → <code>/canli</code> sayfasındaki program listesi.</li>
         </ul>
       </aside>

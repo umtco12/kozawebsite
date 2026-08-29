@@ -692,18 +692,28 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .topbar-inner{height:52px;gap:20px}
 .topbar-inner>span:first-child{flex:0 0 auto;color:#9ba5af;font-size:10px;font-weight:700;letter-spacing:.15px}
 .live-data{align-self:stretch;display:flex;align-items:stretch;gap:0;margin-left:auto}
-.weather-chip,.market-chip{display:flex;align-items:center;gap:9px;min-width:96px;padding:0 15px;border-left:1px solid #27313b;color:#fff;font-variant-numeric:tabular-nums}
+.weather-chip,.market-chip{display:flex;align-items:center;gap:8px;min-width:96px;padding:0 13px;border-left:1px solid #27313b;color:#fff;font-variant-numeric:tabular-nums}
+.market-chip{min-width:122px;justify-content:center;line-height:1}
 .weather-chip>i{width:27px;height:27px;display:grid;place-items:center;color:#ffc928}
 .weather-chip svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
 .weather-chip svg circle{fill:#ffc928;stroke:#ffc928}
-.weather-chip>span,.market-chip{line-height:1.05}
+.weather-chip>span{line-height:1.05}
 .weather-chip small,.market-chip small{display:flex;align-items:center;gap:5px;color:#89949f;font-size:8px;font-weight:800;letter-spacing:.75px;text-transform:uppercase}
-.weather-chip b,.market-chip b{display:block;margin-top:4px;color:#f8fafb!important;font-size:13px;font-weight:850}
-.weather-chip b{font-size:17px}
-.market-chip small i{width:17px;height:17px;display:grid;place-items:center;border-radius:50%;background:#202b35;color:#e9edf0;font-style:normal;font-size:9px}
+.weather-chip b,.market-chip b{display:block;color:#f8fafb!important;font-size:13px;font-weight:850}
+.weather-chip b{margin-top:4px;font-size:17px}
+.market-trend{width:0;height:0;flex:none;border-left:5px solid transparent;border-right:5px solid transparent}
+.market-up .market-trend{border-bottom:6px solid #22c06b}
+.market-down .market-trend{border-top:6px solid #ff3340}
+.market-neutral .market-trend{width:9px;height:2px;border:0;background:#687582}
+.market-chip>em{font-size:9px;font-style:normal;font-weight:850;white-space:nowrap}
+.market-up>em{color:#22c06b}
+.market-down>em{color:#ff3340}
+.market-neutral>em{color:#89949f}
 .live-data-source{align-self:center;display:grid;gap:2px;padding:0 14px;border-left:1px solid #27313b;color:#7d8994;font-size:7px;letter-spacing:.45px}
-.live-data-source b{color:#dce2e7!important;font-size:8px}
+.live-data-source b{display:flex;align-items:center;gap:5px;color:#dce2e7!important;font-size:8px}
+.live-data-source b i{width:5px;height:5px;border-radius:50%;background:#22c06b;box-shadow:0 0 0 3px #22c06b22}
 .live-data-source span{white-space:nowrap}
+.live-data-source em{color:#22c06b;font-size:6px;font-style:normal;font-weight:900;letter-spacing:.8px;text-transform:uppercase}
 .top-links{color:#d3d9df}
 .topbar .social-link{width:27px;height:27px;background:#18222c;border-color:#303c47;color:#dce2e7}
 .topbar .social-link svg{width:12px;height:12px}
@@ -749,7 +759,8 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
   .topbar-inner>span:first-child{display:none}
   .live-data{width:100%;margin:0;overflow-x:auto;overflow-y:hidden;justify-content:flex-start;scrollbar-width:none}
   .live-data::-webkit-scrollbar{display:none}
-  .live-data span.weather-chip,.live-data span.market-chip{display:flex;flex:0 0 auto;padding-inline:12px}
+  .live-data span.weather-chip,.live-data span.market-chip{display:flex;flex:0 0 auto;padding-inline:12px;scroll-snap-align:start}
+  .live-data{scroll-snap-type:x proximity}
   .live-data-source{display:none}
 }
 
@@ -761,7 +772,8 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
   .weather-chip small,.market-chip small{font-size:7px}
   .weather-chip b{font-size:15px}
   .market-chip b{font-size:12px}
-  .live-data .market-chip:nth-of-type(4){display:none}
+  .market-chip{min-width:112px;gap:7px}
+  .market-chip>em{font-size:8px}
   .breaking-ribbon{left:10px;height:92px;min-width:33px;padding:10px 7px;font-size:8px!important}
   .breaking-ribbon-hero{top:17px;left:16px;height:105px}
   .home .latest{margin-top:4px}

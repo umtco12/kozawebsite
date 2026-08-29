@@ -5,49 +5,85 @@ import { getSwipeDirection } from "./slider-gesture.mjs";
 
 type MarketData = {
   ok: boolean;
-  rates: { code: string; label: string; value: string }[];
+  rates: { code: string; name: string; value: string; change: string; direction: "up" | "down" | "neutral"; asOf: string }[];
   rateSource: string;
   rateDate: string;
   weather: { label: string; value: string } | null;
+  fetchedAt: number;
 };
 
-/* Döviz ve hava durumu sunucu tarafında TCMB ve açık hava durumu servisinden okunur.
-   Veri alınamazsa gösterge hiç çizilmez; okura sabit ya da eski değer gösterilmez. */
+const MARKET_REFRESH_MS = 5 * 60 * 1000;
+
+/* BIST, altın, döviz ve hava durumu yalnız sunucu tarafında doğrulanmış kaynaklardan okunur.
+   İlk veri alınamazsa gösterge çizilmez; geçici yenileme hatasında tarihli son veri korunur. */
 export function LiveData() {
   const [data, setData] = useState<MarketData | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/piyasa")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: MarketData | null) => { if (!cancelled && payload?.ok) setData(payload); })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    let request: AbortController | null = null;
+
+    const refresh = () => {
+      request?.abort();
+      request = new AbortController();
+      fetch("/api/piyasa", { cache: "no-store", signal: request.signal })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload: MarketData | null) => { if (!cancelled && payload?.ok) setData(payload); })
+        .catch(() => {});
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+
+    refresh();
+    const interval = window.setInterval(refresh, MARKET_REFRESH_MS);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("online", refresh);
+
+    return () => {
+      cancelled = true;
+      request?.abort();
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("online", refresh);
+    };
   }, []);
 
   if (!data) return <div className="live-data" aria-hidden="true" />;
 
-  const rateTitle = data.rateSource && data.rateDate ? `${data.rateSource} döviz satış kuru · ${data.rateDate}` : undefined;
-  const rateNames: Record<string, string> = { USD: "Dolar", EUR: "Euro", GBP: "Sterlin" };
+  const checkedAt = Number.isFinite(data.fetchedAt)
+    ? new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }).format(new Date(data.fetchedAt))
+    : "";
+  const rateTitle = data.rateSource && data.rateDate
+    ? `${data.rateSource} piyasa verisi · ${data.rateDate}${checkedAt ? ` · Son kontrol ${checkedAt}` : ""} · Otomatik güncellenir`
+    : undefined;
 
   return (
-    <div className="live-data" role="region" aria-label="Hava durumu ve döviz kurları">
+    <div className="live-data" role="region" aria-label="Hava durumu ve piyasa verileri" aria-live="polite">
       {data.weather && (
         <span className="weather-chip">
           <i aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M19.8 4.2l-2.1 2.1M6.3 17.7l-2.1 2.1" /></svg></i>
           <span><small>{data.weather.label}</small><b>{data.weather.value}</b></span>
         </span>
       )}
-      {data.rates.map((rate) => (
-        <span className="market-chip" key={rate.code} title={rateTitle}>
-          <small><i aria-hidden="true">{rate.label}</i>{rateNames[rate.code] ?? rate.code}</small>
-          <b>{rate.value}</b>
-        </span>
-      ))}
+      {data.rates.map((rate) => {
+        const directionLabel = rate.direction === "up" ? "yükseliş" : rate.direction === "down" ? "düşüş" : "değişim yok";
+        const itemTitle = `${rate.name} · ${rate.value}${rate.change ? ` · ${rate.change} ${directionLabel}` : ""}${rate.asOf ? ` · ${rate.asOf}` : ""}`;
+        return (
+          <span className={`market-chip market-${rate.direction}`} data-market={rate.code} key={rate.code} title={itemTitle} aria-label={itemTitle}>
+            <small>{rate.name}</small>
+            <i className="market-trend" aria-hidden="true" />
+            <b>{rate.value}</b>
+            {rate.change && <em>{rate.change}</em>}
+          </span>
+        );
+      })}
       {data.rateSource && (
         <small className="live-data-source" title={rateTitle}>
-          <b>{data.rateSource}</b>
+          <b><i aria-hidden="true" />{data.rateSource}</b>
           {data.rateDate && <span>{data.rateDate}</span>}
+          <em>Otomatik</em>
         </small>
       )}
     </div>

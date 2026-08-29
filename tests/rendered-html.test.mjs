@@ -17,6 +17,7 @@ import { defaultSettings, normalizePath, officialSocialAccounts, parseLiveSource
 import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseHomepageEntries, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
 import { selectHomepageLeads } from "../db/homepage-model.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
+import { parseMynetMarketPayload } from "../app/api/piyasa/market-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -924,18 +925,41 @@ test("eski adresler panelden eşlenir ve ziyaretçiyi kalıcı olarak yeni adres
   assert.equal(anonymous.status, 401);
 });
 
+test("piyasa modeli BIST, altın ve döviz değişimlerini güvenli biçimde ayrıştırır", () => {
+  const parsed = parseMynetMarketPayload({
+    XU100: { price: "14.641,56", percent: "% 0.45", date: "28 Ağustos 2026 18:10" },
+    GAUTRY: { price: "6.908,7430", percent: "% -3.01", date: "28 Ağustos 2026 23:59" },
+    USDTRY: { price: "48,2370", percent: "% 0.18", date: "28 Ağustos 2026 23:59" },
+    EURTRY: { price: "55,9200", percent: "% 0", date: "28 Ağustos 2026 23:59" },
+  });
+
+  assert.equal(parsed.source, "Mynet Finans");
+  assert.equal(parsed.date, "28.08.2026");
+  assert.deepEqual(parsed.rates.map(({ code, value, change, direction }) => ({ code, value, change, direction })), [
+    { code: "XU100", value: "14.642", change: "%0,45", direction: "up" },
+    { code: "GOLD", value: "6.909", change: "%-3,01", direction: "down" },
+    { code: "USD", value: "48,24", change: "%0,18", direction: "up" },
+    { code: "EUR", value: "55,92", change: "%0,00", direction: "neutral" },
+  ]);
+  assert.throws(() => parseMynetMarketPayload({}), /XU100 verisi eksik/);
+  assert.throws(() => parseMynetMarketPayload(null), /nesne değil/);
+});
+
 test("piyasa göstergesi sunucu tarafından okunur ve veri yoksa uydurma değer üretmez", async () => {
   const response = await request("/api/piyasa");
   assert.equal(response.status, 200);
   const data = await response.json();
   assert.equal(typeof data.ok, "boolean");
   if (data.ok) {
+    assert.equal(typeof data.fetchedAt, "number", "Son veri kontrol zamanı belirtilmeli");
     assert.ok(Array.isArray(data.rates));
     for (const rate of data.rates) {
-      assert.match(rate.value, /^\d{1,3}(\.\d{3})*,\d{2}$/, "Kur değeri Türkçe biçimde olmalı");
-      assert.ok(["USD", "EUR", "GBP"].includes(rate.code));
+      assert.match(rate.value, /^\d{1,3}(\.\d{3})*(,\d{2})?$/, "Piyasa değeri Türkçe biçimde olmalı");
+      assert.ok(["XU100", "GOLD", "USD", "EUR"].includes(rate.code));
+      assert.ok(["up", "down", "neutral"].includes(rate.direction));
+      if (rate.change) assert.match(rate.change, /^%-?\d{1,3},\d{2}$/);
     }
-    if (data.rates.length) assert.equal(data.rateSource, "TCMB", "Kur kaynağı belirtilmeli");
+    if (data.rates.length) assert.ok(["Mynet Finans", "TCMB"].includes(data.rateSource), "Piyasa kaynağı belirtilmeli");
   } else {
     assert.deepEqual(data.rates, [], "Veri yoksa kur listesi boş olmalı");
   }
@@ -944,6 +968,20 @@ test("piyasa göstergesi sunucu tarafından okunur ve veri yoksa uydurma değer 
   const client = await readFile(new URL("../app/site-client.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(client, /41,12|48,06|55,74/, "Üst bantta sabit kur değeri kalmamalı");
   assert.doesNotMatch(client, /frankfurter/, "Kur isteği tarayıcıdan üçüncü tarafa gitmemeli");
+  assert.match(client, /MARKET_REFRESH_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, "Piyasa verisi sayfa açıkken beş dakikada bir kontrol edilmeli");
+  assert.match(client, /setInterval\(refresh, MARKET_REFRESH_MS\)/, "Otomatik yenileme zamanlayıcısı kurulmalı");
+  assert.match(client, /cache:\s*["']no-store["']/, "Tarayıcı eski piyasa yanıtını önbellekten göstermemeli");
+  assert.match(client, /visibilitychange/, "Kullanıcı sekmeye döndüğünde piyasa verisi tekrar kontrol edilmeli");
+  assert.match(client, /addEventListener\(["']online["'], refresh\)/, "Bağlantı geri geldiğinde piyasa verisi tekrar kontrol edilmeli");
+  assert.match(client, /market-trend/, "Yükseliş ve düşüş yönü görsel olarak işaretlenmeli");
+  assert.match(client, /directionLabel/, "Yükseliş ve düşüş yönü erişilebilir metinle açıklanmalı");
+  assert.match(client, /Otomatik/, "Otomatik güncelleme durumu ziyaretçiye açıkça gösterilmeli");
+  assert.match(client, /aria-live=["']polite["']/, "Kur değişimi ekran okuyucuyu bölmeden duyurulmalı");
+
+  const route = await readFile(new URL("../app/api/piyasa/route.ts", import.meta.url), "utf8");
+  assert.match(route, /https:\/\/finans\.mynet\.com\/api\/real-time/, "BIST, altın ve değişim verisi Koza'nın kullandığı piyasa akışından okunmalı");
+  assert.match(route, /https:\/\/www\.tcmb\.gov\.tr\/kurlar\/today\.xml/, "TCMB güvenli yedek kur kaynağı olarak korunmalı");
+  assert.match(route, /const CACHE_MS = 5 \* 60 \* 1000/, "Piyasa kaynağı kontrollü aralıkla yeniden okunmalı");
 });
 
 test("operasyon kurgusu izleme, kurtarma hedefi ve canlıya geçiş kapılarını tanımlar", async () => {
@@ -1298,7 +1336,7 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
   const client = await readFile(new URL("../app/site-client.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(client, /className="weather-chip"/);
-  assert.match(client, /className="market-chip"/);
+  assert.match(client, /market-chip market-/, "Piyasa kartları yön durumunu sınıfında taşımalı");
   assert.match(styles, /\.home \.latest \.latest-more\{[^}]*display:flex!important[^}]*white-space:nowrap/s, "Daha fazla bağlantısı kelime kelime kırılmamalı");
   assert.match(styles, /@media\(max-width:500px\)[\s\S]*\.breaking-ribbon/, "Haber şeridinin mobil boyutu tanımlanmalı");
   assert.match(styles, /\.weather-chip>span\{display:block!important\}/, "Mobilde sıcaklık metni güneş simgesiyle birlikte görünmeli");
