@@ -461,3 +461,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/site-client.tsx`, `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: `npm test` production build ile **59 test geçti; 0 başarısız, 0 atlandı**. `npx tsc --noEmit` başarılı; `npm run lint` **0 hata**, mevcut **33** ham görsel performans uyarısıyla tamamlandı. Gerçek uygulama tarayıcısında 1440, 900 ve 390 px görünümler kontrol edildi: görünür **Mynet Finans** metni ve kaynak kutusu sayısı sıfır, dört piyasa kalemi görünür, sayfada yatay taşma ve konsol hatası yok; mobil bant kendi içinde kaydırılabilir durumda.
 - Kalan karar veya risk: Değişiklikler henüz commit edilmedi ve staging'e dağıtılmadı. Piyasa verisinin sunucu tarafındaki sağlayıcısı değişmedi; yalnız üçüncü taraf marka sunumu ziyaretçi arayüzünden kaldırıldı.
+
+### 2026-08-29 — Kaynak markası kaldırılmış piyasa bandının staging dağıtımı
+
+- İstek: Üst banttan kaldırılan **Mynet Finans** kaynak kutusunun commit edilip Hetzner staging ortamına dağıtılması.
+- Yapılanlar: `573160c` uygulama commit'i fast-forward olarak `main` branch'ine push edildi. GitHub Actions üzerindeki **Koza TV Staging** iş akışı test, dosya aktarımı ve atomik Hetzner dağıtımını başarıyla tamamladı.
+- Değişen ana dosyalar: Dağıtılan uygulama sürümü `573160c`; dağıtım kaydı için `AGENTS.md`.
+- Doğrulama: Push öncesinde `npm test` production build ile **59 test geçti; 0 başarısız, 0 atlandı**. GitHub Actions çalışması `33265762508` başarıyla tamamlandı. Dış kontrolde `/`, `/kategori/gundem`, `/son-dakika`, `/canli`, `/yazarlar` ve `/admin/giris` HTTP 200; `/admin` HTTP 307 ve `/api/auth/me` HTTP 401 döndürdü. Staging ana sayfasının gerçek tarayıcı kontrolünde 1440 ve 390 px görünümlerde görünür **Mynet Finans** metni ve `.live-data-source` kutusu sayısı sıfır; BIST 100, altın, dolar ve euro kartlarının dördü de görünür, sayfada yatay taşma ve konsol hatası yok.
+- Kalan karar veya risk: Staging IP üzerinden HTTP çalışmaktadır; canlı alan adı ve DNS geçişi bu dağıtımın kapsamında değildir. Piyasa verisinin sunucu tarafındaki sağlayıcısı değişmedi; üçüncü taraf marka yalnız ziyaretçi arayüzünden kaldırıldı.
