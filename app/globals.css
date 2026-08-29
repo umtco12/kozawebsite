@@ -184,7 +184,6 @@ footer .social a:hover{color:var(--red)}
 .copyright span a:hover{color:var(--red)}
 
 /* Site ayarları, adres yönetimi ve piyasa göstergesi */
-.live-data-source{font-size:9px;font-weight:800;letter-spacing:.6px;color:#9aa2ab;align-self:center}
 .live-note{position:absolute;bottom:12px;left:12px;background:#000000c9;color:#fff;font-size:12px;padding:8px 12px;margin:0}
 .settings-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
 .settings-form{display:grid;gap:18px}
@@ -709,11 +708,6 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .market-up>em{color:#22c06b}
 .market-down>em{color:#ff3340}
 .market-neutral>em{color:#89949f}
-.live-data-source{align-self:center;display:grid;gap:2px;padding:0 14px;border-left:1px solid #27313b;color:#7d8994;font-size:7px;letter-spacing:.45px}
-.live-data-source b{display:flex;align-items:center;gap:5px;color:#dce2e7!important;font-size:8px}
-.live-data-source b i{width:5px;height:5px;border-radius:50%;background:#22c06b;box-shadow:0 0 0 3px #22c06b22}
-.live-data-source span{white-space:nowrap}
-.live-data-source em{color:#22c06b;font-size:6px;font-style:normal;font-weight:900;letter-spacing:.8px;text-transform:uppercase}
 .top-links{color:#d3d9df}
 .topbar .social-link{width:27px;height:27px;background:#18222c;border-color:#303c47;color:#dce2e7}
 .topbar .social-link svg{width:12px;height:12px}
@@ -761,7 +755,6 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
   .live-data::-webkit-scrollbar{display:none}
   .live-data span.weather-chip,.live-data span.market-chip{display:flex;flex:0 0 auto;padding-inline:12px;scroll-snap-align:start}
   .live-data{scroll-snap-type:x proximity}
-  .live-data-source{display:none}
 }
 
 @media(max-width:500px){

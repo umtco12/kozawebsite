@@ -6,10 +6,7 @@ import { getSwipeDirection } from "./slider-gesture.mjs";
 type MarketData = {
   ok: boolean;
   rates: { code: string; name: string; value: string; change: string; direction: "up" | "down" | "neutral"; asOf: string }[];
-  rateSource: string;
-  rateDate: string;
   weather: { label: string; value: string } | null;
-  fetchedAt: number;
 };
 
 const MARKET_REFRESH_MS = 5 * 60 * 1000;
@@ -52,13 +49,6 @@ export function LiveData() {
 
   if (!data) return <div className="live-data" aria-hidden="true" />;
 
-  const checkedAt = Number.isFinite(data.fetchedAt)
-    ? new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }).format(new Date(data.fetchedAt))
-    : "";
-  const rateTitle = data.rateSource && data.rateDate
-    ? `${data.rateSource} piyasa verisi · ${data.rateDate}${checkedAt ? ` · Son kontrol ${checkedAt}` : ""} · Otomatik güncellenir`
-    : undefined;
-
   return (
     <div className="live-data" role="region" aria-label="Hava durumu ve piyasa verileri" aria-live="polite">
       {data.weather && (
@@ -79,13 +69,6 @@ export function LiveData() {
           </span>
         );
       })}
-      {data.rateSource && (
-        <small className="live-data-source" title={rateTitle}>
-          <b><i aria-hidden="true" />{data.rateSource}</b>
-          {data.rateDate && <span>{data.rateDate}</span>}
-          <em>Otomatik</em>
-        </small>
-      )}
     </div>
   );
 }

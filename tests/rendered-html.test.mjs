@@ -975,7 +975,7 @@ test("piyasa göstergesi sunucu tarafından okunur ve veri yoksa uydurma değer 
   assert.match(client, /addEventListener\(["']online["'], refresh\)/, "Bağlantı geri geldiğinde piyasa verisi tekrar kontrol edilmeli");
   assert.match(client, /market-trend/, "Yükseliş ve düşüş yönü görsel olarak işaretlenmeli");
   assert.match(client, /directionLabel/, "Yükseliş ve düşüş yönü erişilebilir metinle açıklanmalı");
-  assert.match(client, /Otomatik/, "Otomatik güncelleme durumu ziyaretçiye açıkça gösterilmeli");
+  assert.doesNotMatch(client, /live-data-source|data\.rateSource|Mynet Finans/, "Üçüncü taraf piyasa kaynağı ziyaretçi bandında marka olarak gösterilmemeli");
   assert.match(client, /aria-live=["']polite["']/, "Kur değişimi ekran okuyucuyu bölmeden duyurulmalı");
 
   const route = await readFile(new URL("../app/api/piyasa/route.ts", import.meta.url), "utf8");
