@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import test, { after, before } from "node:test";
 import Database from "better-sqlite3";
+import { unzipSync } from "fflate";
 import {
   defaultContent,
   isValidContentUpdate,
@@ -1734,8 +1735,10 @@ test("reklam merkezi yönetim kılavuzu açılır, görselli ve gerçek panel di
   const manual = await stat(manualPath);
   assert.ok(manual.size > 300_000, `Görselli yönetim kılavuzu beklenenden küçük: ${manual.size} bayt`);
 
-  await execFileAsync("unzip", ["-t", manualPath]);
-  const { stdout: documentXml } = await execFileAsync("unzip", ["-p", manualPath, "word/document.xml"], { maxBuffer: 5_000_000 });
+  const archive = unzipSync(new Uint8Array(await readFile(manualPath)));
+  const documentEntry = archive["word/document.xml"];
+  assert.ok(documentEntry, "Kılavuz geçerli bir Word belgesi ve document.xml içermeli");
+  const documentXml = new TextDecoder().decode(documentEntry);
   for (const phrase of [
     "Reklam Merkezi",
     "Yönetici",
@@ -1751,6 +1754,6 @@ test("reklam merkezi yönetim kılavuzu açılır, görselli ve gerçek panel di
   }
   assert.ok((documentXml.match(/descr="[^"]+"/g) ?? []).length >= 7, "Her ekran görüntüsü ve logo erişilebilir açıklama taşımalı");
 
-  const { stdout: entries } = await execFileAsync("unzip", ["-Z1", manualPath]);
-  assert.ok(entries.split("\n").filter((entry) => /^word\/media\//.test(entry)).length >= 6, "Kılavuz logo dahil en az altı benzersiz gömülü medya içermeli");
+  const entries = Object.keys(archive);
+  assert.ok(entries.filter((entry) => /^word\/media\//.test(entry)).length >= 6, "Kılavuz logo dahil en az altı benzersiz gömülü medya içermeli");
 });
