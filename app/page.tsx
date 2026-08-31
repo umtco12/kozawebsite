@@ -3,6 +3,7 @@ import { selectHomepageLeads } from "../db/homepage-model.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
+import { AdSlot } from "./ad-slot";
 
 export const dynamic = "force-dynamic";
 
@@ -135,6 +136,8 @@ export default async function Home() {
             ))}
           </section>
         )}
+
+        <AdSlot placement="home_billboard" className="ad-home-billboard" />
 
         <section className="main-columns" id="gundem">
           <div>

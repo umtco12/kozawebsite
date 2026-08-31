@@ -8,6 +8,7 @@ import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "./demo-content-model.
 import { defaultSettings, normalizePath, normalizeSchedule, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
 import { legacyPath } from "./import-model.mjs";
 import { agencyUpdateDecision } from "./agency-model.mjs";
+import { advertisementState, houseAdSeeds } from "./ad-model.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
@@ -22,11 +23,13 @@ export type CategoryInput = { id?: number; name: string; slug?: string; descript
 export type MediaRecord = { id: number; storageKey: string; publicUrl: string; originalName: string; mimeType: string; sizeBytes: number; altText: string; credit: string; createdAt: number };
 export type AdminRole = "admin" | "publisher" | "editor" | "reporter" | "viewer";
 export type AdminUser = { id: number; email: string; fullName: string; role: AdminRole; active: number; mustChangePassword: number; failedAttempts: number; lockedUntil: number | null; lastLoginAt: number | null; createdAt: number; updatedAt: number };
+export type AdvertisementRecord = { id: number; placement: string; advertiser: string; campaignName: string; title: string; description: string; imageUrl: string; targetUrl: string; ctaLabel: string; theme: string; kind: string; priority: number; active: number; startsAt: number | null; endsAt: number | null; state: "live" | "scheduled" | "paused" | "expired"; createdAt: number; updatedAt: number };
 
 let database: InstanceType<typeof Database> | undefined;
 function databasePath() { return resolve(process.env.KOZA_DB_PATH ?? resolve(process.cwd(), "data/koza.sqlite")); }
 function parseBlocks(value: unknown, body: string): ContentBlock[] { try { const blocks = JSON.parse(String(value || "[]")); if (Array.isArray(blocks) && blocks.length) return blocks; } catch { /* Eski veya bozuk blok JSON'u düz metin olarak korunur. */ } return [{ id: "legacy", type: "paragraph", content: body }]; }
 function mapArticle(row: Record<string, unknown>): ArticleRecord { const body = String(row.body); return { id: Number(row.id), slug: String(row.slug), title: String(row.title), spot: String(row.spot), body, blocks: parseBlocks(row.content_blocks, body), category: String(row.category), status: row.status as ArticleStatus, workflowState: (row.workflow_state || (row.status === "published" ? "published" : "reporter_draft")) as WorkflowState, assignedTo: row.assigned_to == null ? null : Number(row.assigned_to), editVersion: Number(row.edit_version || 1), correctionNote: String(row.correction_note || ""), withdrawnAt: row.withdrawn_at == null ? null : Number(row.withdrawn_at), heroImage: String(row.hero_image), imageAlt: String(row.image_alt), videoUrl: String(row.video_url), author: String(row.author), sourceName: String(row.source_name), sourceUrl: String(row.source_url), seoTitle: String(row.seo_title), seoDescription: String(row.seo_description), isBreaking: Number(row.is_breaking), isFeatured: Number(row.is_featured), homepageOrder: Number(row.homepage_order ?? 100), publishedAt: row.published_at == null ? null : Number(row.published_at), scheduledAt: row.scheduled_at == null ? null : Number(row.scheduled_at), agencySourceId: row.agency_source_id == null ? null : Number(row.agency_source_id), agencyExternalId: String(row.agency_external_id || ""), agencyCredit: String(row.agency_credit || ""), agencyReceivedAt: row.agency_received_at == null ? null : Number(row.agency_received_at), agencyDisclaimer: String(row.agency_disclaimer || ""), agencyEditorialLock: Number(row.agency_editorial_lock || 0), agencyUpdatePending: Number(row.agency_update_pending || 0), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) }; }
+function mapAdvertisement(row: Record<string, unknown>): AdvertisementRecord { const record = { id: Number(row.id), placement: String(row.placement), advertiser: String(row.advertiser), campaignName: String(row.campaign_name || ""), title: String(row.title), description: String(row.description || ""), imageUrl: String(row.image_url || ""), targetUrl: String(row.target_url || ""), ctaLabel: String(row.cta_label || ""), theme: String(row.theme || "dark"), kind: String(row.kind || "direct"), priority: Number(row.priority || 100), active: Number(row.active), startsAt: row.starts_at == null ? null : Number(row.starts_at), endsAt: row.ends_at == null ? null : Number(row.ends_at), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) }; return { ...record, state: advertisementState(record) }; }
 
 function ensureColumn(db: InstanceType<typeof Database>, table: string, name: string, definition: string) { const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]; if (!columns.some((column) => column.name === name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`); }
 
@@ -82,6 +85,21 @@ function ensureSchema(db: InstanceType<typeof Database>) {
       UNIQUE(source_id, external_id)
     );
     CREATE INDEX IF NOT EXISTS idx_agency_items_source_received ON agency_items(source_id, received_at DESC);
+    CREATE TABLE IF NOT EXISTS advertisements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, placement TEXT NOT NULL CHECK (placement IN ('site_top','home_billboard','section_inline','article_sidebar')), advertiser TEXT NOT NULL, campaign_name TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '', target_url TEXT NOT NULL DEFAULT '', cta_label TEXT NOT NULL DEFAULT '',
+      theme TEXT NOT NULL DEFAULT 'dark' CHECK (theme IN ('red','dark','light')), kind TEXT NOT NULL DEFAULT 'direct' CHECK (kind IN ('house','direct','programmatic')),
+      priority INTEGER NOT NULL DEFAULT 100 CHECK (typeof(priority)='integer' AND priority BETWEEN 1 AND 999), active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)), starts_at INTEGER, ends_at INTEGER,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+      CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at < ends_at)
+    );
+    CREATE INDEX IF NOT EXISTS idx_advertisements_delivery ON advertisements(placement,active,priority DESC,starts_at,ends_at);
+    CREATE TRIGGER IF NOT EXISTS trg_advertisements_validate_insert BEFORE INSERT ON advertisements
+    WHEN NEW.placement NOT IN ('site_top','home_billboard','section_inline','article_sidebar') OR typeof(NEW.priority)<>'integer' OR NEW.priority NOT BETWEEN 1 AND 999 OR NEW.active NOT IN (0,1) OR (NEW.starts_at IS NOT NULL AND NEW.ends_at IS NOT NULL AND NEW.starts_at>=NEW.ends_at)
+    BEGIN SELECT RAISE(ABORT,'Geçersiz reklam kaydı'); END;
+    CREATE TRIGGER IF NOT EXISTS trg_advertisements_validate_update BEFORE UPDATE ON advertisements
+    WHEN NEW.placement NOT IN ('site_top','home_billboard','section_inline','article_sidebar') OR typeof(NEW.priority)<>'integer' OR NEW.priority NOT BETWEEN 1 AND 999 OR NEW.active NOT IN (0,1) OR (NEW.starts_at IS NOT NULL AND NEW.ends_at IS NOT NULL AND NEW.starts_at>=NEW.ends_at)
+    BEGIN SELECT RAISE(ABORT,'Geçersiz reklam kaydı'); END;
   `);
   ensureColumn(db, "articles", "content_blocks", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "articles", "workflow_state", "TEXT NOT NULL DEFAULT 'reporter_draft'");
@@ -111,6 +129,14 @@ function ensureSchema(db: InstanceType<typeof Database>) {
   ensureColumn(db, "news_sources", "updated_at", "INTEGER NOT NULL DEFAULT 0");
   db.exec("CREATE INDEX IF NOT EXISTS idx_workflow_state_assignee ON articles(workflow_state,assigned_to,updated_at DESC)");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_agency_identity ON articles(agency_source_id,agency_external_id) WHERE agency_source_id IS NOT NULL AND agency_external_id<>''");
+
+  /* İlk kurulumda patronların reklam alanlarını gerçek sayfa bağlamında görebilmesi için
+     Koza TV kurum içi tanıtımları eklenir. Sonraki yönetici tercihleri asla ezilmez. */
+  const now = Date.now();
+  const insertHouseAdvertisement = db.prepare(`INSERT INTO advertisements (placement,advertiser,campaign_name,title,description,image_url,target_url,cta_label,theme,kind,priority,active,starts_at,ends_at,created_at,updated_at)
+    SELECT @placement,@advertiser,@campaignName,@title,@description,@imageUrl,@targetUrl,@ctaLabel,@theme,@kind,@priority,1,NULL,NULL,@now,@now
+    WHERE NOT EXISTS (SELECT 1 FROM advertisements WHERE placement=@placement)`);
+  db.transaction(() => { for (const advertisement of houseAdSeeds) insertHouseAdvertisement.run({ ...advertisement, now }); })();
 
   /* Resmî sosyal hesaplar ilk kez tanımlandığında yalnız boş ayarlar doldurulur.
      Bir defalık işaret, yöneticinin daha sonra panelden hesabı kaldırma kararını korur. */
@@ -338,6 +364,66 @@ export function updateAdminUser(id: number, changes: { role?: AdminRole; active?
     db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('admin_user',?,'update',?,?,?)").run(id, actor.fullName, JSON.stringify({ fromRole: target.role, toRole: nextRole, fromActive: Number(target.active), toActive: nextActive ? 1 : 0 }), now);
   })();
   return getAdminUserById(id)!;
+}
+
+/* Doğrudan reklam envanteri: konumlar kod sözleşmesidir, kampanya/kreatif/tarih
+   yönetim panelinden değiştirilir. Harici reklam ağı bağlandığında aynı konum kodları korunur. */
+export type AdvertisementInput = Omit<AdvertisementRecord, "id" | "state" | "createdAt" | "updatedAt"> & { id?: number };
+
+export function listAdvertisements(limit = 200) {
+  return (getDb().prepare("SELECT * FROM advertisements ORDER BY active DESC,placement,priority DESC,updated_at DESC LIMIT ?").all(Math.min(Math.max(limit, 1), 500)) as Record<string, unknown>[]).map(mapAdvertisement);
+}
+
+export function getAdvertisement(id: number) {
+  const row = getDb().prepare("SELECT * FROM advertisements WHERE id=?").get(id) as Record<string, unknown> | undefined;
+  return row ? mapAdvertisement(row) : null;
+}
+
+export function getActiveAdvertisement(placement: string, now = Date.now()) {
+  const row = getDb().prepare(`SELECT * FROM advertisements
+    WHERE placement=? AND active=1 AND (starts_at IS NULL OR starts_at<=?) AND (ends_at IS NULL OR ends_at>?)
+    ORDER BY priority DESC,updated_at DESC,id DESC LIMIT 1`).get(placement, now, now) as Record<string, unknown> | undefined;
+  return row ? mapAdvertisement(row) : null;
+}
+
+export class AdvertisementConflictError extends Error { constructor() { super("Bu reklam başka bir yönetici tarafından güncellendi. En son sürümü açıp değişikliğinizi yeniden uygulayın."); this.name = "AdvertisementConflictError"; } }
+export class AdvertisementNotFoundError extends Error { constructor() { super("Reklam kaydı bulunamadı."); this.name = "AdvertisementNotFoundError"; } }
+type AdvertisementActor = string | Pick<AdminUser, "id" | "fullName" | "role">;
+
+function advertisementAuditSnapshot(value: AdvertisementInput | AdvertisementRecord) {
+  return {
+    placement: value.placement, advertiser: value.advertiser, campaignName: value.campaignName,
+    title: value.title, description: value.description, imageUrl: value.imageUrl, targetUrl: value.targetUrl,
+    ctaLabel: value.ctaLabel, theme: value.theme, kind: value.kind, priority: value.priority,
+    active: Number(value.active), startsAt: value.startsAt ?? null, endsAt: value.endsAt ?? null,
+  };
+}
+
+export function saveAdvertisement(input: AdvertisementInput, actor: AdvertisementActor = "Yayın Yönetmeni", expectedUpdatedAt?: number) {
+  const db = getDb();
+  let id = input.id;
+  db.transaction(() => {
+    const current = id ? getAdvertisement(id) : null;
+    if (id && !current) throw new AdvertisementNotFoundError();
+    if (id && (!Number.isSafeInteger(expectedUpdatedAt) || expectedUpdatedAt !== current!.updatedAt)) throw new AdvertisementConflictError();
+    const now = current ? Math.max(Date.now(), current.updatedAt + 1) : Date.now();
+    const values = { ...input, active: input.active ? 1 : 0, startsAt: input.startsAt ?? null, endsAt: input.endsAt ?? null, now, expectedUpdatedAt };
+    if (id) {
+      const result = db.prepare(`UPDATE advertisements SET placement=@placement,advertiser=@advertiser,campaign_name=@campaignName,title=@title,description=@description,image_url=@imageUrl,target_url=@targetUrl,cta_label=@ctaLabel,theme=@theme,kind=@kind,priority=@priority,active=@active,starts_at=@startsAt,ends_at=@endsAt,updated_at=@now WHERE id=@id AND updated_at=@expectedUpdatedAt`).run(values);
+      if (!result.changes) throw new AdvertisementConflictError();
+    } else {
+      id = Number(db.prepare(`INSERT INTO advertisements (placement,advertiser,campaign_name,title,description,image_url,target_url,cta_label,theme,kind,priority,active,starts_at,ends_at,created_at,updated_at)
+        VALUES (@placement,@advertiser,@campaignName,@title,@description,@imageUrl,@targetUrl,@ctaLabel,@theme,@kind,@priority,@active,@startsAt,@endsAt,@now,@now)`).run(values).lastInsertRowid);
+    }
+    const actorName = typeof actor === "string" ? actor : actor.fullName;
+    db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('advertisement',?,?,?,?,?)")
+      .run(id, input.id ? "update" : "create", actorName, JSON.stringify({
+        actor: typeof actor === "string" ? { name: actor } : { id: actor.id, name: actor.fullName, role: actor.role },
+        before: current ? advertisementAuditSnapshot(current) : null,
+        after: advertisementAuditSnapshot({ ...input, active: values.active, startsAt: values.startsAt, endsAt: values.endsAt }),
+      }), now);
+  })();
+  return getAdvertisement(id!)!;
 }
 
 /* Site ayarları: yönetim panelinden düzenlenir, ziyaretçi sitesi ve kurumsal sayfalar buradan okur. */

@@ -5,6 +5,7 @@ import { SiteSettingsPanel } from "./site-settings";
 import { RedirectManager } from "./redirects";
 import { ContentImport } from "./content-import";
 import { AgencySources } from "./agency-sources";
+import { AdvertisingCenter } from "./advertising-center";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Status = "draft" | "review" | "scheduled" | "published";
@@ -15,7 +16,7 @@ type Category = { id?: number; name: string; slug: string; description: string; 
 type Media = { id: number; publicUrl: string; originalName: string; mimeType: string; sizeBytes: number; altText: string; credit: string; createdAt: number };
 type Role = "admin" | "publisher" | "editor" | "reporter" | "viewer";
 type AdminUser = { id: number; email: string; fullName: string; role: Role; active: number; mustChangePassword: number; lastLoginAt: number | null; createdAt: number };
-type Tab = "dashboard" | "studio" | "articles" | "editor" | "categories" | "media" | "sources" | "users" | "settings" | "redirects" | "import";
+type Tab = "dashboard" | "studio" | "articles" | "editor" | "categories" | "media" | "sources" | "ads" | "users" | "settings" | "redirects" | "import";
 
 const statusLabels: Record<Status, string> = { draft: "Taslak", review: "Editör incelemesi", scheduled: "Planlandı", published: "Yayında" };
 const roleLabels: Record<Role, string> = { admin: "Yönetici", publisher: "Yayın Yönetmeni", editor: "Editör", reporter: "Muhabir", viewer: "Görüntüleyici" };
@@ -41,6 +42,7 @@ export function AdminPanel({ currentUser }: { currentUser: AdminUser }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [adDirty, setAdDirty] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [userForm, setUserForm] = useState({ fullName: "", email: "", role: "editor" as Role, password: "" });
 
@@ -57,7 +59,8 @@ export function AdminPanel({ currentUser }: { currentUser: AdminUser }) {
   const visibleArticles = useMemo(() => filter === "all" ? articles : articles.filter((article) => article.status === filter), [articles, filter]);
   const reviewQueue = articles.filter((article) => article.status === "review").slice(0, 4);
   function update<K extends keyof Article>(key: K, value: Article[K]) { setForm((current) => ({ ...current, [key]: value })); }
-  function newArticle() { setForm({ ...emptyArticle, category: categories.find((category) => category.isVisible)?.name || "Gündem" }); setErrors({}); setMessage(""); setTab("editor"); }
+  function changeTab(next: Tab) { if (tab === "ads" && next !== "ads" && adDirty && !window.confirm("Reklamda kaydedilmemiş değişiklikler var. Bu değişiklikleri silmek istiyor musunuz?")) return false; setTab(next); return true; }
+  function newArticle() { if (!changeTab("editor")) return; setForm({ ...emptyArticle, category: categories.find((category) => category.isVisible)?.name || "Gündem" }); setErrors({}); setMessage(""); }
   function editArticle(article: Article) { setForm({ ...article, scheduledAt: article.scheduledAt ? new Date(Number(article.scheduledAt)).toISOString().slice(0, 16) : null }); setErrors({}); setMessage(""); setTab("editor"); }
 
   async function saveArticle(status: Status) {
@@ -104,15 +107,15 @@ export function AdminPanel({ currentUser }: { currentUser: AdminUser }) {
   const tabs: { id: Tab; label: string; icon: string; count?: number }[] = [
     { id: "dashboard", label: "Haber Masası", icon: "▦" }, { id: "studio", label: "Yayın Stüdyosu", icon: "◆", count: stats.review }, { id: "articles", label: "Tüm Haberler", icon: "▤", count: stats.total },
     ...(canEdit ? [{ id: "editor" as Tab, label: "Yeni Haber", icon: "+" }, { id: "media" as Tab, label: "Medya Kütüphanesi", icon: "▧", count: media.length }] : []),
-    ...(canPublish ? [{ id: "categories" as Tab, label: "Kategoriler", icon: "≡", count: categories.length }, { id: "sources" as Tab, label: "Kaynak Merkezi", icon: "⌁", count: sources.length }] : []),
+    ...(canPublish ? [{ id: "categories" as Tab, label: "Kategoriler", icon: "≡", count: categories.length }, { id: "sources" as Tab, label: "Kaynak Merkezi", icon: "⌁", count: sources.length }, { id: "ads" as Tab, label: "Reklam Merkezi", icon: "▰" }] : []),
     ...(currentUser.role === "admin" ? [{ id: "users" as Tab, label: "Kullanıcılar", icon: "♙", count: users.length }] : []),
     { id: "settings", label: "Site Ayarları", icon: "⚙" }, { id: "redirects", label: "Adres Yönetimi", icon: "⇄" }, { id: "import", label: "İçerik Aktarımı", icon: "⇩" },
   ];
-  const title = tab === "import" ? "Eski Site İçerik Aktarımı" : tab === "settings" ? "Site Ayarları" : tab === "redirects" ? "Adres ve Yönlendirme Yönetimi" : tab === "dashboard" ? `Günaydın, ${currentUser.fullName.split(" ")[0]}` : tab === "studio" ? "Profesyonel Yayın Stüdyosu" : tab === "articles" ? "Haber Arşivi" : tab === "editor" ? (form.id ? "Haberi Düzenle" : "Yeni Haber Oluştur") : tab === "categories" ? "Kategori Yönetimi" : tab === "media" ? "Medya Kütüphanesi" : tab === "users" ? "Kullanıcı ve Rol Yönetimi" : "Kaynak Merkezi";
+  const title = tab === "import" ? "Eski Site İçerik Aktarımı" : tab === "settings" ? "Site Ayarları" : tab === "redirects" ? "Adres ve Yönlendirme Yönetimi" : tab === "ads" ? "Reklam Merkezi" : tab === "dashboard" ? `Günaydın, ${currentUser.fullName.split(" ")[0]}` : tab === "studio" ? "Profesyonel Yayın Stüdyosu" : tab === "articles" ? "Haber Arşivi" : tab === "editor" ? (form.id ? "Haberi Düzenle" : "Yeni Haber Oluştur") : tab === "categories" ? "Kategori Yönetimi" : tab === "media" ? "Medya Kütüphanesi" : tab === "users" ? "Kullanıcı ve Rol Yönetimi" : "Kaynak Merkezi";
 
   return <main className="newsroom-shell">
-    <aside className="newsroom-side"><a className="admin-logo" href="/"><img src="/koza-logo.png" alt="Koza TV" /></a><span className="workspace-label">YAYIN OPERASYONU</span><nav aria-label="Yönetim bölümleri">{tabs.map((item) => <button className={tab === item.id ? "active" : ""} onClick={() => item.id === "editor" ? newArticle() : setTab(item.id)} type="button" key={item.id}><i>{item.icon}</i>{item.label}{item.count !== undefined && <small>{item.count}</small>}</button>)}</nav><div className="newsroom-ai"><span>AI HABER MASASI</span><strong>Editör kontrolü açık</strong><p>AI taslakları onay olmadan yayınlanamaz.</p></div><a className="back-site" href="/">← Siteye dön</a></aside>
-    <section className="newsroom-main"><header className="newsroom-top"><div><span>KOZA TV / İÇERİK MERKEZİ</span><h1>{title}</h1><p>{tab === "import" ? "kozatv.com.tr arşivini yeni siteye taşıyın; eski adresler otomatik yönlendirilir." : tab === "settings" ? "Canlı yayın kaynağı, sosyal hesaplar, künye ve yayın akışını buradan yönetin." : tab === "redirects" ? "Eski site adreslerini yeni adreslere eşleyerek arama motoru değerini koruyun." : tab === "studio" ? "Görevlendirme, blok içerik, revizyon ve yayın onayını tek ekrandan yönetin." : tab === "categories" ? "Menü yapısını, kategori sırasını ve SEO bilgilerini yönetin." : tab === "media" ? "Kalıcı görselleri, alt metinleri ve kullanım alanını yönetin." : tab === "users" ? "Ekip hesaplarını ve yayın yetkilerini güvenle yönetin." : tab === "editor" ? "İçerik, medya, kaynak ve SEO alanlarını birlikte hazırlayın." : "Koza TV yayın operasyonu"}</p></div><div className="newsroom-user"><b>{currentUser.fullName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</b><span>{currentUser.fullName}<small>{roleLabels[currentUser.role]}</small></span><button type="button" onClick={logout}>Çıkış</button></div></header>
+    <aside className="newsroom-side"><a className="admin-logo" href="/"><img src="/koza-logo.png" alt="Koza TV" /></a><span className="workspace-label">YAYIN OPERASYONU</span><nav aria-label="Yönetim bölümleri">{tabs.map((item) => <button className={tab === item.id ? "active" : ""} onClick={() => item.id === "editor" ? newArticle() : changeTab(item.id)} type="button" key={item.id}><i>{item.icon}</i>{item.label}{item.count !== undefined && <small>{item.count}</small>}</button>)}</nav><div className="newsroom-ai"><span>AI HABER MASASI</span><strong>Editör kontrolü açık</strong><p>AI taslakları onay olmadan yayınlanamaz.</p></div><a className="back-site" href="/">← Siteye dön</a></aside>
+    <section className="newsroom-main"><header className="newsroom-top"><div><span>KOZA TV / İÇERİK MERKEZİ</span><h1>{title}</h1><p>{tab === "import" ? "kozatv.com.tr arşivini yeni siteye taşıyın; eski adresler otomatik yönlendirilir." : tab === "settings" ? "Canlı yayın kaynağı, sosyal hesaplar, künye ve yayın akışını buradan yönetin." : tab === "redirects" ? "Eski site adreslerini yeni adreslere eşleyerek arama motoru değerini koruyun." : tab === "ads" ? "Reklam konumlarını, kampanyaları, kreatifleri ve yayın tarihlerini yönetin." : tab === "studio" ? "Görevlendirme, blok içerik, revizyon ve yayın onayını tek ekrandan yönetin." : tab === "categories" ? "Menü yapısını, kategori sırasını ve SEO bilgilerini yönetin." : tab === "media" ? "Kalıcı görselleri, alt metinleri ve kullanım alanını yönetin." : tab === "users" ? "Ekip hesaplarını ve yayın yetkilerini güvenle yönetin." : tab === "editor" ? "İçerik, medya, kaynak ve SEO alanlarını birlikte hazırlayın." : "Koza TV yayın operasyonu"}</p></div><div className="newsroom-user"><b>{currentUser.fullName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</b><span>{currentUser.fullName}<small>{roleLabels[currentUser.role]}</small></span><button type="button" onClick={logout}>Çıkış</button></div></header>
       {message && <div className={message.includes("alınamadı") || message.includes("edilemedi") || message.includes("yüklenemedi") ? "newsroom-message error" : "newsroom-message"}>{message}<button onClick={() => setMessage("")} aria-label="Mesajı kapat">×</button></div>}
 
       {tab === "studio" && <WorkflowStudio role={currentUser.role} userId={currentUser.id} sources={sources} />}
@@ -122,6 +125,8 @@ export function AdminPanel({ currentUser }: { currentUser: AdminUser }) {
       {tab === "redirects" && <RedirectManager canEdit={canPublish} />}
 
       {tab === "import" && <ContentImport canEdit={canPublish} />}
+
+      {tab === "ads" && <AdvertisingCenter canEdit={canPublish} onDirtyChange={setAdDirty} />}
 
       {tab === "dashboard" && <><div className="newsroom-stats"><article><span>Yayındaki Haber</span><strong>{stats.published}</strong><small>Toplam {stats.total} kayıt</small></article><article><span>Editör Kuyruğu</span><strong>{stats.review}</strong><small>Onay bekleyen içerik</small></article><article><span>Aktif Kategori</span><strong>{categories.filter((item) => item.isVisible).length}</strong><small>Menüde görünür</small></article><article className="accent"><span>Medya Alanı</span><strong>{formatBytes(mediaStats.totalBytes)}</strong><small>{mediaStats.total} kalıcı görsel</small></article></div><div className="newsroom-grid"><section className="newsroom-card desk-list"><div className="card-title"><div><span>EDİTÖR KUYRUĞU</span><h2>İnceleme bekleyenler</h2></div><button onClick={() => setTab("articles")}>Tüm haberler →</button></div>{reviewQueue.length ? reviewQueue.map((article) => <button className="queue-row" onClick={() => editArticle(article)} key={article.id}><img src={article.heroImage} alt="" /><span><b>{article.category}</b><strong>{article.title}</strong><small>{article.author} · {relativeDate(article.updatedAt)}</small></span><i>İncele →</i></button>) : <div className="empty-state">İnceleme kuyruğu temiz.</div>}</section><aside className="newsroom-card today-flow"><div className="card-title"><div><span>BUGÜN</span><h2>Yayın akışı</h2></div></div>{articles.slice(0, 6).map((article) => <div className="today-row" key={article.id}><time>{relativeDate(article.publishedAt ?? article.updatedAt).split(" ").slice(-1)}</time><span><b className={`status status-${article.status}`}>{statusLabels[article.status]}</b><p>{article.title}</p></span></div>)}</aside></div></>}
 

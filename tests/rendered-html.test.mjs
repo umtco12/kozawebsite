@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test, { after, before } from "node:test";
+import Database from "better-sqlite3";
 import {
   defaultContent,
   isValidContentUpdate,
@@ -20,6 +21,8 @@ import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { parseMynetMarketPayload } from "../app/api/piyasa/market-model.mjs";
 import { agencyUpdateDecision, applyCategoryMap, buildAgencyHeaders, normalizeAgencyPayload, renderAgencyDisclaimer, validateAgencySource } from "../db/agency-model.mjs";
 import { canAccessArticle, canEditArticle, canManageAgencyMetadata, canPublish, canWriteStatus } from "../db/editorial-permissions.mjs";
+import { adPlacements, advertisementState, validateAdvertisement } from "../db/ad-model.mjs";
+import { formSignature, istanbulInputTimestamp, istanbulInputValue, toggleConfirmation } from "../app/admin/ad-form-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -207,7 +210,205 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(body, /Koza Test Yöneticisi/);
   assert.match(body, /Kullanıcılar/);
   assert.match(body, /Yayın Stüdyosu/);
+  assert.match(body, /Reklam Merkezi/);
   assert.match(await readFile(new URL("../app/admin/agency-sources.tsx", import.meta.url), "utf8"), /Ajans Akış Merkezi/);
+  const advertisingCenter = await readFile(new URL("../app/admin/advertising-center.tsx", import.meta.url), "utf8");
+  assert.match(advertisingCenter, /“REKLAM” etiketi otomatik eklenir ve kaldırılamaz/);
+  assert.match(advertisingCenter, /pop-up, otomatik ses ve içeriği kapatan reklam/);
+  assert.match(advertisingCenter, /Bilgisayardan yükle/);
+  assert.match(advertisingCenter, /Kütüphaneden seç/);
+  assert.match(advertisingCenter, /Türkiye saati/);
+  assert.match(advertisingCenter, /aria-live="polite"/);
+  assert.match(advertisingCenter, /aria-invalid=/);
+  assert.match(advertisingCenter, /querySelector<HTMLElement>\("\[aria-invalid='true'\]"\)/);
+  assert.match(advertisingCenter, /beforeunload/);
+  assert.match(advertisingCenter, /Kaydedilmemiş değişiklikleriniz var/);
+  assert.match(advertisingCenter, /Reklam ağı · henüz bağlı değil/);
+  assert.match(advertisingCenter, /finally/);
+});
+
+test("reklam modeli sabit envanteri, güvenli bağlantıları ve tarih durumlarını doğrular", () => {
+  assert.deepEqual(adPlacements.map((item) => item.key), ["site_top", "home_billboard", "section_inline", "article_sidebar"]);
+  const now = Date.now();
+  const valid = validateAdvertisement({
+    placement: "home_billboard", advertiser: "Koza TV", campaignName: "Kurumsal tanıtım",
+    title: "Haberin merkezinde", description: "Koza TV kurum içi tanıtımı.", imageUrl: "/koza-logo.png",
+    targetUrl: "/canli", ctaLabel: "Canlı izle", theme: "red", kind: "house", priority: 250,
+    startsAt: now + 60_000, endsAt: now + 120_000, active: true,
+  });
+  assert.equal(valid.valid, true);
+  assert.equal(valid.value.priority, 250);
+  assert.equal(advertisementState(valid.value, now), "scheduled");
+  assert.equal(advertisementState({ ...valid.value, startsAt: null, endsAt: now }, now), "expired", "Bitiş anında reklam yayından kalkmalı");
+  assert.equal(advertisementState({ ...valid.value, active: 0 }, now), "paused");
+  assert.equal(advertisementState({ ...valid.value, startsAt: null, endsAt: null }, now), "live");
+
+  const unsafe = validateAdvertisement({ placement: "bilinmeyen", advertiser: "K", title: "X", imageUrl: "http://cdn.example.com/a.png", targetUrl: "javascript:alert(1)", startsAt: now + 10_000, endsAt: now });
+  assert.equal(unsafe.valid, false);
+  for (const field of ["placement", "advertiser", "title", "imageUrl", "targetUrl", "endsAt"]) assert.ok(unsafe.errors[field], `${field} reddedilmeli`);
+
+  const escape = validateAdvertisement({ placement: "site_top", advertiser: "Koza TV", title: "Güvenli reklam", targetUrl: "/\\evil.example/path" });
+  assert.equal(escape.valid, false, "Ters eğik çizgi ile origin kaçışı reddedilmeli");
+  assert.ok(escape.errors.targetUrl);
+  const credential = validateAdvertisement({ placement: "site_top", advertiser: "Koza TV", title: "Güvenli reklam", targetUrl: "https://user:pass@example.com/path" });
+  assert.equal(credential.valid, false, "Kimlik bilgili dış adres reddedilmeli");
+  for (const targetUrl of ["https://example.com/pa\\th", "https://example.com/satir\nyeni", "https://example.com/sekme\tyeni"]) {
+    const unsafeExternal = validateAdvertisement({ placement: "site_top", advertiser: "Koza TV", title: "Güvenli reklam", targetUrl });
+    assert.equal(unsafeExternal.valid, false, `Dış adresteki kaçış veya kontrol karakteri reddedilmeli: ${JSON.stringify(targetUrl)}`);
+    assert.ok(unsafeExternal.errors.targetUrl);
+  }
+
+  for (const payload of [
+    { priority: 1.5 }, { priority: "abc" }, { priority: 1000 }, { active: "false" },
+    { theme: "purple" }, { kind: "unknown" }, { kind: "programmatic" }, { id: Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
+    const result = validateAdvertisement({ placement: "site_top", advertiser: "Koza TV", title: "Doğrulama reklamı", ...payload });
+    assert.equal(result.valid, false, `Hatalı alan sessizce düzeltilmemeli: ${JSON.stringify(payload)}`);
+  }
+  const missingTarget = validateAdvertisement({ placement: "site_top", advertiser: "Koza TV", title: "Hedefsiz buton", ctaLabel: "Detaylı bilgi" });
+  assert.equal(missingTarget.valid, false);
+  assert.ok(missingTarget.errors.targetUrl, "Buton metni hedef bağlantı gerektirmeli");
+  const timezoneLess = validateAdvertisement({ placement: "site_top", advertiser: "Koza TV", title: "Saat testi", startsAt: "2026-08-31T12:00" });
+  assert.equal(timezoneLess.valid, false, "Saat dilimsiz API tarihi sunucuda ayrıştırılmamalı");
+  assert.ok(timezoneLess.errors.startsAt);
+  const tooLong = validateAdvertisement({ placement: "site_top", advertiser: "A".repeat(101), title: "B".repeat(111), description: "C".repeat(261), ctaLabel: "D".repeat(31) });
+  for (const field of ["advertiser", "title", "description", "ctaLabel"]) assert.ok(tooLong.errors[field], `${field} uzunluk sınırı uygulanmalı`);
+});
+
+test("reklam tarih formu her sunucuda Türkiye saatini aynı epoch değerine çevirir", () => {
+  const epoch = Date.parse("2026-08-31T12:00:00+03:00");
+  assert.equal(istanbulInputTimestamp("2026-08-31T12:00"), epoch);
+  assert.equal(istanbulInputValue(epoch), "2026-08-31T12:00");
+  assert.equal(istanbulInputTimestamp("2026-08-31T12:00:00Z"), Number.NaN);
+  assert.equal(istanbulInputTimestamp(null), null);
+  assert.equal(formSignature({ title: "A" }), formSignature({ title: "A" }));
+  assert.notEqual(formSignature({ title: "A" }), formSignature({ title: "B" }));
+  assert.match(toggleConfirmation({ currentId: 10, dirty: false, itemId: 10, active: 1, label: "Yayındaki reklam" }), /durdurmak/);
+  assert.match(toggleConfirmation({ currentId: 10, dirty: true, itemId: 10, active: 0, label: "Taslak reklam" }), /kaydedilmemiş değişiklikler/);
+  assert.equal(toggleConfirmation({ currentId: 10, dirty: true, itemId: 11, active: 0, label: "Başka reklam" }), "", "Başka kartın işlemi açık taslağı silmediği için gereksiz uyarı göstermemeli");
+});
+
+test("reklam kreatifi görselsiz, bozuk görselli ve mobil durumda güvenli düzeni korur", async () => {
+  const slot = await readFile(new URL("../app/ad-slot.tsx", import.meta.url), "utf8");
+  const image = await readFile(new URL("../app/ad-image.tsx", import.meta.url), "utf8");
+  const categoryPage = await readFile(new URL("../app/kategori/[slug]/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(slot, /ad-has-image/);
+  assert.match(slot, /ad-no-image/);
+  assert.match(slot, /data-nosnippet/);
+  assert.match(slot, /advertisement\.ctaLabel && advertisement\.targetUrl/);
+  assert.match(image, /onError=\{\(\) => setFailedSrc\(src\)\}/);
+  assert.match(image, /Görsel yüklenemedi/);
+  assert.match(styles, /\.ad-leaderboard\.ad-no-image \.ad-creative/);
+  assert.match(styles, /\.ad-billboard\.ad-no-image \.ad-creative/);
+  assert.match(styles, /@media\(max-width:600px\)[\s\S]*?\.ad-site-top \.ad-creative-copy>p\{display:none\}/);
+  assert.match(styles, /\.ad-creative-copy>strong\{[^}]*-webkit-line-clamp:2/);
+  assert.ok(categoryPage.indexOf("gridArticles.slice(0, 6)") < categoryPage.indexOf('<AdSlot placement="section_inline"'), "Bölüm reklamı ilk altı haberden sonra görünmeli");
+  assert.ok(categoryPage.indexOf('<AdSlot placement="section_inline"') < categoryPage.indexOf("gridArticles.slice(6)"));
+});
+
+test("reklam envanteri panelden yönetilir, rol sınırlarını ve ziyaretçi yerleşimlerini korur", async () => {
+  const inventory = await request("/api/ads");
+  assert.equal(inventory.status, 200);
+  const initial = await inventory.json();
+  assert.equal(initial.placements.length, 4, "Dört sabit reklam konumu bulunmalı");
+  assert.equal(initial.advertisements.filter((item) => item.kind === "house").length, 4, "İlk kurulum Koza TV dummy kreatiflerini içermeli");
+  assert.ok(initial.advertisements.every((item) => item.state === "live"));
+  assert.equal(initial.advertisements.filter((item) => item.serving).length, 4, "Her konumda yalnız gerçekten gösterilen reklam işaretlenmeli");
+  for (const placement of initial.placements) assert.equal(initial.advertisements.filter((item) => item.placement === placement.key && item.serving).length, 1);
+
+  const home = await html("/");
+  assert.match(home, /data-ad-placement="site_top"/);
+  assert.match(home, /data-ad-placement="home_billboard"/);
+  assert.match(home, /data-nosnippet=""/);
+  assert.match(home, />REKLAM</);
+  assert.match(home, /KOZA TV TANITIMI/);
+  assert.doesNotMatch(home, /data-ad-placement="site_top"[\s\S]{0,1200}?rel="sponsored nofollow"/, "Kurum içi Koza TV tanıtımı gereksiz sponsored rel almamalı");
+  assert.doesNotMatch(home, /Site üstü lider alan · 970×90/, "Teknik envanter adı ziyaretçiye gösterilmemeli");
+  const category = await html("/kategori/gundem");
+  assert.match(category, /data-ad-placement="site_top"/);
+  assert.match(category, /data-ad-placement="section_inline"/);
+  const article = await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde");
+  assert.match(article, /data-ad-placement="article_sidebar"/);
+  assert.doesNotMatch(article, /<strong>300 × 250<\/strong>/, "Eski boş reklam kutusu kalmamalı");
+
+  const unsafe = await request("/api/ads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ placement: "site_top", advertiser: "Test", title: "Güvensiz hedef", targetUrl: "/\\evil.example/path" }) });
+  assert.equal(unsafe.status, 400);
+  assert.ok((await unsafe.json()).fields.targetUrl);
+  const targetlessCta = await request("/api/ads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ placement: "site_top", advertiser: "Test", title: "Hedefsiz buton", ctaLabel: "Detay" }) });
+  assert.equal(targetlessCta.status, 400);
+  assert.ok((await targetlessCta.json()).fields.targetUrl);
+
+  const future = await request("/api/ads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ placement: "site_top", advertiser: "Koza TV", campaignName: "Planlı test", title: "Yarın başlayacak tanıtım", targetUrl: "/canli", kind: "house", theme: "dark", priority: 999, startsAt: Date.now() + 86_400_000, active: 1 }) });
+  assert.equal(future.status, 201);
+  assert.equal((await future.json()).advertisement.state, "scheduled");
+  const afterSchedule = await html("/");
+  assert.doesNotMatch(afterSchedule, /Yarın başlayacak tanıtım/, "Planlı reklam başlangıçtan önce gösterilmemeli");
+
+  const direct = await request("/api/ads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ placement: "site_top", advertiser: "Koza TV", campaignName: "Öncelik testi", title: "Yeni Koza TV tanıtımı", description: "Önceliği daha yüksek kurum içi kampanya.", targetUrl: "/kurumsal/hakkimizda", ctaLabel: "Keşfet", kind: "house", theme: "red", priority: 998, active: 1 }) });
+  assert.equal(direct.status, 201);
+  const directAd = (await direct.json()).advertisement;
+  assert.equal(directAd.serving, true);
+  assert.match(await html("/"), /Yeni Koza TV tanıtımı/, "En yüksek aktif öncelik ziyaretçi yüzeyine yansımalı");
+  const paused = await request("/api/ads", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...directAd, active: 0 }) });
+  assert.equal(paused.status, 200);
+  assert.equal((await paused.json()).advertisement.state, "paused");
+  assert.doesNotMatch(await html("/"), /Yeni Koza TV tanıtımı/, "Durdurulan reklam yayından kalkmalı");
+
+  const auditDb = new Database(process.env.KOZA_DB_PATH, { readonly: true });
+  const auditsBeforeConflict = auditDb.prepare("SELECT COUNT(*) AS total FROM audit_logs WHERE entity_type='advertisement' AND entity_id=?").get(directAd.id).total;
+  auditDb.close();
+  const stale = await request("/api/ads", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...directAd, title: "Sessizce ezilmemeli" }) });
+  assert.equal(stale.status, 409, "Eski sürümle güncelleme sessizce ezilmemeli");
+  assert.equal((await stale.json()).code, "EDIT_CONFLICT");
+  const auditAfterDb = new Database(process.env.KOZA_DB_PATH, { readonly: true });
+  const auditsAfterConflict = auditAfterDb.prepare("SELECT COUNT(*) AS total FROM audit_logs WHERE entity_type='advertisement' AND entity_id=?").get(directAd.id).total;
+  const latestAudit = auditAfterDb.prepare("SELECT detail FROM audit_logs WHERE entity_type='advertisement' AND entity_id=? ORDER BY id DESC LIMIT 1").get(directAd.id);
+  auditAfterDb.close();
+  assert.equal(auditsAfterConflict, auditsBeforeConflict, "Çakışan işlem denetim kaydı üretmemeli");
+  const auditDetail = JSON.parse(latestAudit.detail);
+  assert.equal(auditDetail.actor.role, "admin");
+  assert.equal(auditDetail.before.active, 1);
+  assert.equal(auditDetail.after.active, 0);
+
+  const postWithId = await request("/api/ads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(directAd) });
+  assert.equal(postWithId.status, 400, "POST var olan kaydı güncellememeli");
+  const { id: omittedId, ...withoutId } = directAd;
+  assert.ok(omittedId);
+  const patchWithoutId = await request("/api/ads", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(withoutId) });
+  assert.equal(patchWithoutId.status, 400, "PATCH id olmadan kayıt oluşturmamalı");
+  const missing = await request("/api/ads", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...directAd, id: 999_999_999 }) });
+  assert.equal(missing.status, 404);
+  const malformed = await request("/api/ads", { method: "POST", headers: { "content-type": "application/json" }, body: "{" });
+  assert.equal(malformed.status, 400);
+  assert.match((await malformed.json()).error, /JSON/);
+
+  const noImage = await request("/api/ads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ placement: "section_inline", advertiser: "Örnek Marka", campaignName: "Görselsiz test", title: "Görselsiz reklam düzeni", description: "Görsel bulunmasa da başlık ve bağlantı bütün genişliği kullanır.", targetUrl: "https://example.com/kampanya", ctaLabel: "İncele", kind: "direct", theme: "light", priority: 999, active: 1 }) });
+  assert.equal(noImage.status, 201);
+  const categoryWithNoImage = await html("/kategori/gundem");
+  assert.match(categoryWithNoImage, /ad-inline ad-theme-light ad-no-image/);
+  assert.match(categoryWithNoImage, /Görselsiz reklam düzeni/);
+  assert.match(categoryWithNoImage, /rel="sponsored nofollow"/);
+
+  const publisher = await createRoleSession("publisher", "ReklamYayinYoneticisi");
+  assert.equal((await anonymousRequest("/api/ads", { headers: { cookie: publisher.cookie } })).status, 200);
+  const publisherCreate = await anonymousRequest("/api/ads", { method: "POST", headers: { "content-type": "application/json", cookie: publisher.cookie }, body: JSON.stringify({ placement: "article_sidebar", advertiser: "Yayın Yönetmeni Test", title: "Yetkili kampanya kaydı", active: 0 }) });
+  assert.equal(publisherCreate.status, 201);
+  const publisherAd = (await publisherCreate.json()).advertisement;
+  const publisherPatch = await anonymousRequest("/api/ads", { method: "PATCH", headers: { "content-type": "application/json", cookie: publisher.cookie }, body: JSON.stringify({ ...publisherAd, title: "Yetkili kampanya güncellendi" }) });
+  assert.equal(publisherPatch.status, 200);
+
+  const anonymousGet = await anonymousRequest("/api/ads");
+  const anonymousWrite = await anonymousRequest("/api/ads", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const crossOrigin = await request("/api/ads", { headers: { origin: "https://evil.example" } });
+  assert.equal(anonymousGet.status, 401);
+  assert.equal(anonymousWrite.status, 401);
+  assert.equal(crossOrigin.status, 403, "Başka origin üzerinden reklam yönetimi reddedilmeli");
+  for (const [role, label] of [["editor", "ReklamEditorYetki"], ["reporter", "ReklamMuhabirYetki"], ["viewer", "ReklamIzleyiciYetki"]]) {
+    const session = await createRoleSession(role, label);
+    assert.equal((await anonymousRequest("/api/ads", { headers: { cookie: session.cookie } })).status, 403, `${role} reklam envanterini görememeli`);
+    assert.equal((await anonymousRequest("/api/ads", { method: "POST", headers: { "content-type": "application/json", cookie: session.cookie }, body: JSON.stringify({ placement: "site_top", advertiser: "Yetkisiz", title: "Yetkisiz reklam" }) })).status, 403, `${role} reklam yazamamalı`);
+  }
 });
 
 test("ajans modeli güvenli bağlantıyı ve eksiksiz RSS/JSON alanlarını doğrular", () => {
@@ -1526,4 +1727,30 @@ test("ana sayfa imza vitrini kırık görsele ihtiyaç duymadan servisleri ve ya
   assert.match(styles, /@media\(max-width:1000px\)[\s\S]*?\.writers-showcase-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /@media\(max-width:600px\)[\s\S]*?grid-auto-flow:column[^}]*overflow-x:auto/, "Mobil imza vitrini sayfayı taşırmadan kendi içinde kaymalı");
   assert.match(styles, /\.writer-profile:focus-visible\{[^}]*outline:3px solid #fff/, "Klavye odağı belirgin olmalı");
+});
+
+test("reklam merkezi yönetim kılavuzu açılır, görselli ve gerçek panel diliyle hazırlanmıştır", async () => {
+  const manualPath = new URL("../docs/yonetim/Koza-TV-Reklam-Merkezi-Yonetim-Kilavuzu.docx", import.meta.url).pathname;
+  const manual = await stat(manualPath);
+  assert.ok(manual.size > 300_000, `Görselli yönetim kılavuzu beklenenden küçük: ${manual.size} bayt`);
+
+  await execFileAsync("unzip", ["-t", manualPath]);
+  const { stdout: documentXml } = await execFileAsync("unzip", ["-p", manualPath, "word/document.xml"], { maxBuffer: 5_000_000 });
+  for (const phrase of [
+    "Reklam Merkezi",
+    "Yönetici",
+    "Yayın Yönetmeni",
+    "Site üstü lider alan",
+    "Ana sayfa marka panosu",
+    "Bölüm içi reklam",
+    "Haber sağ sütun",
+    "Türkiye saati",
+    "Sitede kontrol et",
+  ]) {
+    assert.ok(documentXml.includes(phrase), `Kılavuzda gerçek panel ifadesi bulunmalı: ${phrase}`);
+  }
+  assert.ok((documentXml.match(/descr="[^"]+"/g) ?? []).length >= 7, "Her ekran görüntüsü ve logo erişilebilir açıklama taşımalı");
+
+  const { stdout: entries } = await execFileAsync("unzip", ["-Z1", manualPath]);
+  assert.ok(entries.split("\n").filter((entry) => /^word\/media\//.test(entry)).length >= 6, "Kılavuz logo dahil en az altı benzersiz gömülü medya içermeli");
 });

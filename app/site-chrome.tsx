@@ -1,6 +1,7 @@
 import { getSiteSettings, listCategories } from "../db";
 import { LiveData, MobileMenu, SearchBox } from "./site-client";
 import { corporateTitles, liveStream, socialLinks } from "./site-config";
+import { AdSlot } from "./ad-slot";
 
 /* Ziyaretçi sitesinin ortak başlık ve alt bölümü. Bütün sayfalar aynı çalışan menüyü kullanır. */
 
@@ -79,6 +80,7 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
           </div>
         </nav>
       </header>
+      <AdSlot placement="site_top" className="wrap ad-site-top" />
     </>
   );
 }

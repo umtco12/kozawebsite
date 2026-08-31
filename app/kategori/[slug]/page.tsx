@@ -4,6 +4,7 @@ import { getCategoryBySlug, listCategories, listCategoryPage, listLatestArticles
 import { redirectIfMapped } from "../../legacy-redirect";
 import { SiteFooter, SiteHeader } from "../../site-chrome";
 import { displaySpot, displayTitle } from "../../../db/title-model.mjs";
+import { AdSlot } from "../../ad-slot";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ sayfa?: string }> };
@@ -33,6 +34,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const latest = listLatestArticles(30).filter((article) => article.category !== category.name);
   const sidebar = [...latest.filter((article) => article.isBreaking), ...latest.filter((article) => !article.isBreaking)].slice(0, 6);
   const siblings = navItems.filter((item) => item.slug !== category.slug).slice(0, 8);
+  const gridArticles = page === 1 ? others : articles;
 
   return (
     <main className="category-page section-page">
@@ -70,7 +72,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             )}
 
             <div className="section-grid">
-              {(page === 1 ? others : articles).map((article) => (
+              {gridArticles.slice(0, 6).map((article) => (
                 <a className="section-card" href={`/haber/${article.slug}`} key={article.id}>
                   <div className="section-card-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <span style={{ color: category.color }}>{article.category}</span>
@@ -79,6 +81,19 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                 </a>
               ))}
             </div>
+
+            <AdSlot placement="section_inline" className="ad-section-inline" />
+
+            {gridArticles.length > 6 && <div className="section-grid">
+              {gridArticles.slice(6).map((article) => (
+                <a className="section-card" href={`/haber/${article.slug}`} key={article.id}>
+                  <div className="section-card-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
+                  <span style={{ color: category.color }}>{article.category}</span>
+                  <h3>{displayTitle(article.title)}</h3>
+                  <time>{stamp(article.publishedAt)}</time>
+                </a>
+              ))}
+            </div>}
 
             {pageCount > 1 && (
               <nav className="pager" aria-label="Sayfalama">

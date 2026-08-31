@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { listBreakingArticles, listCategories } from "../../db";
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
 import { displaySpot, displayTitle } from "../../db/title-model.mjs";
+import { AdSlot } from "../ad-slot";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,8 @@ export default async function BreakingPage() {
                 ))}
               </div>
             )}
+
+            <AdSlot placement="section_inline" className="ad-section-inline" />
 
             {groups.length > 0 && (
               <div className="feed">
