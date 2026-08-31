@@ -9,6 +9,7 @@ export function AdSlot({ placement, className = "" }: { placement: string; class
   const paidLink = advertisement.kind !== "house" || /^https:\/\//i.test(advertisement.targetUrl);
 
   const content = <>
+    {advertisement.kind === "house" ? <span className="ad-house-stamp" aria-hidden="true">KOZA TV REKLAM</span> : null}
     {advertisement.imageUrl ? <AdImage src={advertisement.imageUrl} alt="" /> : null}
     <div className="ad-creative-copy">
       <small>{advertisement.kind === "house" ? "KOZA TV TANITIMI" : advertisement.advertiser}</small>

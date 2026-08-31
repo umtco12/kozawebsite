@@ -28,19 +28,29 @@ function SocialIcon({ label }: { label: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7.2 2h9.6A5.2 5.2 0 0 1 22 7.2v9.6a5.2 5.2 0 0 1-5.2 5.2H7.2A5.2 5.2 0 0 1 2 16.8V7.2A5.2 5.2 0 0 1 7.2 2Zm-.18 2A3.02 3.02 0 0 0 4 7.02v9.96A3.02 3.02 0 0 0 7.02 20h9.96A3.02 3.02 0 0 0 20 16.98V7.02A3.02 3.02 0 0 0 16.98 4H7.02Zm10.73 1.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" /></svg>;
 }
 
-function SocialCluster() {
+function SocialCluster({ labeled = false }: { labeled?: boolean } = {}) {
   const settings = getSiteSettings();
   const accounts = socialLinks(settings).filter((item) => item.href);
   if (accounts.length === 0) return null;
 
   return (
-    <span className="social" role="group" aria-label="Koza TV sosyal medya hesapları">
+    <div className={`social${labeled ? " footer-social" : ""}`} role="group" aria-label="Koza TV sosyal medya hesapları">
       {accounts.map((item) => (
-        <a className="social-link" href={item.href} key={item.label} target="_blank" rel="noreferrer" aria-label={`Koza TV ${item.label}`}>
+        <a className={`social-link${labeled ? " footer-social-link" : ""}`} href={item.href} key={item.label} target="_blank" rel="noopener noreferrer" aria-label={labeled ? `Koza TV ${item.label} hesabını yeni sekmede aç` : `Koza TV ${item.label}`}>
           <SocialIcon label={item.label} />
+          {labeled ? <span>{item.label}</span> : null}
         </a>
       ))}
-    </span>
+    </div>
+  );
+}
+
+function DesktopAdRails() {
+  return (
+    <div className="desktop-ad-rails" aria-label="Geniş ekran reklam alanları">
+      <AdSlot placement="site_left_rail" className="ad-desktop-rail ad-desktop-rail-left" />
+      <AdSlot placement="site_right_rail" className="ad-desktop-rail ad-desktop-rail-right" />
+    </div>
   );
 }
 
@@ -80,7 +90,10 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
           </div>
         </nav>
       </header>
-      <AdSlot placement="site_top" className="wrap ad-site-top" />
+      <div className="site-ad-stage">
+        <AdSlot placement="site_top" className="wrap ad-site-top" />
+        <DesktopAdRails />
+      </div>
     </>
   );
 }
@@ -90,34 +103,63 @@ export function SiteFooter({ categories }: { categories: NavCategory[] }) {
   const broadcast = liveStream(settings);
   const legal = ["kvkk", "gizlilik", "cerez-politikasi"];
   const institutional = ["hakkimizda", "kunye", "yayin-ilkeleri", "iletisim"];
+  const year = new Intl.DateTimeFormat("tr-TR", { year: "numeric", timeZone: "Europe/Istanbul" }).format(new Date());
 
   return (
-    <footer>
-      <div className="wrap footer-grid">
-        <div>
-          <a className="brand footer-brand" href="/"><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></a>
-          <p>Türkiye&apos;nin gündemi, güvenilir haber ve güçlü yorumla Koza TV&apos;de.</p>
-          <SocialCluster />
+    <footer id="site-footer" className="site-footer">
+      <div className="wrap footer-shell">
+        <section className="footer-intro" aria-labelledby="footer-intro-title">
+          <div className="footer-intro-copy">
+            <span>KOZA TV DİJİTAL</span>
+            <h2 id="footer-intro-title">{settings.siteMotto}</h2>
+            <p>Gündemin nabzı, son dakika gelişmeleri ve güçlü yorum günün her anında Koza TV&apos;de.</p>
+          </div>
+          <div className="footer-intro-actions">
+            <a className="footer-live-link" href="/canli"><i aria-hidden="true" />Canlı yayını izle <span aria-hidden="true">→</span></a>
+            <a className="footer-rss-link" href="/rss.xml">RSS akışı <span aria-hidden="true">↗</span></a>
+          </div>
+        </section>
+
+        <div className="footer-grid">
+          <section className="footer-identity" aria-labelledby="footer-brand-title">
+            <h2 id="footer-brand-title" className="visually-hidden">Koza TV</h2>
+            <a className="brand footer-brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo.png" alt="Koza TV" /></a>
+            <p>Türkiye&apos;nin gündemi, güvenilir haber ve güçlü yorumla Koza TV&apos;de.</p>
+            <SocialCluster labeled />
+          </section>
+
+          <nav className="footer-nav" aria-labelledby="footer-categories-title">
+            <h2 id="footer-categories-title">Kategoriler</h2>
+            <div className="footer-link-list">
+              {categories.slice(0, 6).map((category) => <a href={`/kategori/${category.slug}`} key={category.id}>{category.name}</a>)}
+              <a href="/son-dakika">Son Dakika</a>
+            </div>
+          </nav>
+
+          <nav className="footer-nav" aria-labelledby="footer-corporate-title">
+            <h2 id="footer-corporate-title">Koza TV</h2>
+            <div className="footer-link-list">
+              {institutional.map((slug) => <a href={`/kurumsal/${slug}`} key={slug}>{corporateTitles[slug]}</a>)}
+              <a href="/canli">Canlı Yayın</a>
+            </div>
+          </nav>
+
+          <section className="footer-broadcast" aria-labelledby="footer-broadcast-title">
+            <div className="footer-broadcast-title"><i aria-hidden="true" /><h2 id="footer-broadcast-title">Yayın Bilgileri</h2></div>
+            <dl>
+              <div><dt>Uydu</dt><dd>{broadcast.satellite || "Uydu bilgisi tanımlanacak"}</dd></div>
+              <div><dt>Platformlar</dt><dd>{broadcast.platforms || "Platform bilgisi tanımlanacak"}</dd></div>
+            </dl>
+            <a href="/canli">Yayın akışını görüntüle <span aria-hidden="true">→</span></a>
+          </section>
         </div>
-        <div>
-          <strong>Kategoriler</strong>
-          {categories.slice(0, 6).map((category) => <a href={`/kategori/${category.slug}`} key={category.id}>{category.name}</a>)}
-          <a href="/son-dakika">Son Dakika</a>
+
+        <div className="footer-bottom">
+          <p>© {year} Koza TV. Tüm hakları saklıdır.</p>
+          <nav aria-label="Yasal bağlantılar">
+            {legal.map((slug) => <a href={`/kurumsal/${slug}`} key={slug}>{corporateTitles[slug].replace(" Aydınlatma Metni", "").replace(" Politikası", "")}</a>)}
+          </nav>
         </div>
-        <div>
-          <strong>Koza TV</strong>
-          {institutional.map((slug) => <a href={`/kurumsal/${slug}`} key={slug}>{corporateTitles[slug]}</a>)}
-          <a href="/canli">Canlı Yayın</a>
-        </div>
-        <div>
-          <strong>Yayın Bilgileri</strong>
-          <p>{broadcast.satellite || "Uydu bilgisi tanımlanacak"}<br />{broadcast.platforms}</p>
-          <a href="/rss.xml">RSS akışı</a>
-        </div>
-      </div>
-      <div className="wrap copyright">
-        © 2026 Koza TV. Tüm hakları saklıdır.
-        <span>{legal.map((slug) => <a href={`/kurumsal/${slug}`} key={slug}>{corporateTitles[slug].replace(" Aydınlatma Metni", "").replace(" Politikası", "")}</a>)}</span>
       </div>
     </footer>
   );

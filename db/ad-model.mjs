@@ -3,6 +3,8 @@
 
 export const adPlacements = [
   { key: "site_top", label: "Site üstü lider alan", scope: "Tüm ziyaretçi sayfaları", format: "970×90 · mobil 320×100", shape: "leaderboard" },
+  { key: "site_left_rail", label: "Masaüstü sol duvar", scope: "Masaüstü · site geneli", format: "120/300×600 · 1360 px üzeri", shape: "rail" },
+  { key: "site_right_rail", label: "Masaüstü sağ duvar", scope: "Masaüstü · site geneli", format: "120/300×600 · 1360 px üzeri", shape: "rail" },
   { key: "home_billboard", label: "Ana sayfa marka panosu", scope: "Ana sayfa · manşet sonrası", format: "970×250 · responsive", shape: "billboard" },
   { key: "section_inline", label: "Bölüm içi reklam", scope: "Kategori ve Son Dakika akışı", format: "728×90 · mobil 320×100", shape: "inline" },
   { key: "article_sidebar", label: "Haber sağ sütun", scope: "Haber detay sayfası", format: "300×250", shape: "rectangle" },
@@ -15,6 +17,14 @@ export const houseAdSeeds = [
   {
     placement: "site_top", advertiser: "Koza TV", campaignName: "Şimdi Konuşma Zamanı", title: "Gündemin nabzı Koza TV’de",
     description: "Son dakika, canlı yayın ve güçlü yorum tek ekranda.", imageUrl: "/koza-logo.png", targetUrl: "/canli", ctaLabel: "Canlı yayını izle", theme: "dark", kind: "house", priority: 100,
+  },
+  {
+    placement: "site_left_rail", advertiser: "Koza TV", campaignName: "Koza TV Sol Duvar", title: "KOZA TV REKLAM ALANI",
+    description: "Markanızı Koza TV okurlarıyla buluşturun.", imageUrl: "/ads/koza-tv-reklam-dikey.svg", targetUrl: "/kurumsal/iletisim", ctaLabel: "Reklam ver", theme: "red", kind: "house", priority: 100,
+  },
+  {
+    placement: "site_right_rail", advertiser: "Koza TV", campaignName: "Koza TV Sağ Duvar", title: "KOZA TV REKLAM ALANI",
+    description: "Bu alan reklamverenler için ayrılmıştır.", imageUrl: "/ads/koza-tv-reklam-dikey.svg", targetUrl: "/kurumsal/iletisim", ctaLabel: "Bilgi alın", theme: "dark", kind: "house", priority: 100,
   },
   {
     placement: "home_billboard", advertiser: "Koza TV", campaignName: "Koza TV Dijital", title: "Haberin merkezinde, hayatın içinde",

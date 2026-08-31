@@ -9,6 +9,7 @@ import { defaultSettings, normalizePath, normalizeSchedule, officialSocialAccoun
 import { legacyPath } from "./import-model.mjs";
 import { agencyUpdateDecision } from "./agency-model.mjs";
 import { advertisementState, houseAdSeeds } from "./ad-model.mjs";
+import { ensureAdvertisementSchema } from "./ad-schema.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
@@ -85,22 +86,8 @@ function ensureSchema(db: InstanceType<typeof Database>) {
       UNIQUE(source_id, external_id)
     );
     CREATE INDEX IF NOT EXISTS idx_agency_items_source_received ON agency_items(source_id, received_at DESC);
-    CREATE TABLE IF NOT EXISTS advertisements (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, placement TEXT NOT NULL CHECK (placement IN ('site_top','home_billboard','section_inline','article_sidebar')), advertiser TEXT NOT NULL, campaign_name TEXT NOT NULL DEFAULT '',
-      title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '', target_url TEXT NOT NULL DEFAULT '', cta_label TEXT NOT NULL DEFAULT '',
-      theme TEXT NOT NULL DEFAULT 'dark' CHECK (theme IN ('red','dark','light')), kind TEXT NOT NULL DEFAULT 'direct' CHECK (kind IN ('house','direct','programmatic')),
-      priority INTEGER NOT NULL DEFAULT 100 CHECK (typeof(priority)='integer' AND priority BETWEEN 1 AND 999), active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)), starts_at INTEGER, ends_at INTEGER,
-      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-      CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at < ends_at)
-    );
-    CREATE INDEX IF NOT EXISTS idx_advertisements_delivery ON advertisements(placement,active,priority DESC,starts_at,ends_at);
-    CREATE TRIGGER IF NOT EXISTS trg_advertisements_validate_insert BEFORE INSERT ON advertisements
-    WHEN NEW.placement NOT IN ('site_top','home_billboard','section_inline','article_sidebar') OR typeof(NEW.priority)<>'integer' OR NEW.priority NOT BETWEEN 1 AND 999 OR NEW.active NOT IN (0,1) OR (NEW.starts_at IS NOT NULL AND NEW.ends_at IS NOT NULL AND NEW.starts_at>=NEW.ends_at)
-    BEGIN SELECT RAISE(ABORT,'Geçersiz reklam kaydı'); END;
-    CREATE TRIGGER IF NOT EXISTS trg_advertisements_validate_update BEFORE UPDATE ON advertisements
-    WHEN NEW.placement NOT IN ('site_top','home_billboard','section_inline','article_sidebar') OR typeof(NEW.priority)<>'integer' OR NEW.priority NOT BETWEEN 1 AND 999 OR NEW.active NOT IN (0,1) OR (NEW.starts_at IS NOT NULL AND NEW.ends_at IS NOT NULL AND NEW.starts_at>=NEW.ends_at)
-    BEGIN SELECT RAISE(ABORT,'Geçersiz reklam kaydı'); END;
   `);
+  ensureAdvertisementSchema(db);
   ensureColumn(db, "articles", "content_blocks", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "articles", "workflow_state", "TEXT NOT NULL DEFAULT 'reporter_draft'");
   ensureColumn(db, "articles", "assigned_to", "INTEGER");

@@ -23,6 +23,7 @@ import { parseMynetMarketPayload } from "../app/api/piyasa/market-model.mjs";
 import { agencyUpdateDecision, applyCategoryMap, buildAgencyHeaders, normalizeAgencyPayload, renderAgencyDisclaimer, validateAgencySource } from "../db/agency-model.mjs";
 import { canAccessArticle, canEditArticle, canManageAgencyMetadata, canPublish, canWriteStatus } from "../db/editorial-permissions.mjs";
 import { adPlacements, advertisementState, validateAdvertisement } from "../db/ad-model.mjs";
+import { ensureAdvertisementSchema } from "../db/ad-schema.mjs";
 import { formSignature, istanbulInputTimestamp, istanbulInputValue, toggleConfirmation } from "../app/admin/ad-form-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
@@ -229,7 +230,7 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
 });
 
 test("reklam modeli sabit envanteri, güvenli bağlantıları ve tarih durumlarını doğrular", () => {
-  assert.deepEqual(adPlacements.map((item) => item.key), ["site_top", "home_billboard", "section_inline", "article_sidebar"]);
+  assert.deepEqual(adPlacements.map((item) => item.key), ["site_top", "site_left_rail", "site_right_rail", "home_billboard", "section_inline", "article_sidebar"]);
   const now = Date.now();
   const valid = validateAdvertisement({
     placement: "home_billboard", advertiser: "Koza TV", campaignName: "Kurumsal tanıtım",
@@ -276,6 +277,40 @@ test("reklam modeli sabit envanteri, güvenli bağlantıları ve tarih durumlar�
   for (const field of ["advertiser", "title", "description", "ctaLabel"]) assert.ok(tooLong.errors[field], `${field} uzunluk sınırı uygulanmalı`);
 });
 
+test("eski dört alanlı reklam tablosu yan reklamları destekleyecek biçimde veri kaybı olmadan genişler", () => {
+  const legacyDb = new Database(":memory:");
+  legacyDb.exec(`
+    CREATE TABLE advertisements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, placement TEXT NOT NULL CHECK (placement IN ('site_top','home_billboard','section_inline','article_sidebar')), advertiser TEXT NOT NULL, campaign_name TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '', target_url TEXT NOT NULL DEFAULT '', cta_label TEXT NOT NULL DEFAULT '',
+      theme TEXT NOT NULL DEFAULT 'dark' CHECK (theme IN ('red','dark','light')), kind TEXT NOT NULL DEFAULT 'direct' CHECK (kind IN ('house','direct','programmatic')),
+      priority INTEGER NOT NULL DEFAULT 100 CHECK (typeof(priority)='integer' AND priority BETWEEN 1 AND 999), active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)), starts_at INTEGER, ends_at INTEGER,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at < ends_at)
+    );
+    CREATE INDEX idx_advertisements_delivery ON advertisements(placement,active,priority DESC,starts_at,ends_at);
+    CREATE TRIGGER trg_advertisements_validate_insert BEFORE INSERT ON advertisements
+    WHEN NEW.placement NOT IN ('site_top','home_billboard','section_inline','article_sidebar')
+    BEGIN SELECT RAISE(ABORT,'Geçersiz reklam kaydı'); END;
+    CREATE TRIGGER trg_advertisements_validate_update BEFORE UPDATE ON advertisements
+    WHEN NEW.placement NOT IN ('site_top','home_billboard','section_inline','article_sidebar')
+    BEGIN SELECT RAISE(ABORT,'Geçersiz reklam kaydı'); END;
+    INSERT INTO advertisements (id,placement,advertiser,campaign_name,title,description,image_url,target_url,cta_label,theme,kind,priority,active,starts_at,ends_at,created_at,updated_at)
+    VALUES (42,'site_top','Korunan Marka','Eski kampanya','Korunan reklam','','','','','dark','direct',125,1,NULL,NULL,1000,2000);
+  `);
+
+  ensureAdvertisementSchema(legacyDb);
+  const preserved = legacyDb.prepare("SELECT * FROM advertisements WHERE id=42").get();
+  assert.equal(preserved.title, "Korunan reklam");
+  assert.equal(preserved.priority, 125);
+  legacyDb.prepare("INSERT INTO advertisements (placement,advertiser,title,created_at,updated_at) VALUES (?,?,?,?,?)").run("site_left_rail", "Koza TV", "Sol duvar", 3000, 3000);
+  legacyDb.prepare("INSERT INTO advertisements (placement,advertiser,title,created_at,updated_at) VALUES (?,?,?,?,?)").run("site_right_rail", "Koza TV", "Sağ duvar", 3000, 3000);
+  assert.throws(() => legacyDb.prepare("INSERT INTO advertisements (placement,advertiser,title,created_at,updated_at) VALUES (?,?,?,?,?)").run("bilinmeyen", "Test", "Geçersiz", 3000, 3000));
+
+  ensureAdvertisementSchema(legacyDb);
+  assert.equal(legacyDb.prepare("SELECT COUNT(*) AS total FROM advertisements").get().total, 3, "İkinci çalıştırma kayıtları çoğaltmamalı");
+  legacyDb.close();
+});
+
 test("reklam tarih formu her sunucuda Türkiye saatini aynı epoch değerine çevirir", () => {
   const epoch = Date.parse("2026-08-31T12:00:00+03:00");
   assert.equal(istanbulInputTimestamp("2026-08-31T12:00"), epoch);
@@ -294,6 +329,8 @@ test("reklam kreatifi görselsiz, bozuk görselli ve mobil durumda güvenli düz
   const image = await readFile(new URL("../app/ad-image.tsx", import.meta.url), "utf8");
   const categoryPage = await readFile(new URL("../app/kategori/[slug]/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const chrome = await readFile(new URL("../app/site-chrome.tsx", import.meta.url), "utf8");
+  const railCreative = await readFile(new URL("../public/ads/koza-tv-reklam-dikey.svg", import.meta.url), "utf8");
   assert.match(slot, /ad-has-image/);
   assert.match(slot, /ad-no-image/);
   assert.match(slot, /data-nosnippet/);
@@ -304,6 +341,21 @@ test("reklam kreatifi görselsiz, bozuk görselli ve mobil durumda güvenli düz
   assert.match(styles, /\.ad-billboard\.ad-no-image \.ad-creative/);
   assert.match(styles, /@media\(max-width:600px\)[\s\S]*?\.ad-site-top \.ad-creative-copy>p\{display:none\}/);
   assert.match(styles, /\.ad-creative-copy>strong\{[^}]*-webkit-line-clamp:2/);
+  assert.match(styles, /\.desktop-ad-rails\{display:none\}/, "Yan reklamlar varsayılan olarak görünmemeli");
+  assert.match(styles, /@media\(min-width:1360px\) and \(min-height:700px\)[\s\S]*?\.desktop-ad-rails\{[^}]*display:block/, "Yan reklamlar masaüstünde açılmalı");
+  assert.match(styles, /@media\(min-width:1360px\) and \(min-height:700px\)[\s\S]*?\.ad-desktop-rail\{[^}]*width:120px/, "Orta masaüstünde ince yan reklam kullanılmalı");
+  assert.match(styles, /@media\(min-width:1360px\) and \(max-width:1799px\) and \(min-height:700px\)[\s\S]*?\.ad-rail \.ad-creative>img\{display:none\}/, "İnce yan reklamda kırpılan görsel gizlenmeli");
+  assert.match(styles, /@media\(min-width:1360px\) and \(max-width:1799px\) and \(min-height:700px\)[\s\S]*?font-size:17px/, "İnce yan reklamda KOZA TV REKLAM metni okunur kalmalı");
+  assert.match(styles, /@media\(min-width:1800px\) and \(min-height:700px\)[\s\S]*?\.ad-desktop-rail\{width:300px/, "Geniş masaüstünde tam yan reklam kullanılmalı");
+  assert.match(styles, /@media\(max-width:1100px\)\{[\s\S]*?\.topbar \.top-links\{display:none\}/, "Tablet üst bandı sayfayı yatay taşırmamalı");
+  assert.match(styles, /@media\(max-width:1100px\)\{[\s\S]*?\.nav-inner\{[^}]*overflow-x:auto/, "Tablet ana menüsü sayfayı taşırmak yerine kendi içinde kaymalı");
+  assert.match(styles, /\.ad-desktop-rail-left\{left:max\(10px,calc\(50% - 705px\)\)\}/);
+  assert.match(styles, /\.ad-desktop-rail-right\{right:max\(10px,calc\(50% - 705px\)\)\}/);
+  assert.match(chrome, /placement="site_left_rail"/);
+  assert.match(chrome, /placement="site_right_rail"/);
+  assert.match(railCreative, /KOZA TV/);
+  assert.match(railCreative, />REKLAM</);
+  assert.match(railCreative, /MARKANIZ BURADA/);
   assert.ok(categoryPage.indexOf("gridArticles.slice(0, 6)") < categoryPage.indexOf('<AdSlot placement="section_inline"'), "Bölüm reklamı ilk altı haberden sonra görünmeli");
   assert.ok(categoryPage.indexOf('<AdSlot placement="section_inline"') < categoryPage.indexOf("gridArticles.slice(6)"));
 });
@@ -312,18 +364,22 @@ test("reklam envanteri panelden yönetilir, rol sınırlarını ve ziyaretçi ye
   const inventory = await request("/api/ads");
   assert.equal(inventory.status, 200);
   const initial = await inventory.json();
-  assert.equal(initial.placements.length, 4, "Dört sabit reklam konumu bulunmalı");
-  assert.equal(initial.advertisements.filter((item) => item.kind === "house").length, 4, "İlk kurulum Koza TV dummy kreatiflerini içermeli");
+  assert.equal(initial.placements.length, 6, "Altı sabit reklam konumu bulunmalı");
+  assert.equal(initial.advertisements.filter((item) => item.kind === "house").length, 6, "İlk kurulum Koza TV dummy kreatiflerini içermeli");
   assert.ok(initial.advertisements.every((item) => item.state === "live"));
-  assert.equal(initial.advertisements.filter((item) => item.serving).length, 4, "Her konumda yalnız gerçekten gösterilen reklam işaretlenmeli");
+  assert.equal(initial.advertisements.filter((item) => item.serving).length, 6, "Her konumda yalnız gerçekten gösterilen reklam işaretlenmeli");
   for (const placement of initial.placements) assert.equal(initial.advertisements.filter((item) => item.placement === placement.key && item.serving).length, 1);
 
   const home = await html("/");
   assert.match(home, /data-ad-placement="site_top"/);
+  assert.match(home, /data-ad-placement="site_left_rail"/);
+  assert.match(home, /data-ad-placement="site_right_rail"/);
   assert.match(home, /data-ad-placement="home_billboard"/);
   assert.match(home, /data-nosnippet=""/);
   assert.match(home, />REKLAM</);
   assert.match(home, /KOZA TV TANITIMI/);
+  assert.match(home, /KOZA TV REKLAM/);
+  assert.match(home, /\/ads\/koza-tv-reklam-dikey\.svg/);
   assert.doesNotMatch(home, /data-ad-placement="site_top"[\s\S]{0,1200}?rel="sponsored nofollow"/, "Kurum içi Koza TV tanıtımı gereksiz sponsored rel almamalı");
   assert.doesNotMatch(home, /Site üstü lider alan · 970×90/, "Teknik envanter adı ziyaretçiye gösterilmemeli");
   const category = await html("/kategori/gundem");
@@ -836,6 +892,38 @@ test("ana sayfa tarih, mobil ve hareket azaltma kurallarını kaynakta korur", a
   assert.match(css, /\.section-card:active/, "Haber kartları tıklama anında görsel geri bildirim vermeli");
   assert.match(css, /@media\(hover:hover\)/, "Hover efektleri yalnız destekleyen cihazlarda uygulanmalı");
   assert.match(chrome, /socialLinks\(settings\)\.filter\(\(item\) => item\.href\)/, "Tanımsız sosyal hesap simgeleri basılmamalı");
+});
+
+test("ortak footer sosyal hesapları yatay ve erişilebilir bir yayın kapanışında sunar", async () => {
+  const [home, chrome, css] = await Promise.all([
+    html("/"),
+    readFile(new URL("app/site-chrome.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/globals.css", projectRoot), "utf8"),
+  ]);
+
+  const footer = home.match(/<footer\b[^>]*class="site-footer"[^>]*>[\s\S]*?<\/footer>/)?.[0] ?? "";
+  assert.ok(footer, "Ana sayfada ortak site footerı bulunmalı");
+  assert.equal((home.match(/<footer\b/g) ?? []).length, 1, "Sayfada tek footer landmarkı olmalı");
+  assert.match(footer, /id="site-footer"/, "Footer doğrudan bağlantı ve görsel kontrol için sabit bir kimlik taşımalı");
+  assert.match(footer, /id="footer-intro-title"/, "Footer güçlü bir editoryal giriş başlığı taşımalı");
+  assert.match(footer, /aria-labelledby="footer-categories-title"/, "Kategori bağlantıları adlandırılmış nav içinde olmalı");
+  assert.match(footer, /aria-labelledby="footer-corporate-title"/, "Kurumsal bağlantılar adlandırılmış nav içinde olmalı");
+  assert.match(footer, /aria-label="Yasal bağlantılar"/, "Yasal bağlantılar ayrı bir nav içinde olmalı");
+  assert.match(footer, /href="\/canli"/, "Canlı yayın bağlantısı footerda bulunmalı");
+  assert.match(footer, /href="\/rss\.xml"/, "RSS bağlantısı footerda bulunmalı");
+  assert.match(footer, /class="social-link footer-social-link"/, "Footer sosyal hesapları kendine özel yatay düğmeler kullanmalı");
+  assert.match(footer, /hesabını yeni sekmede aç/, "Footer sosyal bağlantıları yeni sekme davranışını erişilebilir adında açıklamalı");
+  assert.match(footer, /rel="noopener noreferrer"/, "Dış sosyal bağlantılar güvenli yeni sekme ilişkisi kullanmalı");
+  assert.match(chrome, /<SocialCluster labeled \/>/, "Footer etiketli sosyal hesap kümesini kullanmalı");
+  assert.match(chrome, /timeZone: "Europe\/Istanbul"/, "Telif yılı İstanbul saatine göre üretilmeli");
+  assert.match(css, /\.site-footer \.footer-social\{[^}]*display:flex/, "Sosyal hesaplar masaüstünde yatay flex olmalı");
+  assert.match(css, /@media\(max-width:680px\)\{[\s\S]*?\.site-footer \.footer-grid\{[^}]*grid-template-columns:1fr/, "Footer mobilde bütün grupları tek sütunda korumalı");
+  assert.match(chrome, /<nav className="footer-nav" aria-labelledby="footer-categories-title">/, "Kategori grubu gerçek footer-nav sınıfını kullanmalı");
+  assert.match(css, /\.site-footer \.footer-grid>\.footer-nav,\.site-footer \.footer-grid>\.footer-broadcast\{display:block\}/, "Eski mobil kural kategori ve kurumsal grupları gizleyememeli");
+  assert.match(css, /\.site-footer \.footer-social-link\{[^}]*height:42px/, "Sosyal düğmeler masaüstünde belirgin hedef alanı sunmalı");
+  assert.match(css, /@media\(max-width:680px\)\{[\s\S]*?\.site-footer \.footer-social-link\{[^}]*min-height:44px/, "Sosyal düğmeler mobilde en az 44 piksel olmalı");
+  assert.match(css, /@media\(max-width:680px\)\{[\s\S]*?\.site-footer \.footer-link-list>a\{[^}]*min-height:38px[^}]*line-height:1\.18/, "Mobil footer bağlantıları geniş boşluk üretmeden kompakt kalmalı");
+  assert.match(css, /\.site-footer a:focus-visible\{outline:3px solid/, "Footer bağlantılarında görünür klavye odağı olmalı");
 });
 
 test("kritik marka ve haber görselleri projede bulunur ve boş değildir", async () => {
@@ -1743,7 +1831,10 @@ test("reklam merkezi yönetim kılavuzu açılır, görselli ve gerçek panel di
     "Reklam Merkezi",
     "Yönetici",
     "Yayın Yönetmeni",
+    "Altı reklam alanını tanıyın",
     "Site üstü lider alan",
+    "Masaüstü sol duvar",
+    "Masaüstü sağ duvar",
     "Ana sayfa marka panosu",
     "Bölüm içi reklam",
     "Haber sağ sütun",

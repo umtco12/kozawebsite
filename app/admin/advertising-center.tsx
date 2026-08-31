@@ -23,7 +23,7 @@ const emptyAdvertisement: Advertisement = {
 const stateLabels: Record<string, string> = { live: "Yayına uygun", scheduled: "Planlandı", paused: "Durduruldu", expired: "Süresi doldu" };
 const kindLabels: Record<string, string> = { house: "Koza TV tanıtımı", direct: "Doğrudan reklam", programmatic: "Reklam ağı" };
 const placementPreview: Record<string, string> = {
-  site_top: "/", home_billboard: "/", section_inline: "/kategori/gundem",
+  site_top: "/", site_left_rail: "/", site_right_rail: "/", home_billboard: "/", section_inline: "/kategori/gundem",
   article_sidebar: "/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde",
 };
 const acceptedImageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -213,7 +213,7 @@ export function AdvertisingCenter({ canEdit, onDirtyChange }: { canEdit: boolean
     <div className="advertising-center" aria-busy={saving || uploading}>
       <section className="advertising-inventory newsroom-card">
         <header className="advertising-hero">
-          <div><span>REKLAM ALANLARI</span><h2>Yayındaki reklamlar</h2><p>Dört sabit alanı buradan yönetin. Reklam etiketi ziyaretçi sitesine otomatik eklenir.</p></div>
+          <div><span>REKLAM ALANLARI</span><h2>Yayındaki reklamlar</h2><p>Üst, yan, içerik içi ve haber detayındaki tüm sabit alanları buradan yönetin. Reklam etiketi ziyaretçi sitesine otomatik eklenir.</p></div>
           <div className="advertising-metrics"><b>{placements.length}<small>reklam alanı</small></b><b>{metrics.serving}<small>şu an yayında</small></b><b>{metrics.scheduled}<small>planlandı</small></b></div>
         </header>
         <div className="advertising-policy"><strong>“REKLAM” etiketi otomatik eklenir ve kaldırılamaz.</strong><p>Koza TV; pop-up, otomatik ses ve içeriği kapatan reklam kullanmaz. Bir reklamı silmek yerine güvenle durdurabilirsiniz.</p></div>
