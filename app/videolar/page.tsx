@@ -45,7 +45,7 @@ export default async function VideoCenter() {
         )) : (
           <div className="category-empty video-empty">
             <h2>Henüz video eklenmiş haber yok.</h2>
-            <p>Yönetim panelindeki haber editöründe <strong>Video URL</strong> alanı doldurulan haberler bu sayfada listelenir.</p>
+            <p>Haber editöründen <strong>MP4/WebM video yükleyin</strong> veya YouTube, Vimeo ya da HLS bağlantısı ekleyin. Videolu haberler burada listelenir.</p>
             <div className="search-suggestions">{fallback.map((article) => <a href={`/haber/${article.slug}`} key={article.id}>{displayTitle(article.title)}</a>)}</div>
             <a href="/canli">Canlı yayına git →</a>
           </div>

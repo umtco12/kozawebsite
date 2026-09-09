@@ -216,8 +216,12 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   const adminPanel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
   assert.match(adminPanel, /Kütüphanede ara/);
   assert.match(adminPanel, /Arşivde fotoğraf ara/);
-  assert.match(adminPanel, /api\/media\?q=/);
+  assert.match(adminPanel, /api\/media\?type=\$\{activeKind\}&q=/);
   assert.match(adminPanel, /Dosya adı, açıklama veya ajans/);
+  assert.match(adminPanel, /Bilgisayardan video yükle/);
+  assert.match(adminPanel, /Kütüphanede video ara/);
+  assert.match(adminPanel, /openMediaPicker\("video"\)/);
+  assert.match(adminPanel, /Video, haberde kapak fotoğrafının altında ve haber metninden önce gösterilir/);
   assert.match(
     await readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     /media-search input,.media-library-search input\{height:44px;font-size:16px\}/,
@@ -585,12 +589,13 @@ test("rol sistemi ilk parola değişimini zorunlu tutar ve viewer yazma işlemin
 
 test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını doğrular", () => {
   assert.equal(slugify("İstanbul'da Önemli Gelişme!"), "istanbul-da-onemli-gelisme");
-  const valid = validateArticleInput({ title: "Test için yeterince uzun haber başlığı", spot: "Bu test için yeterince açıklayıcı bir haber spotudur.", body: "Bu haber metni doğrulama sınırını geçmek için yeterince uzun hazırlanmıştır. İkinci cümle içerik alanını tamamlar.", category: "Gündem", status: "draft", sourceUrl: "https://example.com/haber" });
+  const valid = validateArticleInput({ title: "Test için yeterince uzun haber başlığı", spot: "Bu test için yeterince açıklayıcı bir haber spotudur.", body: "Bu haber metni doğrulama sınırını geçmek için yeterince uzun hazırlanmıştır. İkinci cümle içerik alanını tamamlar.", category: "Gündem", status: "draft", sourceUrl: "https://example.com/haber", videoUrl: "/media/2026/09/0123456789abcdef0123456789abcdef.mp4" });
   assert.equal(valid.valid, true);
-  const invalid = validateArticleInput({ title: "Kısa", spot: "Kısa", body: "Kısa", category: "", status: "published", sourceUrl: "javascript:alert(1)" });
+  const invalid = validateArticleInput({ title: "Kısa", spot: "Kısa", body: "Kısa", category: "", status: "published", sourceUrl: "javascript:alert(1)", videoUrl: "javascript:alert(1)" });
   assert.equal(invalid.valid, false);
   assert.ok(invalid.errors.title);
   assert.ok(invalid.errors.body);
+  assert.ok(invalid.errors.videoUrl);
 });
 
 test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı tutar", async () => {
@@ -806,7 +811,7 @@ test("kategoriler admin API üzerinden oluşturulur, sıralanır ve menüden giz
   assert.equal(external.status, 401);
 });
 
-test("görseller kalıcı medya alanına doğrulanarak yüklenir ve yeniden sunulur", async () => {
+test("fotoğraf ve videolar kalıcı medya alanına doğrulanarak yüklenir, aranır ve yeniden sunulur", async () => {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nksAAAAASUVORK5CYII=", "base64");
   const form = new FormData();
   form.set("file", new Blob([png], { type: "image/png" }), "koza-test.png");
@@ -826,16 +831,46 @@ test("görseller kalıcı medya alanına doğrulanarak yüklenir ve yeniden sunu
   invalidForm.set("file", new Blob(["zararlı içerik"], { type: "image/png" }), "sahte.png");
   const invalid = await request("/api/media", { method: "POST", body: invalidForm });
   assert.equal(invalid.status, 400);
+
+  const mp4 = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00, 0x69, 0x73, 0x6f, 0x6d, 0x6d, 0x70, 0x34, 0x31]);
+  const videoForm = new FormData();
+  videoForm.set("file", new Blob([mp4], { type: "video/mp4" }), "ozgur-ozel-meclis.mp4");
+  videoForm.set("altText", "Özgür Özel Meclis konuşması");
+  videoForm.set("credit", "Koza TV Arşiv");
+  const videoUpload = await request("/api/media", { method: "POST", body: videoForm });
+  assert.equal(videoUpload.status, 201);
+  const videoBody = await videoUpload.json();
+  assert.match(videoBody.media.publicUrl, /^\/media\/\d{4}\/\d{2}\/[a-f0-9]{32}\.mp4$/);
+  assert.equal(videoBody.media.mimeType, "video/mp4");
+  const videoRange = await request(videoBody.media.publicUrl, { headers: { range: "bytes=4-11" } });
+  assert.equal(videoRange.status, 206, "Video ileri-geri sarma için byte range desteklemeli");
+  assert.equal(videoRange.headers.get("content-type"), "video/mp4");
+  assert.equal(videoRange.headers.get("accept-ranges"), "bytes");
+  assert.equal(videoRange.headers.get("content-range"), `bytes 4-11/${mp4.length}`);
+  assert.deepEqual(Buffer.from(await videoRange.arrayBuffer()), mp4.subarray(4, 12));
+  const invalidVideoRange = await request(videoBody.media.publicUrl, { headers: { range: "bytes=-0" } });
+  assert.equal(invalidVideoRange.status, 416, "Geçersiz video byte aralığı reddedilmeli");
+
+  const invalidVideoForm = new FormData();
+  invalidVideoForm.set("file", new Blob(["sahte video"], { type: "video/mp4" }), "sahte.mp4");
+  const invalidVideo = await request("/api/media", { method: "POST", body: invalidVideoForm });
+  assert.equal(invalidVideo.status, 400);
   const library = await request("/api/media");
   const libraryBody = await library.json();
-  assert.equal(libraryBody.stats.total, 1);
-  assert.equal(libraryBody.stats.totalBytes, png.length);
+  assert.equal(libraryBody.stats.total, 2);
+  assert.equal(libraryBody.stats.imageCount, 1);
+  assert.equal(libraryBody.stats.videoCount, 1);
+  assert.equal(libraryBody.stats.totalBytes, png.length + mp4.length);
   assert.equal(libraryBody.stats.quotaBytes, 100);
   const searchedByDescription = await request("/api/media?q=Koza%20TV%20test%20g%C3%B6rseli");
   assert.equal(searchedByDescription.status, 200);
   assert.equal((await searchedByDescription.json()).media[0].originalName, "koza-test.png");
-  const searchedByCredit = await request("/api/media?q=Koza%20TV");
+  const searchedByCredit = await request("/api/media?type=image&q=Koza%20TV");
   assert.equal((await searchedByCredit.json()).media.length, 1);
+  const searchedVideo = await request("/api/media?type=video&q=Meclis");
+  const searchedVideoBody = await searchedVideo.json();
+  assert.equal(searchedVideoBody.media.length, 1);
+  assert.equal(searchedVideoBody.media[0].originalName, "ozgur-ozel-meclis.mp4");
   const noMediaMatches = await request("/api/media?q=bulunmayan-fotograf");
   assert.equal((await noMediaMatches.json()).media.length, 0, "Arama bütün arşivde yalnız eşleşen fotoğrafları döndürmeli");
   const quotaForm = new FormData();
@@ -1280,7 +1315,10 @@ test("yeni yayınlanan haber arama, yazar ve son dakika yüzeylerinde anında g�
   assert.match(videos, new RegExp(`href="/haber/${article.slug}"`), "Video URL'si olan haber video merkezinde listelenmeli");
 
   const detail = await html(`/haber/${article.slug}`);
-  assert.match(detail, /Haberin videosunu izle/);
+  assert.match(detail, /class="article-primary-video"/);
+  assert.match(detail, /<video[^>]+class="article-video-player"[^>]+src="https:\/\/video\.example\.com\/koza\/kopru\.m3u8"/);
+  assert.ok(detail.indexOf("article-figure") < detail.indexOf("article-primary-video"), "Ana video kapak fotoğrafından sonra gelmeli");
+  assert.ok(detail.indexOf("article-primary-video") < detail.indexOf("article-layout"), "Ana video haber metninden önce gelmeli");
   assert.match(detail, /"@type":"BreadcrumbList"/);
   assert.match(detail, /href="\/yazar\/koza-tv-saha-ekibi"/);
 });
@@ -1818,7 +1856,7 @@ test("görsel türü içerik imzasından tanınır ve aktarım hatası sebebiyle
      TypeScript kaynağı testte doğrudan çalıştırılamadığı için kural kaynak üzerinden doğrulanır. */
   const storage = await readFile(new URL("../db/media-storage.ts", import.meta.url), "utf8");
   assert.match(storage, /export function detectImageType/, "İmza tabanlı tür tanıma bulunmalı");
-  assert.match(storage, /acceptedTypes\[file\.type\]\?\.signature\(buffer\) \? file\.type : detectImageType\(buffer\)/, "Hatalı content-type imzayla düzeltilmeli");
+  assert.match(storage, /declared\?\.signature\(buffer\).*detectMediaType\(buffer, requiredKind\)/s, "Hatalı content-type imzayla düzeltilmeli");
 
   /* Aktarım artık görsel hatasını yutmuyor; sebep kaydediliyor ve yeniden deneme sunuluyor. */
   const route = await readFile(new URL("../app/api/import/route.ts", import.meta.url), "utf8");

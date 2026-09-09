@@ -21,5 +21,18 @@ export function validateArticleInput(payload) {
       errors.sourceUrl = "Kaynak adresi geçerli bir URL olmalı";
     }
   }
+  if (payload.videoUrl) {
+    const videoUrl = String(payload.videoUrl).trim();
+    if (videoUrl.startsWith("/")) {
+      if (!/^\/media\/\d{4}\/\d{2}\/[a-f0-9]{32}\.(?:mp4|webm)$/i.test(videoUrl)) errors.videoUrl = "Kütüphane video yolu geçerli değil";
+    } else {
+      try {
+        const parsed = new URL(videoUrl);
+        if (parsed.protocol !== "https:" || parsed.username || parsed.password) errors.videoUrl = "Video adresi güvenli bir https bağlantısı olmalı";
+      } catch {
+        errors.videoUrl = "Video adresi veya kütüphane yolu geçerli değil";
+      }
+    }
+  }
   return { valid: Object.keys(errors).length === 0, errors };
 }

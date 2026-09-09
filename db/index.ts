@@ -57,6 +57,7 @@ function ensureSchema(db: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS idx_articles_featured ON articles(is_featured, status, published_at DESC) WHERE is_featured = 1;
     CREATE INDEX IF NOT EXISTS idx_categories_visible_order ON categories(is_visible, nav_order, name);
     CREATE INDEX IF NOT EXISTS idx_media_assets_created ON media_assets(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_media_assets_type_created ON media_assets(mime_type, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_user_expiry ON admin_sessions(user_id, expires_at);
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry ON admin_sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_revisions_article_version ON article_revisions(article_id,version DESC);
@@ -281,15 +282,16 @@ export function saveCategory(input: CategoryInput, actor = "Yayın Yönetmeni") 
 
 function mapMedia(row: Record<string, unknown>): MediaRecord { return { id: Number(row.id), storageKey: String(row.storage_key), publicUrl: String(row.public_url), originalName: String(row.original_name), mimeType: String(row.mime_type), sizeBytes: Number(row.size_bytes), altText: String(row.alt_text), credit: String(row.credit), createdAt: Number(row.created_at) }; }
 export function saveMediaAsset(input: Omit<MediaRecord, "id" | "createdAt">, actor = "Yayın Yönetmeni") { const db = getDb(); const now = Date.now(); const result = db.prepare("INSERT INTO media_assets (storage_key,public_url,original_name,mime_type,size_bytes,alt_text,credit,created_at) VALUES (@storageKey,@publicUrl,@originalName,@mimeType,@sizeBytes,@altText,@credit,@now) ON CONFLICT(storage_key) DO UPDATE SET alt_text=excluded.alt_text,credit=excluded.credit RETURNING id").get({ ...input, now }) as { id: number }; db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('media',?,?,?,?,?)").run(result.id, "upload", actor, JSON.stringify({ name: input.originalName, size: input.sizeBytes }), now); return mapMedia(db.prepare("SELECT * FROM media_assets WHERE id=?").get(result.id) as Record<string, unknown>); }
-export function listMediaAssets(options: { limit?: number; query?: string } = {}) {
+export function listMediaAssets(options: { limit?: number; query?: string; kind?: "image" | "video" } = {}) {
   const requestedLimit = Number(options.limit ?? 80);
   const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 80, 1), 200);
   const query = String(options.query ?? "").trim().slice(0, 120);
-  if (!query) return (getDb().prepare("SELECT * FROM media_assets ORDER BY created_at DESC LIMIT ?").all(limit) as Record<string, unknown>[]).map(mapMedia);
+  const kindPattern = options.kind ? `${options.kind}/%` : "%";
+  if (!query) return (getDb().prepare("SELECT * FROM media_assets WHERE mime_type LIKE @kindPattern ORDER BY created_at DESC LIMIT @limit").all({ kindPattern, limit }) as Record<string, unknown>[]).map(mapMedia);
   const escaped = query.replace(/[\\%_]/g, "\\$&");
-  return (getDb().prepare("SELECT * FROM media_assets WHERE original_name LIKE @query ESCAPE '\\' COLLATE NOCASE OR alt_text LIKE @query ESCAPE '\\' COLLATE NOCASE OR credit LIKE @query ESCAPE '\\' COLLATE NOCASE ORDER BY created_at DESC LIMIT @limit").all({ query: `%${escaped}%`, limit }) as Record<string, unknown>[]).map(mapMedia);
+  return (getDb().prepare("SELECT * FROM media_assets WHERE mime_type LIKE @kindPattern AND (original_name LIKE @query ESCAPE '\\' COLLATE NOCASE OR alt_text LIKE @query ESCAPE '\\' COLLATE NOCASE OR credit LIKE @query ESCAPE '\\' COLLATE NOCASE) ORDER BY created_at DESC LIMIT @limit").all({ query: `%${escaped}%`, kindPattern, limit }) as Record<string, unknown>[]).map(mapMedia);
 }
-export function getMediaStats() { const row = getDb().prepare("SELECT COUNT(*) AS total,COALESCE(SUM(size_bytes),0) AS totalBytes FROM media_assets").get() as { total: number; totalBytes: number }; return row; }
+export function getMediaStats() { const row = getDb().prepare("SELECT COUNT(*) AS total,COALESCE(SUM(size_bytes),0) AS totalBytes,SUM(CASE WHEN mime_type LIKE 'image/%' THEN 1 ELSE 0 END) AS imageCount,SUM(CASE WHEN mime_type LIKE 'video/%' THEN 1 ELSE 0 END) AS videoCount FROM media_assets").get() as { total: number; totalBytes: number; imageCount: number; videoCount: number }; return { ...row, imageCount: Number(row.imageCount || 0), videoCount: Number(row.videoCount || 0) }; }
 
 function mapAdminUser(row: Record<string, unknown>): AdminUser { return { id: Number(row.id), email: String(row.email), fullName: String(row.full_name), role: row.role as AdminRole, active: Number(row.active), mustChangePassword: Number(row.must_change_password), failedAttempts: Number(row.failed_attempts), lockedUntil: row.locked_until == null ? null : Number(row.locked_until), lastLoginAt: row.last_login_at == null ? null : Number(row.last_login_at), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) }; }
 export function listAdminUsers() { return (getDb().prepare("SELECT * FROM admin_users ORDER BY active DESC,full_name").all() as Record<string, unknown>[]).map(mapAdminUser); }

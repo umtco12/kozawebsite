@@ -1130,3 +1130,29 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 }
 @media(max-width:400px){.advertising-media-picker{grid-template-columns:repeat(2,minmax(0,1fr))}.advertising-media-actions>button,.advertising-upload{flex:1;justify-content:center}.advertising-preview{grid-template-columns:64px 1fr}.advertising-preview>img,.advertising-preview>.ad-image-fallback{width:60px}}
 @media(prefers-reduced-motion:reduce){.advertising-spinner{animation:none}.placement-campaigns>div{transition:none}}
+
+/* Fotoğraf ve video arşivi: aynı hızlı arama akışı, tür bazlı güvenli seçim. */
+.media-upload-group{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.media-upload-button.video-upload,.media-editor-actions .video-upload{background:#0b1118;border-color:#4d5d6c;color:#fff}
+.media-kind-tabs{display:flex;gap:5px;flex-wrap:wrap}
+.media-kind-tabs button{min-height:40px;padding:0 12px;border:1px solid #d8dfe4;border-radius:6px;background:#f6f8f9;color:#53606b;font-size:9px;font-weight:900}
+.media-kind-tabs button.active{border-color:#17222d;background:#17222d;color:#fff}
+.media-video-thumb{position:relative;width:100%;height:100%;overflow:hidden;background:#090e14}
+.media-video-thumb video{display:block;width:100%;height:100%;object-fit:cover;background:#090e14}
+.media-video-thumb i{position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#dc151de8;color:#fff;font-size:12px;font-style:normal;padding-left:2px;box-shadow:0 4px 16px #0006}
+.media-picker .media-video-thumb{height:65px;border-radius:3px}
+.media-library-grid article.video-asset>div{background:#090e14}
+.selected-video{display:flex;align-items:center;gap:11px;margin:0 0 12px;padding:12px 14px;border:1px solid #bed8c8;border-radius:6px;background:#edf8f1;color:#235b39}
+.selected-video>span{width:32px;height:32px;display:grid;place-items:center;flex:none;border-radius:50%;background:#267a49;color:#fff;font-size:11px}
+.selected-video>div{min-width:0;display:flex;flex:1;flex-direction:column}.selected-video strong{font-size:10px}.selected-video small{margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#60806d;font-size:8px}
+.selected-video button{min-height:34px;padding:0 11px;border:1px solid #b9d3c3;border-radius:4px;background:#fff;color:#2d6743;font-size:8px;font-weight:900}
+.video-placement-note{margin:0 0 16px;padding:11px 13px;border-left:4px solid #17222d;background:#f2f5f7;color:#64707a;font-size:9px;line-height:1.55}.video-placement-note strong{color:#26333d}
+.studio-video-preview{margin:0 15px;padding:11px 13px;display:grid;grid-template-columns:28px 1fr;gap:2px 9px;align-items:center;border-radius:5px;background:#111923;color:#fff}.studio-video-preview>span{grid-row:1/3;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:var(--red);font-size:10px}.studio-video-preview strong{font-size:9px}.studio-video-preview small{margin:0!important;color:#aeb8c2!important;font-size:7px!important}
+
+/* Ana haber videosu kapaktan sonra, metinden önce ve 16:9 oranında gösterilir. */
+.article-primary-video{margin:28px 0;padding:14px;border-radius:8px;background:#0b1118;color:#fff;box-shadow:0 14px 36px #0b111822}
+.article-primary-video>div:first-child{display:flex;align-items:center;justify-content:space-between;padding:1px 2px 11px}.article-primary-video>div:first-child span{color:#ff6f76;font-size:9px;font-weight:900;letter-spacing:1.5px}.article-primary-video>div:first-child small{color:#95a0aa;font-size:8px}
+.article-video-player{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:5px;background:#000}
+
+@media(max-width:1100px){.media-library-search{flex-wrap:wrap}.media-kind-tabs{flex-basis:100%}}
+@media(max-width:760px){.media-upload-group{grid-template-columns:1fr}.media-kind-tabs{width:100%}.media-kind-tabs button{flex:1;min-height:44px;font-size:11px}.media-editor-actions>label,.media-editor-actions>button{min-height:44px;height:auto;font-size:10px}.selected-video{align-items:flex-start;flex-wrap:wrap}.selected-video button{margin-left:43px}.article-primary-video{margin:18px 0;padding:8px;border-radius:5px}.article-primary-video>div:first-child{padding:3px 3px 9px}}
