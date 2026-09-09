@@ -12,7 +12,7 @@ import {
   isValidContentUpdate,
   mergeContentRows,
 } from "../app/api/content/content-model.mjs";
-import { slugify, validateArticleInput } from "../db/article-model.mjs";
+import { markHeadingSelection, plainBodyToBlocks, promoteBlockSelectionToHeading, slugify, validateArticleInput } from "../db/article-model.mjs";
 import { hashPassword, validatePassword, verifyPassword } from "../db/auth-model.mjs";
 import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "../db/demo-content-model.mjs";
 import { defaultSettings, normalizePath, officialSocialAccounts, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
@@ -218,7 +218,11 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(body, /Kullanıcılar/);
   assert.match(body, /Yayın Stüdyosu/);
   assert.match(body, /Reklam Merkezi/);
-  const adminPanel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const [adminPanel, workflowStudio, globalStyles] = await Promise.all([
+    readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
   assert.match(adminPanel, /Kütüphanede ara/);
   assert.match(adminPanel, /Arşivde fotoğraf ara/);
   assert.match(adminPanel, /api\/media\?type=\$\{activeKind\}&q=/);
@@ -227,6 +231,10 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(adminPanel, /Kütüphanede video ara/);
   assert.match(adminPanel, /openMediaPicker\("video"\)/);
   assert.match(adminPanel, /Video, haberde kapak fotoğrafının altında ve haber metninden önce gösterilir/);
+  assert.match(adminPanel, /Seçili metni ara başlık yap/, "Yeni Haber editörü seçili metni ara başlığa çevirebilmeli");
+  assert.match(workflowStudio, /Seçileni ara başlık yap/, "Yayın Stüdyosu paragraf içindeki seçimi ayrı ara başlık bloğuna çevirebilmeli");
+  assert.match(workflowStudio, /className="block-heading-action" disabled=\{!canEdit\}/, "Yetkisiz kullanıcı ara başlık dönüşümünü çalıştıramamalı");
+  assert.match(globalStyles, /\.article-body h2,\.continuous-body h2\{[^}]*margin:42px 0 18px[^}]*color:#0b1117[^}]*font-weight:900/, "Ara başlıklar yayında üst-alt boşluklu, siyah ve kalın olmalı");
   assert.match(adminPanel, /<span>İşlem<\/span>/, "Haber arşivinde işlem sütunu açıkça adlandırılmalı");
   assert.match(
     adminPanel,
@@ -613,6 +621,34 @@ test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını
   assert.ok(invalid.errors.headlinePosition);
 });
 
+test("editör seçili metni güvenli biçimde kalın ve boşluklu ara başlığa dönüştürür", () => {
+  const source = "İlk paragraf burada biter. ARA BAŞLIK BURADA Son paragraf burada devam eder.";
+  const start = source.indexOf("ARA BAŞLIK BURADA");
+  const end = start + "ARA BAŞLIK BURADA".length;
+  const marked = markHeadingSelection(source, start, end);
+  assert.equal(marked.valid, true);
+  assert.equal(marked.value, "İlk paragraf burada biter.\n\n## ARA BAŞLIK BURADA\n\nSon paragraf burada devam eder.");
+  assert.deepEqual(plainBodyToBlocks(marked.value).map(({ type, content }) => ({ type, content })), [
+    { type: "paragraph", content: "İlk paragraf burada biter." },
+    { type: "heading", content: "ARA BAŞLIK BURADA" },
+    { type: "paragraph", content: "Son paragraf burada devam eder." },
+  ]);
+
+  const blocks = [{ id: "paragraph-1", type: "paragraph", content: source }];
+  const promoted = promoteBlockSelectionToHeading(blocks, "paragraph-1", start, end, (index) => `heading-part-${index}`);
+  assert.equal(promoted.valid, true);
+  assert.deepEqual(promoted.blocks.map(({ type, content }) => ({ type, content })), [
+    { type: "paragraph", content: "İlk paragraf burada biter." },
+    { type: "heading", content: "ARA BAŞLIK BURADA" },
+    { type: "paragraph", content: "Son paragraf burada devam eder." },
+  ]);
+
+  assert.equal(markHeadingSelection(source, 0, 0).valid, false, "Boş seçim reddedilmeli");
+  assert.equal(markHeadingSelection(source, start, source.length + 1).valid, false, "Metin sınırını aşan seçim reddedilmeli");
+  assert.equal(markHeadingSelection("A\nB", 0, 3).valid, false, "Birden fazla satır ara başlık yapılamamalı");
+  assert.equal(promoteBlockSelectionToHeading([{ id: "heading-1", type: "heading", content: "Başlık" }], "heading-1", 0, 6).valid, false, "Ara başlık yeniden bölünmemeli");
+});
+
 test("önceki sürümde sıra 100'de kalan manşetler bir kez görünür sıraya alınır", () => {
   const sliderDb = new Database(":memory:");
   sliderDb.exec(`
@@ -643,7 +679,7 @@ test("önceki sürümde sıra 100'de kalan manşetler bir kez görünür sıraya
 test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı tutar", async () => {
   const article = {
     slug: "", title: "Koza TV otomatik yayın akışı test haberi", spot: "Editör kontrolündeki yayın akışını doğrulayan ayrıntılı test spotu.",
-    body: "Bu içerik önce taslak olarak kaydedilir. Ardından editör tarafından kontrol edilerek yayına alınır. Böylece ziyaretçi sayfası yalnızca onaylanan haberi gösterir.",
+    body: "Bu içerik önce taslak olarak kaydedilir. Ardından editör tarafından kontrol edilerek yayına alınır.\n\n## HABERİN AYRINTILARI\n\nBöylece ziyaretçi sayfası yalnızca onaylanan haberi gösterir.",
     category: "Teknoloji", status: "draft", heroImage: "/news/studio.jpg", imageAlt: "Koza TV test haber masası", videoUrl: "", author: "Test Editörü", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0, homepagePlacement: "side", headlinePosition: "right-top",
   };
   const created = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(article) });
@@ -670,6 +706,7 @@ test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı
 
   const publicPage = await html(`/haber/${publishedBody.article.slug}`);
   assert.match(publicPage, /Koza TV otomatik yayın akışı test haberi/);
+  assert.match(publicPage, /<h2>HABERİN AYRINTILARI<\/h2>/, "Yeni Haber editöründeki işaretli ara başlık gerçek başlık olarak yayınlanmalı");
   assert.match(publicPage, /"@type":"NewsArticle"/);
   assert.match(publicPage, /Test Editörü/);
 });
@@ -1046,6 +1083,7 @@ test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve a
 
   assert.equal((page.match(/class="continuous-article"/g) ?? []).length, 5, "Tam beş önceki haber tam metin akışına eklenmeli");
   assert.match(page, /id="kesintisiz-okuma"/, "Kesintisiz akış doğrudan paylaşılabilir bir sayfa bölümüne sahip olmalı");
+  assert.doesNotMatch(page, /Bu haberden önce yayınlanan[^<]*haberi sayfadan ayrılmadan okumaya devam edin\./, "Kesintisiz okuma açıklaması ziyaretçiye gösterilmemeli");
   assert.equal((page.match(/data-ad-placement="section_inline"/g) ?? []).length, 6, "Ana haber ve takip eden her haber bittikten sonra ince reklam görünmeli");
   const positions = [1, 2, 3, 4, 5].map((index) => page.indexOf(`Kesintisiz önceki haber ${index}`));
   assert.ok(positions.every((position) => position > -1));

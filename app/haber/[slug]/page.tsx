@@ -78,7 +78,7 @@ export default async function ArticlePage({ params }: Props) {
     <section className="continuous-reading" id="kesintisiz-okuma" aria-label={`${article.category} kategorisinde kesintisiz okuma`}>
       <div className="continuous-wrap">
         <AdSlot placement="section_inline" className="ad-article-inline" />
-        {continuousArticles.length ? <div className="continuous-intro"><span>KESİNTİSİZ OKUMA</span><h2>{article.category} gündemi burada bitmiyor</h2><p>Bu haberden önce yayınlanan {continuousArticles.length} haberi sayfadan ayrılmadan okumaya devam edin.</p></div> : null}
+        {continuousArticles.length ? <div className="continuous-intro"><span>KESİNTİSİZ OKUMA</span><h2>{article.category} gündemi burada bitmiyor</h2></div> : null}
         {continuousArticles.map((item, index) => <ContinuousArticle article={item} index={index} total={continuousArticles.length} key={item.id} />)}
         <a className="continuous-category-more" href={categoryHref}>{article.category} kategorisindeki tüm haberler <span aria-hidden="true">→</span></a>
       </div>

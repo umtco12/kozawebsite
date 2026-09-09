@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import Database from "better-sqlite3";
-import { slugify } from "./article-model.mjs";
+import { plainBodyToBlocks, slugify } from "./article-model.mjs";
 import { hashPassword, verifyPassword } from "./auth-model.mjs";
 import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "./demo-content-model.mjs";
 import { defaultSettings, normalizePath, normalizeSchedule, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
@@ -221,7 +221,9 @@ export function listPreviousCategoryArticles(article: Pick<ArticleRecord, "id" |
 
 export function saveArticle(input: ArticleInput, actor: AdminUser | string = "Yayın Yönetmeni") {
   const db = getDb(); const now = Date.now(); const actorName = typeof actor === "string" ? actor : actor.fullName; const actorId = typeof actor === "string" ? null : actor.id; const slug = input.slug || slugify(input.title); const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt).getTime() : null; const publishedAt = input.status === "published" ? (input.publishedAt ? new Date(input.publishedAt).getTime() : now) : null;
-  const blocks = Array.isArray(input.blocks) && input.blocks.length ? input.blocks : [{ id: randomBytes(6).toString("hex"), type: "paragraph" as const, content: input.body }];
+  const blocks = Array.isArray(input.blocks) && input.blocks.length
+    ? input.blocks
+    : plainBodyToBlocks(input.body, () => randomBytes(6).toString("hex")) as ContentBlock[];
   const agencySourceId = Number.isInteger(Number(input.agencySourceId)) && Number(input.agencySourceId) > 0 ? Number(input.agencySourceId) : null;
   if (agencySourceId && !getNewsSource(agencySourceId)) throw new Error("AGENCY_SOURCE_NOT_FOUND");
   const existingWorkflow = input.id ? db.prepare("SELECT workflow_state AS workflowState,status,homepage_placement AS homepagePlacement FROM articles WHERE id=?").get(input.id) as { workflowState: WorkflowState; status: ArticleStatus; homepagePlacement: HomepagePlacement } | undefined : undefined;

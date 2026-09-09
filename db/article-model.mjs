@@ -6,6 +6,43 @@ export function slugify(value) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ı/g, "i").replace(/İ/g, "i").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 120);
 }
 
+export function markHeadingSelection(value, start, end) {
+  const source = String(value ?? "");
+  const from = Number(start);
+  const to = Number(end);
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to > source.length || from >= to) {
+    return { valid: false, value: source, error: "Önce ara başlık olacak metni seçin." };
+  }
+  const heading = source.slice(from, to).trim().replace(/^##\s+/, "");
+  if (heading.length < 2) return { valid: false, value: source, error: "Ara başlık en az 2 karakter olmalı." };
+  if (heading.length > 180 || /[\r\n]/.test(heading)) return { valid: false, value: source, error: "Ara başlık tek satır ve en fazla 180 karakter olmalı." };
+  const before = source.slice(0, from).trimEnd();
+  const after = source.slice(to).trimStart();
+  const prefix = before ? `${before}\n\n` : "";
+  const marker = `## ${heading}`;
+  const next = `${prefix}${marker}${after ? `\n\n${after}` : ""}`;
+  const selectionStart = prefix.length + 3;
+  return { valid: true, value: next, error: "", selectionStart, selectionEnd: selectionStart + heading.length };
+}
+
+export function plainBodyToBlocks(value, makeId = (index) => `plain-${index}`) {
+  const chunks = String(value ?? "").replace(/\r\n?/g, "\n").split(/\n\s*\n+/).map((chunk) => chunk.trim()).filter(Boolean);
+  return chunks.map((chunk, index) => {
+    const heading = /^##\s+([^\n]+)$/.exec(chunk);
+    return { id: makeId(index), type: heading ? "heading" : "paragraph", content: heading ? heading[1].trim() : chunk };
+  });
+}
+
+export function promoteBlockSelectionToHeading(blocks, blockId, start, end, makeId = (index) => `split-${index}`) {
+  const index = Array.isArray(blocks) ? blocks.findIndex((block) => block.id === blockId) : -1;
+  const block = index >= 0 ? blocks[index] : null;
+  if (!block || block.type !== "paragraph") return { valid: false, blocks, error: "Yalnız paragraf içindeki metin ara başlığa çevrilebilir." };
+  const marked = markHeadingSelection(block.content, start, end);
+  if (!marked.valid) return { valid: false, blocks, error: marked.error };
+  const parsed = plainBodyToBlocks(marked.value, (partIndex) => partIndex === 0 ? block.id : makeId(partIndex));
+  return { valid: true, blocks: [...blocks.slice(0, index), ...parsed, ...blocks.slice(index + 1)], error: "" };
+}
+
 export function validateArticleInput(payload) {
   const errors = {};
   if (!payload || typeof payload !== "object") return { valid: false, errors: { form: "Geçersiz veri" } };
