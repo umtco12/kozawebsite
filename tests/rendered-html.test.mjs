@@ -18,6 +18,7 @@ import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "../db/demo-content-mo
 import { defaultSettings, normalizePath, officialSocialAccounts, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
 import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseHomepageEntries, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
 import { selectHomepageLeads } from "../db/homepage-model.mjs";
+import { HOMEPAGE_ORDER_REPAIR_KEY, promoteHomepageArticle, repairUnrankedSliderArticles } from "../db/homepage-order.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { parseMynetMarketPayload } from "../app/api/piyasa/market-model.mjs";
 import { agencyUpdateDecision, applyCategoryMap, buildAgencyHeaders, normalizeAgencyPayload, renderAgencyDisclaimer, validateAgencySource } from "../db/agency-model.mjs";
@@ -612,6 +613,33 @@ test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını
   assert.ok(invalid.errors.headlinePosition);
 });
 
+test("önceki sürümde sıra 100'de kalan manşetler bir kez görünür sıraya alınır", () => {
+  const sliderDb = new Database(":memory:");
+  sliderDb.exec(`
+    CREATE TABLE site_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '');
+    CREATE TABLE articles (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL, homepage_placement TEXT NOT NULL, homepage_order INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+  `);
+  const insert = sliderDb.prepare("INSERT INTO articles (id,title,status,homepage_placement,homepage_order,updated_at) VALUES (?,?,?,?,?,?)");
+  insert.run(1, "Eski manşet 1", "published", "slider", 1, 10);
+  insert.run(2, "Eski manşet 2", "published", "slider", 2, 20);
+  insert.run(3, "Pisa'da Basamak Atladık", "published", "slider", 100, 100);
+  insert.run(4, "CHP 103 Yaşında", "published", "slider", 100, 200);
+  insert.run(5, "İstanbul'da Üç Plaja Kapatma Geldi", "published", "slider", 100, 300);
+  insert.run(6, "Yayında olmayan taslak", "draft", "slider", 100, 400);
+
+  assert.equal(repairUnrankedSliderArticles(sliderDb), 3);
+  const ordered = sliderDb.prepare("SELECT title,homepage_order AS homepageOrder FROM articles WHERE status='published' ORDER BY homepage_order,id").all();
+  assert.deepEqual(ordered.map((article) => article.title), ["İstanbul'da Üç Plaja Kapatma Geldi", "CHP 103 Yaşında", "Pisa'da Basamak Atladık", "Eski manşet 1", "Eski manşet 2"]);
+  assert.deepEqual(ordered.map((article) => article.homepageOrder), [1, 2, 3, 4, 5]);
+  assert.equal(sliderDb.prepare("SELECT value FROM site_settings WHERE key=?").get(HOMEPAGE_ORDER_REPAIR_KEY).value, "3");
+  assert.equal(repairUnrankedSliderArticles(sliderDb), 0, "Onarım ikinci çalışmada editör sırasını yeniden değiştirmemeli");
+
+  insert.run(7, "Yeni seçilen manşet", "published", "slider", 100, 500);
+  assert.equal(promoteHomepageArticle(sliderDb, 7, "slider"), true);
+  assert.equal(sliderDb.prepare("SELECT homepage_order AS homepageOrder FROM articles WHERE id=7").get().homepageOrder, 1);
+  sliderDb.close();
+});
+
 test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı tutar", async () => {
   const article = {
     slug: "", title: "Koza TV otomatik yayın akışı test haberi", spot: "Editör kontrolündeki yayın akışını doğrulayan ayrıntılı test spotu.",
@@ -638,11 +666,45 @@ test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı
   const publishedBody = { article: (await published.json()).articles.find((item) => item.id === createdBody.article.id) };
   assert.equal(publishedBody.article.status, "published");
   assert.ok(publishedBody.article.publishedAt);
+  assert.equal(publishedBody.article.homepageOrder, 1, "İş akışından yayınlanan ana sayfa haberi görünür ilk sıraya alınmalı");
 
   const publicPage = await html(`/haber/${publishedBody.article.slug}`);
   assert.match(publicPage, /Koza TV otomatik yayın akışı test haberi/);
   assert.match(publicPage, /"@type":"NewsArticle"/);
   assert.match(publicPage, /Test Editörü/);
+});
+
+test("Manşet seçilen yeni haberler görünür ilk beş slayda otomatik girer", async () => {
+  const titles = [
+    "Manşet görünürlük test haberi bir",
+    "Manşet görünürlük test haberi iki",
+    "Manşet görünürlük test haberi üç",
+  ];
+  const createdIds = [];
+  for (const title of titles) {
+    const response = await request("/api/articles", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "", title,
+        spot: `${title} için manşet sırası hatasını yakalayan yeterince açıklayıcı test spotu.`,
+        body: `${title} için hazırlanan haber metni manşet görünürlük davranışını doğrular. Haber manşet olarak seçildiğinde eski ilk beş kaydın arkasında kalmamalı ve ana sayfada hemen görünmelidir.`,
+        category: "Gündem", status: "published", heroImage: "/news/studio.jpg", imageAlt: `${title} görseli`, videoUrl: "", author: "Koza TV Haber Merkezi", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 1, homepagePlacement: "slider", homepageOrder: 100, headlinePosition: "left-bottom",
+      }),
+    });
+    assert.equal(response.status, 201);
+    const article = (await response.json()).article;
+    assert.equal(article.homepageOrder, 1, "Yeni manşet varsayılan sıra 100'de bırakılmamalı");
+    createdIds.push(article.id);
+  }
+
+  const records = await request("/api/articles?limit=100");
+  const articles = (await records.json()).articles.filter((article) => createdIds.includes(article.id));
+  const positions = new Map(articles.map((article) => [article.title, article.homepageOrder]));
+  assert.deepEqual(titles.map((title) => positions.get(title)), [3, 2, 1], "Son seçilen manşet en öne, önceki seçimler sırayla arkasına gelmeli");
+
+  const home = await html("/");
+  for (const title of titles) assert.match(home, new RegExp(title), `${title} görünür ilk beş manşette yer almalı`);
 });
 
 test("yalnız yönetici Şimdi yayınla ile haberi doğrudan yayına alabilir", async () => {
