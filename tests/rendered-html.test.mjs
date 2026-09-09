@@ -133,6 +133,10 @@ async function html(path) {
   return response.text();
 }
 
+function primaryArticleHtml(page) {
+  return page.split('<section class="continuous-reading"')[0];
+}
+
 test("ana sayfa Koza TV haber deneyimini sunar", async () => {
   const body = await html("/");
 
@@ -725,11 +729,11 @@ test("ajans haberi yalnız kendi kaynağına ait bilgilendirme ve kayıt kimliğ
     assert.equal(transition.status, 200);
   }
   await execFileAsync("sqlite3", [process.env.KOZA_DB_PATH, `UPDATE articles SET agency_source_id=${testAgencySourceId},agency_external_id='AJANS-TEST-42',agency_credit='Koza Test Ajansı',agency_received_at=${Date.now()} WHERE id=${record.id};`]);
-  const body = await html(`/haber/${record.slug}`);
+  const body = primaryArticleHtml(await html(`/haber/${record.slug}`));
   assert.match(body, /AJANS HABERİ/);
   assert.match(body, /Ajans kayıt no:[\s\S]{0,80}AJANS-TEST-42/);
   assert.match(body, /Koza Test Ajansı tarafından servis edilmiş/);
-  const normal = await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde");
+  const normal = primaryArticleHtml(await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde"));
   assert.doesNotMatch(normal, /Ajans kayıt no:/, "Koza TV'nin kendi haberinde blanket ajans metni gösterilmemeli");
 });
 
@@ -744,7 +748,7 @@ test("ajans kimliği, kredi ve kaynak bağlantısı haber bazında isteğe bağl
   assert.equal(detachedArticle.agencySourceId, null);
   assert.equal(detachedArticle.agencyExternalId, "");
   assert.equal(detachedArticle.sourceName, "");
-  const detachedPage = await html(`/haber/${testAgencyArticleSlug}`);
+  const detachedPage = primaryArticleHtml(await html(`/haber/${testAgencyArticleSlug}`));
   assert.doesNotMatch(detachedPage, /AJANS HABERİ|Ajans kayıt no:|class="source-box"/, "Ajans bağlantısı kaldırılan haberde zorunlu kaynak kutusu kalmamalı");
 
   const sourceResponse = await request("/api/sources");
@@ -753,7 +757,7 @@ test("ajans kimliği, kredi ve kaynak bağlantısı haber bazında isteğe bağl
   assert.equal(optionalDisclaimer.status, 200);
   const attached = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...detachedArticle, sourceName: "Koza Test Ajansı", agencySourceId: testAgencySourceId, agencyExternalId: "", agencyCredit: "", agencyEditorialLock: 1, status: "published" }) });
   assert.equal(attached.status, 200);
-  const attachedPage = await html(`/haber/${testAgencyArticleSlug}`);
+  const attachedPage = primaryArticleHtml(await html(`/haber/${testAgencyArticleSlug}`));
   assert.match(attachedPage, /AJANS HABERİ/);
   assert.doesNotMatch(attachedPage, /Ajans kayıt no:|otomatik olarak alınmıştır/, "Boş kayıt numarası ve açıklama ziyaretçiye zorla eklenmemeli");
 });
@@ -905,6 +909,89 @@ test("haber detay, kategori, sitemap, robots ve RSS keşfedilebilirlik yüzeyler
   assert.match(await robots.text(), /Disallow: \/admin/);
   const rss = await request("/rss.xml");
   assert.match(await rss.text(), /<rss version="2.0">/);
+});
+
+test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve aralarda ince reklam görünür", async () => {
+  const category = "Kesintisiz Okuma";
+  const baseTime = Date.UTC(2030, 0, 10, 12, 0, 0);
+  const articleInput = (title, publishedAt, overrides = {}) => ({
+    slug: "",
+    title,
+    spot: `${title} için hazırlanan yeterince açıklayıcı ve ayrıntılı haber spotu.`,
+    body: `${title} için hazırlanan haber metninin ilk paragrafı burada yer alıyor. Okurun kesintisiz haber akışını takip edebilmesi için ikinci cümle de yeterli uzunlukta sunuluyor.`,
+    category,
+    status: "published",
+    heroImage: "/news/gundem.jpg",
+    imageAlt: `${title} görsel açıklaması`,
+    videoUrl: "",
+    author: "Koza TV Haber Merkezi",
+    sourceName: "Koza TV",
+    sourceUrl: "",
+    seoTitle: "",
+    seoDescription: "",
+    isBreaking: 0,
+    isFeatured: 0,
+    homepagePlacement: "latest",
+    publishedAt,
+    ...overrides,
+  });
+
+  for (let index = 6; index >= 1; index -= 1) {
+    const response = await request("/api/articles", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(articleInput(`Kesintisiz önceki haber ${index}`, baseTime - index * 60_000)),
+    });
+    assert.equal(response.status, 201);
+  }
+
+  const otherCategory = await request("/api/articles", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(articleInput("Başka kategorideki haber görünmemeli", baseTime - 30_000, { category: "Başka Kategori" })),
+  });
+  assert.equal(otherCategory.status, 201);
+
+  const draft = await request("/api/articles", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(articleInput("Taslak haber akışta görünmemeli", baseTime - 20_000, { status: "draft" })),
+  });
+  assert.equal(draft.status, 201);
+
+  const current = await request("/api/articles", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(articleInput("Kesintisiz okuma ana test haberi", baseTime, {
+      blocks: [
+        { id: "continuous-paragraph", type: "paragraph", content: "Ana haber metni, arka arkaya gelen haberlerden önce eksiksiz biçimde okunur. Bu paragraf test için yeterli uzunlukta hazırlanmıştır." },
+        { id: "continuous-image-one", type: "image", content: "/news/studio.jpg", caption: "Birinci ek haber görseli" },
+        { id: "continuous-image-two", type: "image", content: "/news/ekonomi.jpg", caption: "İkinci ek haber görseli" },
+      ],
+    })),
+  });
+  assert.equal(current.status, 201);
+  const currentArticle = (await current.json()).article;
+  const page = await html(`/haber/${currentArticle.slug}`);
+
+  assert.equal((page.match(/class="continuous-article"/g) ?? []).length, 5, "Tam beş önceki haber tam metin akışına eklenmeli");
+  assert.match(page, /id="kesintisiz-okuma"/, "Kesintisiz akış doğrudan paylaşılabilir bir sayfa bölümüne sahip olmalı");
+  assert.equal((page.match(/data-ad-placement="section_inline"/g) ?? []).length, 6, "Ana haber ve takip eden her haber bittikten sonra ince reklam görünmeli");
+  const positions = [1, 2, 3, 4, 5].map((index) => page.indexOf(`Kesintisiz önceki haber ${index}`));
+  assert.ok(positions.every((position) => position > -1));
+  assert.deepEqual([...positions].sort((left, right) => left - right), positions, "Önceki haberler en yeniden eskiye sıralanmalı");
+  assert.doesNotMatch(page, /Kesintisiz önceki haber 6/, "Beş haberlik sınır aşılmamalı");
+  assert.doesNotMatch(page, /Başka kategorideki haber görünmemeli|Taslak haber akışta görünmemeli/);
+  assert.match(page, /Birinci ek haber görseli/);
+  assert.match(page, /İkinci ek haber görseli/, "Tek habere birden fazla içerik görseli eklenebilmeli");
+
+  const [pageSource, studioSource] = await Promise.all([
+    readFile(new URL("../app/haber/[slug]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(pageSource, /listPreviousCategoryArticles\(article, 5\)/);
+  assert.match(studioSource, /image: "Görsel"/);
+  assert.match(studioSource, /\+ \{blockLabels\[type\]\}/, "Yayın Stüdyosu sınırsız ek görsel bloğu ekleme yolunu korumalı");
 });
 
 test("içerik modeli manşet ve yazar varsayılanlarını sağlar", () => {
@@ -1849,6 +1936,9 @@ test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async (
   assert.match(slider, /Otomatik geçişi sürdür/);
   assert.doesNotMatch(slider, /KOZA TV MANŞET/, "Gereksiz manşet etiketi kaldırılmalı");
   assert.doesNotMatch(slider, /<p>\{item\.summary\}<\/p>/, "Manşet görselinin üstünde spot/alt yazı gösterilmemeli");
+  assert.doesNotMatch(slider, /lead-eyebrow|\{item\.category\}/, "Sliderda kategori etiketi bulunmamalı");
+  assert.doesNotMatch(slider, /lead-meta|\{item\.published|Haberi oku/, "Sliderda tarih ve okuma butonu bulunmamalı");
+  assert.doesNotMatch(slider, /breaking-ribbon-hero/, "Slider görselinde Son Dakika şeridi bulunmamalı");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   for (const position of ["left-top", "left-bottom", "right-top", "right-bottom"]) {
     assert.match(slider, new RegExp(`lead-copy-\\$\\{position\\}`), "Manşet metni seçilen köşe sınıfını kullanmalı");
@@ -1865,7 +1955,9 @@ test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async (
   assert.match(slider, /suppressClickRef/, "Kaydırma sonrasında haber bağlantısı yanlışlıkla açılmamalı");
   assert.match(css, /\.home \.lead\{[^}]*touch-action:pan-y/, "Mobil dikey sayfa kaydırması korunmalı");
   assert.match(css, /\.home \.lead-copy\{z-index:3;[^}]*opacity:1\}/, "Manşet metni animasyon beklemeden görünür olmalı");
-  assert.match(css, /font-size:clamp\(34px,calc\(3\.25vw - 2px\),50px\)/, "Masaüstü manşet başlığı tam 2 px küçülmeli");
+  assert.match(css, /font:750 clamp\(28px,2\.55vw,39px\)\/1\.08/, "Manşet başlığı resmi kapatmayacak ölçü ve satır aralığında olmalı");
+  assert.match(css, /letter-spacing:-\.75px/, "Manşet başlığındaki geniş harf aralığı sıkılaştırılmalı");
+  assert.doesNotMatch(css, /\.home \.lead-copy h1 a:hover\{text-decoration:underline/, "Başlık üzerine gelince dikkat dağıtan alt çizgi oluşmamalı");
   assert.doesNotMatch(css, /\.home \.lead-shade\{[^}]*rgba\([^)]*,\.96\)/, "Manşetteki ağır yüzde 96 karartma kaldırılmalı");
   const admin = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
   assert.match(admin, /Manşet yazısı konumu/, "Editörde dört köşeli manşet yerleşimi seçilebilmeli");
@@ -1947,7 +2039,7 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
   const flowItems = home.match(/class="flow-item/g) ?? [];
   assert.equal(flowItems.length, 6, "Aşağı taşınan Günün Akışı altı güncel gelişme göstermeli");
   assert.match(home, /class="latest-more"[^>]*><span>Tüm son dakika haberleri<\/span>/, "Çağrı bağlantısı tek bir anlamlı metin taşımalı");
-  assert.match(home, /class="breaking-ribbon/, "Admin tarafından işaretlenen haber kırmızı şerit taşımalı");
+  assert.doesNotMatch(home, /class="breaking-ribbon breaking-ribbon-hero/, "Son dakika işareti slider görselini kapatmamalı");
 
   const breakingArticle = await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde");
   assert.match(breakingArticle, /class="article-breaking"/, "Son dakika haberi detay bandı taşımalı");

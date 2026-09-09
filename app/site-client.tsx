@@ -221,14 +221,8 @@ export function LeadSlider({ items }: { items: Lead[] }) {
         ))}
       </div>
       <div className="lead-shade" />
-      {item.isBreaking && <b className="breaking-ribbon breaking-ribbon-hero">SON DAKİKA</b>}
       <div className={`lead-copy lead-copy-${position}`} key={item.href} aria-live={pausedByUser ? "polite" : "off"}>
-        <div className="lead-eyebrow"><span>{item.category}</span></div>
         <h1><a href={item.href ?? "/son-dakika"}>{item.title}</a></h1>
-        <div className="lead-meta">
-          <time>{item.published ?? "Koza TV Haber Merkezi"}</time>
-          <a className="lead-read" href={item.href ?? "/son-dakika"}>Haberi oku <span aria-hidden="true">↗</span></a>
-        </div>
       </div>
       <div className="slider-dock">
         <div className="slider-count">

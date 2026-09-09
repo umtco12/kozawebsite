@@ -202,6 +202,17 @@ function publishDueArticles() { const now = Date.now(); getDb().prepare("UPDATE 
 export function listPublishedArticles(limit = 30) { publishDueArticles(); const safeLimit = Math.min(Math.max(limit, 1), 100); return (getDb().prepare("SELECT * FROM articles WHERE status='published' ORDER BY is_featured DESC,homepage_order ASC,published_at DESC LIMIT ?").all(safeLimit) as Record<string, unknown>[]).map(mapArticle); }
 export function listHomepageArticles(placement: HomepagePlacement, limit = 10) { publishDueArticles(); const safeLimit = Math.min(Math.max(limit, 1), 50); return (getDb().prepare("SELECT * FROM articles WHERE status='published' AND homepage_placement=? ORDER BY homepage_order ASC,published_at DESC LIMIT ?").all(placement, safeLimit) as Record<string, unknown>[]).map(mapArticle); }
 export function getArticleBySlug(slug: string) { publishDueArticles(); const row = getDb().prepare("SELECT a.*,s.disclaimer AS agency_disclaimer,EXISTS(SELECT 1 FROM agency_items ai WHERE ai.article_id=a.id AND ai.status='pending_update') AS agency_update_pending FROM articles a LEFT JOIN news_sources s ON s.id=a.agency_source_id WHERE a.slug=? AND a.status='published'").get(slug) as Record<string, unknown> | undefined; return row ? mapArticle(row) : null; }
+export function listPreviousCategoryArticles(article: Pick<ArticleRecord, "id" | "category" | "publishedAt">, limit = 5) {
+  publishDueArticles();
+  const safeLimit = Math.min(Math.max(limit, 1), 10);
+  const publishedAt = article.publishedAt ?? Date.now();
+  const rows = getDb().prepare(`SELECT a.*,s.disclaimer AS agency_disclaimer FROM articles a
+    LEFT JOIN news_sources s ON s.id=a.agency_source_id
+    WHERE a.status='published' AND a.category=? AND a.published_at IS NOT NULL
+      AND (a.published_at < ? OR (a.published_at = ? AND a.id < ?))
+    ORDER BY a.published_at DESC,a.id DESC LIMIT ?`).all(article.category, publishedAt, publishedAt, article.id, safeLimit) as Record<string, unknown>[];
+  return rows.map(mapArticle);
+}
 
 export function saveArticle(input: ArticleInput, actor: AdminUser | string = "Yayın Yönetmeni") {
   const db = getDb(); const now = Date.now(); const actorName = typeof actor === "string" ? actor : actor.fullName; const actorId = typeof actor === "string" ? null : actor.id; const slug = input.slug || slugify(input.title); const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt).getTime() : null; const publishedAt = input.status === "published" ? (input.publishedAt ? new Date(input.publishedAt).getTime() : now) : null;
