@@ -1052,6 +1052,7 @@ test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve a
   assert.deepEqual([...positions].sort((left, right) => left - right), positions, "Önceki haberler en yeniden eskiye sıralanmalı");
   assert.doesNotMatch(page, /Kesintisiz önceki haber 6/, "Beş haberlik sınır aşılmamalı");
   assert.doesNotMatch(page, /Başka kategorideki haber görünmemeli|Taslak haber akışta görünmemeli/);
+  assert.doesNotMatch(page, /Fotoğraf:/, "Kapak görsellerinin altında otomatik dosya adı ve kaynak kredisi gösterilmemeli");
   assert.match(page, /Birinci ek haber görseli/);
   assert.match(page, /İkinci ek haber görseli/, "Tek habere birden fazla içerik görseli eklenebilmeli");
 
