@@ -11,7 +11,7 @@ const actionRoles = {
   request_changes: ["admin", "publisher", "editor"],
   approve: ["admin", "publisher"],
   reject: ["admin", "publisher", "editor"],
-  publish: ["admin", "publisher"],
+  publish: ["admin"],
   withdraw: ["admin", "publisher"],
   correction: ["admin", "publisher", "editor"],
   reopen: ["admin", "publisher", "editor"],

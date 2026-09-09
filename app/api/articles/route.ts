@@ -27,7 +27,7 @@ async function persist(request: Request) {
   if (auth.response) return auth.response;
   const existing = payload.id ? getAdminArticle(Number(payload.id)) : null;
   if (payload.id && !existing) return Response.json({ error: "Haber bulunamadı." }, { status: 404 });
-  if (!canWriteStatus(auth.user!.role, payload.status)) return Response.json({ error: "Yayınlama ve planlama yalnızca yayın yönetmeni veya yönetici tarafından yapılabilir." }, { status: 403 });
+  if (!canWriteStatus(auth.user!.role, payload.status)) return Response.json({ error: "Yayınlama ve planlama yalnızca yönetici tarafından yapılabilir." }, { status: 403 });
   if (existing && (!canAccessArticle(auth.user!.role, auth.user!.id, existing) || !canEditArticle(auth.user!.role, auth.user!.id, existing))) return Response.json({ error: auth.user!.role === "reporter" ? "Yalnızca size atanmış taslak haberleri düzenleyebilirsiniz." : "Yayındaki haber yalnızca yayın yönetmeni veya yönetici tarafından değiştirilebilir." }, { status: 403 });
   const agencyChanged = existing ? Number(payload.agencySourceId || 0) !== Number(existing.agencySourceId || 0) || String(payload.agencyExternalId || "") !== existing.agencyExternalId || String(payload.agencyCredit || "") !== existing.agencyCredit || Number(Boolean(payload.agencyEditorialLock)) !== Number(Boolean(existing.agencyEditorialLock)) : Boolean(payload.agencySourceId || payload.agencyExternalId || payload.agencyCredit);
   if (agencyChanged && !canManageAgencyMetadata(auth.user!.role)) return Response.json({ error: "Ajans bağlantısı ve kayıt bilgilerini yalnızca editör, yayın yönetmeni veya yönetici değiştirebilir." }, { status: 403 });
@@ -40,7 +40,7 @@ async function persist(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("EDIT_CONFLICT")) return Response.json({ error: "Haber başka bir editör tarafından güncellendi. Son sürümü açıp değişikliklerinizi karşılaştırın.", code: "EDIT_CONFLICT" }, { status: 409 });
-    if (message.includes("WORKFLOW_APPROVAL_REQUIRED")) return Response.json({ error: "Haber yayın yönetmeni onayı olmadan yayınlanamaz veya planlanamaz.", code: "WORKFLOW_APPROVAL_REQUIRED" }, { status: 409 });
+    if (message.includes("WORKFLOW_APPROVAL_REQUIRED")) return Response.json({ error: "Haber yalnızca yönetici tarafından yayınlanabilir veya planlanabilir.", code: "WORKFLOW_APPROVAL_REQUIRED" }, { status: 409 });
     if (message.includes("AGENCY_SOURCE_NOT_FOUND")) return Response.json({ error: "Seçilen ajans bağlantısı bulunamadı." }, { status: 400 });
     if (message.includes("UNIQUE constraint failed")) return Response.json({ error: "Bu başlık veya URL adıyla bir haber zaten var" }, { status: 409 });
     return Response.json({ error: "Haber kaydedilemedi" }, { status: 503 });

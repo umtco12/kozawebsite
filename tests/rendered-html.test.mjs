@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -213,6 +213,21 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(body, /Kullanıcılar/);
   assert.match(body, /Yayın Stüdyosu/);
   assert.match(body, /Reklam Merkezi/);
+  const adminPanel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  assert.match(adminPanel, /Kütüphanede ara/);
+  assert.match(adminPanel, /Arşivde fotoğraf ara/);
+  assert.match(adminPanel, /api\/media\?q=/);
+  assert.match(adminPanel, /Dosya adı, açıklama veya ajans/);
+  assert.match(
+    await readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    /media-search input,.media-library-search input\{height:44px;font-size:16px\}/,
+    "Mobil fotoğraf araması okunur olmalı ve alan odağında yakınlaştırma tetiklememeli",
+  );
+  assert.doesNotMatch(
+    adminPanel,
+    /imageAlt: current\.imageAlt \|\| item\.altText/,
+    "Yeni fotoğraf seçildiğinde önceki fotoğrafın açıklaması korunmamalı",
+  );
   assert.match(await readFile(new URL("../app/admin/agency-sources.tsx", import.meta.url), "utf8"), /Ajans Akış Merkezi/);
   const advertisingCenter = await readFile(new URL("../app/admin/advertising-center.tsx", import.meta.url), "utf8");
   assert.match(advertisingCenter, /“REKLAM” etiketi otomatik eklenir ve kaldırılamaz/);
@@ -513,8 +528,9 @@ test("ajans güncellemeleri editör korumasını ve rol sınırlarını gözetir
   assert.equal(canEditArticle("reporter", 42, assigned), true);
   assert.equal(canEditArticle("editor", 7, { ...assigned, status: "published", workflowState: "published" }), false);
   assert.equal(canWriteStatus("editor", "scheduled"), false);
-  assert.equal(canWriteStatus("publisher", "scheduled"), true);
-  assert.equal(canPublish("publisher"), true);
+  assert.equal(canWriteStatus("publisher", "scheduled"), false);
+  assert.equal(canPublish("publisher"), false);
+  assert.equal(canPublish("admin"), true);
   assert.equal(canManageAgencyMetadata("editor"), true);
   assert.equal(canManageAgencyMetadata("reporter"), false);
 });
@@ -592,8 +608,6 @@ test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı
   const hidden = await notFoundHtml(`/haber/${createdBody.article.slug}`);
   assert.match(hidden, /bulunamadı/, "Yayınlanmamış haber ziyaretçiye gösterilmemeli");
 
-  const directPublish = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...createdBody.article, status: "published" }) });
-  assert.equal(directPublish.status, 409, "Onaysız haber doğrudan yayınlanamamalı");
   for (const action of ["submit_review", "approve", "publish"]) {
     const transition = await request("/api/editorial", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "workflow", articleId: createdBody.article.id, action }) });
     assert.equal(transition.status, 200, `${action} geçişi tamamlanmalı`);
@@ -607,6 +621,46 @@ test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı
   assert.match(publicPage, /Koza TV otomatik yayın akışı test haberi/);
   assert.match(publicPage, /"@type":"NewsArticle"/);
   assert.match(publicPage, /Test Editörü/);
+});
+
+test("yalnız yönetici Şimdi yayınla ile haberi doğrudan yayına alabilir", async () => {
+  const article = {
+    slug: "", title: "Yönetici doğrudan yayınlama regresyon haberi", spot: "Yönetici düğmesinin ek onay adımı olmadan çalıştığını doğrulayan ayrıntılı test spotu.",
+    body: "Bu test haberi, yönetici rolündeki kullanıcının Şimdi yayınla düğmesine bastığında haberin doğrudan yayınlanmasını doğrular. Diğer roller aynı işlemi yapamaz.",
+    category: "Gündem", status: "review", heroImage: "/news/studio.jpg", imageAlt: "Koza TV yönetici yayın testi", videoUrl: "", author: "Koza TV Haber Merkezi", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0,
+  };
+  const created = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(article) });
+  assert.equal(created.status, 201);
+  const draft = (await created.json()).article;
+  assert.equal(draft.workflowState, "editor_review");
+  const published = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...draft, status: "published" }) });
+  assert.equal(published.status, 200);
+  const publishedArticle = (await published.json()).article;
+  assert.equal(publishedArticle.status, "published");
+  assert.equal(publishedArticle.workflowState, "published");
+  assert.match(await html(`/haber/${publishedArticle.slug}`), /Yönetici doğrudan yayınlama regresyon haberi/);
+
+  const publisher = await createRoleSession("publisher", "DogrudanYayinYetkisi");
+  const forbidden = await anonymousRequest("/api/articles", { method: "POST", headers: { "content-type": "application/json", cookie: publisher.cookie }, body: JSON.stringify({ ...article, title: "Yayın yönetmeni doğrudan yayınlayamaz", slug: "", status: "published" }) });
+  assert.equal(forbidden.status, 403);
+  assert.match((await forbidden.json()).error, /yalnızca yönetici/i);
+
+  const publisherDraftResponse = await anonymousRequest("/api/articles", { method: "POST", headers: { "content-type": "application/json", cookie: publisher.cookie }, body: JSON.stringify({ ...article, title: "Yayın stüdyosu yönetici yetki testi", slug: "", status: "draft" }) });
+  assert.equal(publisherDraftResponse.status, 201);
+  const publisherDraft = (await publisherDraftResponse.json()).article;
+  for (const action of ["submit_review", "approve"]) {
+    const transition = await request("/api/editorial", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "workflow", articleId: publisherDraft.id, action }) });
+    assert.equal(transition.status, 200);
+  }
+  const forbiddenWorkflowPublish = await anonymousRequest("/api/editorial", { method: "POST", headers: { "content-type": "application/json", cookie: publisher.cookie }, body: JSON.stringify({ type: "workflow", articleId: publisherDraft.id, action: "publish" }) });
+  assert.equal(forbiddenWorkflowPublish.status, 403);
+
+  const [panelSource, studioSource] = await Promise.all([
+    readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(panelSource, /const canPublish = currentUser\.role === "admin";/);
+  assert.match(studioSource, /const canPublish = role === "admin";/);
 });
 
 test("profesyonel editoryal akış revizyon, yorum ve işlem geçmişi tutar", async () => {
@@ -777,6 +831,13 @@ test("görseller kalıcı medya alanına doğrulanarak yüklenir ve yeniden sunu
   assert.equal(libraryBody.stats.total, 1);
   assert.equal(libraryBody.stats.totalBytes, png.length);
   assert.equal(libraryBody.stats.quotaBytes, 100);
+  const searchedByDescription = await request("/api/media?q=Koza%20TV%20test%20g%C3%B6rseli");
+  assert.equal(searchedByDescription.status, 200);
+  assert.equal((await searchedByDescription.json()).media[0].originalName, "koza-test.png");
+  const searchedByCredit = await request("/api/media?q=Koza%20TV");
+  assert.equal((await searchedByCredit.json()).media.length, 1);
+  const noMediaMatches = await request("/api/media?q=bulunmayan-fotograf");
+  assert.equal((await noMediaMatches.json()).media.length, 0, "Arama bütün arşivde yalnız eşleşen fotoğrafları döndürmeli");
   const quotaForm = new FormData();
   quotaForm.set("file", new Blob([png], { type: "image/png" }), "ikinci.png");
   const quotaExceeded = await request("/api/media", { method: "POST", body: quotaForm });
@@ -1033,6 +1094,8 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güve
   assert.match(deployScript, /trap rollback ERR/);
   assert.match(deployScript, /systemctl restart kozatv\.service/);
   assert.match(deployScript, /api\/auth\/me/);
+  assert.match(deployScript, /KOZA_RELEASE_KEEP_COUNT=4/);
+  assert.match(deployScript, /\/usr\/local\/sbin\/kozatv-prune-releases/);
   assert.match(workflow, /admin\/giris/);
   assert.match(workflow, /api\/auth\/me/);
   assert.match(
@@ -1051,14 +1114,53 @@ test("SQLite ve medya yedeği üretilir, checksum ve geri yükleme ön kontrolü
   const root = await mkdtemp(join(tmpdir(), "koza-backup-test-"));
   const data = join(root, "data"); const backups = join(root, "backups");
   await mkdir(join(data, "media"), { recursive: true });
+  const expired = join(backups, "daily", "eski-yedek");
+  await mkdir(expired, { recursive: true });
+  await writeFile(join(expired, "yarim-kalan.tar.gz"), "gecersiz");
+  const expiredAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+  await utimes(expired, expiredAt, expiredAt);
   await writeFile(join(data, "media", "sample.txt"), "Koza medya yedek testi");
   await execFileAsync("sqlite3", [join(data, "koza.sqlite"), "CREATE TABLE news(id INTEGER PRIMARY KEY,title TEXT); INSERT INTO news(title) VALUES('Koza test');"]);
-  await execFileAsync("bash", [new URL("deployment/hetzner/kozatv-backup.sh", projectRoot).pathname], { env: { ...process.env, KOZA_DATA_DIR: data, KOZA_BACKUP_DIR: backups } });
-  const [stamp] = await readdir(join(backups, "daily")); const snapshot = join(backups, "daily", stamp);
+  const backupScript = new URL("deployment/hetzner/kozatv-backup.sh", projectRoot).pathname;
+  await execFileAsync("bash", [backupScript], { env: { ...process.env, KOZA_DATA_DIR: data, KOZA_BACKUP_DIR: backups } });
+  const daily = await readdir(join(backups, "daily"));
+  assert.equal(daily.includes("eski-yedek"), false, "Süresi dolan yedek yeni arşivden önce temizlenmeli");
+  const [stamp] = daily; const snapshot = join(backups, "daily", stamp);
   assert.equal((await stat(join(snapshot, "koza.sqlite"))).isFile(), true);
   assert.equal((await stat(join(snapshot, "media.tar.gz"))).isFile(), true);
   const verified = await execFileAsync("bash", [new URL("deployment/hetzner/kozatv-restore.sh", projectRoot).pathname, snapshot], { env: { ...process.env, KOZA_RESTORE_VERIFY_ONLY: "1" } });
   assert.match(verified.stdout, /geri yüklemeye hazır/);
+  const source = await readFile(backupScript, "utf8");
+  assert.ok(source.indexOf('find "$backup_root/daily"') < source.indexOf('mkdir "$daily_dir"'), "Yedek temizliği yeni arşivden önce çalışmalı");
+  assert.match(source, /trap 'rm -rf -- "\$daily_dir"' ERR/, "Yarım kalan günlük yedek hata halinde kaldırılmalı");
+});
+
+test("başarılı dağıtım aktif sürümle birlikte yalnız son dört sürümü korur", async () => {
+  const root = await mkdtemp(join(tmpdir(), "koza-release-retention-"));
+  const releases = join(root, "releases");
+  const current = join(root, "current");
+  await mkdir(releases, { recursive: true });
+
+  const names = ["1", "2", "3", "4", "5", "6"].map((digit) => digit.repeat(40));
+  for (const [index, name] of names.entries()) {
+    const directory = join(releases, name);
+    await mkdir(directory);
+    const timestamp = new Date(Date.UTC(2026, 7, index + 1));
+    await utimes(directory, timestamp, timestamp);
+  }
+  await symlink(join(releases, names[0]), current);
+
+  const script = new URL("deployment/hetzner/prune-releases.sh", projectRoot).pathname;
+  await assert.rejects(
+    execFileAsync("bash", [script], { env: { ...process.env, KOZA_RELEASES_DIR: releases, KOZA_CURRENT_LINK: current, KOZA_RELEASE_KEEP_COUNT: "1" } }),
+    /2 ile 20/,
+  );
+  assert.equal((await readdir(releases)).length, 6, "Geçersiz sınır hiçbir sürümü silmemeli");
+
+  const pruned = await execFileAsync("bash", [script], { env: { ...process.env, KOZA_RELEASES_DIR: releases, KOZA_CURRENT_LINK: current, KOZA_RELEASE_KEEP_COUNT: "4" } });
+  assert.match(pruned.stdout, /2 eski sürüm kaldırıldı/);
+  assert.deepEqual((await readdir(releases)).sort(), [names[0], names[3], names[4], names[5]].sort());
+  assert.equal((await stat(join(releases, names[0]))).isDirectory(), true, "Aktif sürüm eski olsa bile korunmalı");
 });
 
 test("ziyaretçi sitesinde tıklanabilir tüm iç bağlantılar gerçek sayfaya gider", async () => {

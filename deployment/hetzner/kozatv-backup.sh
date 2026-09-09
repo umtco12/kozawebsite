@@ -6,7 +6,20 @@ data_dir="${KOZA_DATA_DIR:-/srv/kozatv/data}"
 backup_root="${KOZA_BACKUP_DIR:-/srv/kozatv/backups}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 daily_dir="$backup_root/daily/$stamp"
-mkdir -p "$daily_dir"
+mkdir -p "$backup_root/daily" "$backup_root/weekly" "$backup_root/monthly"
+
+# Süresi dolan kopyalar yeni arşivden önce temizlenir. Aksi halde dolu disk yeni yedeği
+# başlatamaz ve betik hiçbir zaman alttaki saklama temizliğine ulaşamaz.
+find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf -- {} +
+find "$backup_root/weekly" -mindepth 1 -maxdepth 1 -type d -mtime +35 -exec rm -rf -- {} + 2>/dev/null || true
+find "$backup_root/monthly" -mindepth 1 -maxdepth 1 -type d -mtime +370 -exec rm -rf -- {} + 2>/dev/null || true
+
+if [[ -e "$daily_dir" ]]; then
+  echo "Bu zaman damgasına ait yedek zaten var: $daily_dir" >&2
+  exit 2
+fi
+mkdir "$daily_dir"
+trap 'rm -rf -- "$daily_dir"' ERR
 mkdir -p "$data_dir/media"
 
 sqlite3 "$data_dir/koza.sqlite" ".timeout 10000" ".backup '$daily_dir/koza.sqlite'"
@@ -14,6 +27,7 @@ sqlite3 "$daily_dir/koza.sqlite" "PRAGMA quick_check" | grep -qx ok
 tar --create --gzip --file "$daily_dir/media.tar.gz" --directory "$data_dir" media
 sha256sum "$daily_dir/koza.sqlite" "$daily_dir/media.tar.gz" > "$daily_dir/SHA256SUMS"
 printf '{"createdAt":"%s","database":"koza.sqlite","media":"media.tar.gz"}\n' "$stamp" > "$daily_dir/manifest.json"
+trap - ERR
 
 if [[ "$(date -u +%u)" == "7" ]]; then
   mkdir -p "$backup_root/weekly"
@@ -23,10 +37,6 @@ if [[ "$(date -u +%d)" == "01" ]]; then
   mkdir -p "$backup_root/monthly"
   cp -a "$daily_dir" "$backup_root/monthly/$stamp"
 fi
-
-find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf -- {} +
-find "$backup_root/weekly" -mindepth 1 -maxdepth 1 -type d -mtime +35 -exec rm -rf -- {} + 2>/dev/null || true
-find "$backup_root/monthly" -mindepth 1 -maxdepth 1 -type d -mtime +370 -exec rm -rf -- {} + 2>/dev/null || true
 
 if [[ -n "${KOZA_BACKUP_REMOTE:-}" ]]; then
   rsync -a --delete "$backup_root/" "$KOZA_BACKUP_REMOTE/"

@@ -48,6 +48,10 @@ for attempt in {1..20}; do
     && [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8201/api/auth/me)" == "401" ]] \
     && [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8201/admin)" =~ ^30[2378]$ ]]; then
     trap - ERR
+    KOZA_RELEASES_DIR="$base_dir/releases" \
+      KOZA_CURRENT_LINK="$current_link" \
+      KOZA_RELEASE_KEEP_COUNT=4 \
+      /usr/local/sbin/kozatv-prune-releases
     echo "Koza TV staging sürümü aktif: $release_id"
     exit 0
   fi

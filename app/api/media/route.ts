@@ -5,7 +5,7 @@ import { authorizeAdmin } from "../write-access";
 export const dynamic = "force-dynamic";
 
 function quotaBytes() { return Number(process.env.KOZA_MEDIA_QUOTA_BYTES ?? 10 * 1024 * 1024 * 1024); }
-export async function GET(request: Request) { const auth = authorizeAdmin(request, ["admin", "publisher", "editor", "reporter", "viewer"]); if (auth.response) return auth.response; return Response.json({ media: listMediaAssets(), stats: { ...getMediaStats(), quotaBytes: quotaBytes() } }); }
+export async function GET(request: Request) { const auth = authorizeAdmin(request, ["admin", "publisher", "editor", "reporter", "viewer"]); if (auth.response) return auth.response; const url = new URL(request.url); return Response.json({ media: listMediaAssets({ query: url.searchParams.get("q") ?? "", limit: Number(url.searchParams.get("limit") || 80) }), stats: { ...getMediaStats(), quotaBytes: quotaBytes() } }); }
 
 export async function POST(request: Request) {
   const auth = authorizeAdmin(request, ["admin", "publisher", "editor", "reporter"]);

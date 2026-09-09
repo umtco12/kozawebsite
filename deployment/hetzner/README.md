@@ -29,8 +29,10 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 - Başarılı kaynak kodu yalnız SSH host anahtarı doğrulanarak `koza-deploy` kullanıcısına aktarılır.
 - `koza-deploy`, `/srv/kozatv` yolunu geçebilmek için yalnız `kozatv` grubuna üyedir; `incoming` dizininin sahibi olmaya devam eder.
 - Root tarafından sahip olunan `/usr/local/sbin/kozatv-deploy` yeni sürümü sunucuda tekrar test eder.
+- `deploy.sh`, `prune-releases.sh` ve `kozatv-backup.sh` dosyaları sırasıyla `/usr/local/sbin/kozatv-deploy`, `/usr/local/sbin/kozatv-prune-releases` ve `/usr/local/sbin/kozatv-backup` yollarına root sahipli ve çalıştırılabilir olarak kurulmalıdır.
 - `koza-deploy` yalnızca bu doğrulamalı deploy komutunu parolasız çalıştırabilir; genel root yetkisi yoktur.
 - Aktif sürüm sembolik bağlantıyla atomik değiştirilir; sağlık kontrolü başarısızsa önceki sürüme dönülür.
+- Başarılı sağlık kontrolünden sonra aktif sürüm dahil en yeni dört sürüm korunur; daha eski doğrulanmış commit dizinleri otomatik kaldırılır.
 - GitHub'da yalnız `HETZNER_SSH_KEY` repository secret'ı gerekir. Özel anahtar repoya yazılmaz.
 - Staging adresi `http://46.225.169.52/` olarak kabul edilir.
 
@@ -44,6 +46,7 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 
 - `kozatv-backup.timer` her gece WAL uyumlu SQLite snapshot'ı ve medya arşivi üretir; SHA-256 doğrulaması yapar.
 - Günlük kopyalar 7 gün, haftalık kopyalar 35 gün, aylık kopyalar 370 gün tutulur.
+- Süresi dolan kopyalar yeni arşiv oluşturulmadan önce temizlenir; yarım kalan günlük arşiv hata halinde otomatik kaldırılır.
 - `KOZA_BACKUP_REMOTE` tanımlanırsa yedek ağacı `rsync` ile ikinci hedefe aktarılır.
 - `kozatv-restore /srv/kozatv/backups/daily/TARIH` doğrulama, işlem öncesi snapshot, geri yükleme ve uygulama sağlık kontrolünü tek komutta yürütür.
 - Aylık geri yüklenebilirlik testi; beş dakikalık disk, servis ve SQLite sağlık kontrolü systemd timer'larıyla çalışır.

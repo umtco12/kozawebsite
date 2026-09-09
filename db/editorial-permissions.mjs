@@ -1,4 +1,5 @@
-const publishingRoles = new Set(["admin", "publisher"]);
+const publishingRoles = new Set(["admin"]);
+const seniorEditorialRoles = new Set(["admin", "publisher"]);
 const reviewingRoles = new Set(["admin", "publisher", "editor"]);
 
 export function canPublish(role) {
@@ -16,7 +17,7 @@ export function canAccessArticle(role, userId, article) {
 
 export function canEditArticle(role, userId, article) {
   if (role === "viewer") return false;
-  if (publishingRoles.has(role)) return true;
+  if (seniorEditorialRoles.has(role)) return true;
   if (["published", "scheduled"].includes(article?.status) || ["published", "approved"].includes(article?.workflowState)) return false;
   if (role === "editor") return true;
   return role === "reporter" && canAccessArticle(role, userId, article);
