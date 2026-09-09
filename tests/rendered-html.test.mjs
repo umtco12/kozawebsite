@@ -226,6 +226,14 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(adminPanel, /Kütüphanede video ara/);
   assert.match(adminPanel, /openMediaPicker\("video"\)/);
   assert.match(adminPanel, /Video, haberde kapak fotoğrafının altında ve haber metninden önce gösterilir/);
+  assert.match(adminPanel, /<span>İşlem<\/span>/, "Haber arşivinde işlem sütunu açıkça adlandırılmalı");
+  assert.match(
+    adminPanel,
+    /article\.status === "published" && <a className="published-article-link" href=\{`\/haber\/\$\{article\.slug\}`\} target="_blank" rel="noreferrer"/,
+    "Yalnız yayındaki kayıtlar doğrudan ziyaretçi haberine bağlanmalı",
+  );
+  assert.match(adminPanel, /Habere git <span aria-hidden="true">↗<\/span>/);
+  assert.match(adminPanel, /Düzenle <span aria-hidden="true">→<\/span>/);
   assert.match(
     await readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     /media-search input,.media-library-search input\{height:44px;font-size:16px\}/,

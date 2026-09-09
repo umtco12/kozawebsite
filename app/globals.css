@@ -1276,3 +1276,28 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
   .ad-article-inline{margin:22px auto 34px}.ad-article-inline.ad-inline .ad-creative{grid-template-columns:58px minmax(0,1fr);gap:10px;padding:10px 12px}.ad-article-inline.ad-inline .ad-creative>img{width:54px;height:36px}.ad-article-inline.ad-inline .ad-creative-copy>small{font-size:5px}.ad-article-inline.ad-inline .ad-creative-copy>strong{font-size:14px}.ad-article-inline.ad-inline .ad-creative-cta{grid-column:1/-1;padding:7px 9px}.ad-article-inline.ad-inline .ad-house-stamp{display:none}
   .continuous-category-more{width:100%;justify-content:space-between}
 }
+
+/* Haber arşivinde ziyaretçi sayfası ve düzenleme işlemleri */
+.article-table .table-head,.article-table .table-row{grid-template-columns:minmax(300px,1.5fr) 110px 125px 110px minmax(175px,auto)}
+.table-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.table-actions>a,.table-actions>button{display:inline-flex;min-height:36px;align-items:center;justify-content:center;gap:6px;border:1px solid #d9dee2;border-radius:5px;padding:0 10px;background:#fff;color:#35414c;font:900 8px var(--font-inter),sans-serif;white-space:nowrap}
+.table-actions>a:hover,.table-actions>a:focus-visible{border-color:var(--red);background:var(--red);color:#fff}
+.table-actions>button:hover,.table-actions>button:focus-visible{border-color:#17222d;background:#17222d;color:#fff}
+.table-actions>a:focus-visible,.table-actions>button:focus-visible{outline:3px solid #f3afb2;outline-offset:2px}
+.table-actions .published-article-link{background:#17222d;color:#fff}
+.published-article-link span,.table-actions>button span{font-size:12px}
+.table-actions>small{color:#929ba3;font-size:8px;font-weight:800;white-space:nowrap}
+@media(max-width:1050px){
+  .article-table .table-head,.article-table .table-row{grid-template-columns:minmax(250px,1fr) 105px 100px minmax(175px,auto)}
+  .article-table .table-head>span:nth-child(3),.article-table .table-source{display:none}
+  .article-table .table-head>span:nth-child(4),.article-table .table-updated{display:block}
+}
+@media(max-width:760px){
+  .article-table .table-head{display:none}
+  .article-table .table-row{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"article status" "actions actions";gap:9px 12px;padding:12px}
+  .article-table .article-cell{grid-area:article}
+  .article-table .table-status{grid-area:status;align-self:start;justify-self:end}
+  .article-table .table-source,.article-table .table-updated{display:none}
+  .article-table .table-actions{grid-area:actions;justify-content:flex-end}
+  .table-actions>a,.table-actions>button{min-height:44px;padding-inline:13px}
+}
