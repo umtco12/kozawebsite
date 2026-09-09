@@ -76,12 +76,12 @@ export function LiveData() {
 type Lead = {
   category: string;
   title: string;
-  summary: string;
   image: string;
   imageAlt: string;
   href?: string;
   published?: string;
   isBreaking?: boolean;
+  headlinePosition?: "left-top" | "left-bottom" | "right-top" | "right-bottom";
 };
 
 const ROTATION_MS = 5000;
@@ -143,6 +143,7 @@ export function LeadSlider({ items }: { items: Lead[] }) {
   if (!slides.length) return null;
 
   const item = slides[active] ?? slides[0];
+  const position = item.headlinePosition ?? "left-bottom";
   const previous = () => setActive((value) => (value - 1 + slides.length) % slides.length);
   const next = () => setActive((value) => (value + 1) % slides.length);
 
@@ -167,7 +168,7 @@ export function LeadSlider({ items }: { items: Lead[] }) {
 
   return (
     <section
-      className="lead"
+      className={`lead lead-position-${position}`}
       aria-roledescription="carousel"
       aria-label="Koza TV manşet haberleri"
       data-autoplay={!paused && slides.length > 1 ? "true" : "false"}
@@ -221,10 +222,9 @@ export function LeadSlider({ items }: { items: Lead[] }) {
       </div>
       <div className="lead-shade" />
       {item.isBreaking && <b className="breaking-ribbon breaking-ribbon-hero">SON DAKİKA</b>}
-      <div className="lead-copy" key={item.href} aria-live={pausedByUser ? "polite" : "off"}>
-        <div className="lead-eyebrow"><span>{item.category}</span><b>KOZA TV MANŞET</b></div>
+      <div className={`lead-copy lead-copy-${position}`} key={item.href} aria-live={pausedByUser ? "polite" : "off"}>
+        <div className="lead-eyebrow"><span>{item.category}</span></div>
         <h1><a href={item.href ?? "/son-dakika"}>{item.title}</a></h1>
-        <p>{item.summary}</p>
         <div className="lead-meta">
           <time>{item.published ?? "Koza TV Haber Merkezi"}</time>
           <a className="lead-read" href={item.href ?? "/son-dakika"}>Haberi oku <span aria-hidden="true">↗</span></a>

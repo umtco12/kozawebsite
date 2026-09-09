@@ -589,26 +589,31 @@ test("rol sistemi ilk parola değişimini zorunlu tutar ve viewer yazma işlemin
 
 test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını doğrular", () => {
   assert.equal(slugify("İstanbul'da Önemli Gelişme!"), "istanbul-da-onemli-gelisme");
-  const valid = validateArticleInput({ title: "Test için yeterince uzun haber başlığı", spot: "Bu test için yeterince açıklayıcı bir haber spotudur.", body: "Bu haber metni doğrulama sınırını geçmek için yeterince uzun hazırlanmıştır. İkinci cümle içerik alanını tamamlar.", category: "Gündem", status: "draft", sourceUrl: "https://example.com/haber", videoUrl: "/media/2026/09/0123456789abcdef0123456789abcdef.mp4" });
+  const valid = validateArticleInput({ title: "Test için yeterince uzun haber başlığı", spot: "Bu test için yeterince açıklayıcı bir haber spotudur.", body: "Bu haber metni doğrulama sınırını geçmek için yeterince uzun hazırlanmıştır. İkinci cümle içerik alanını tamamlar.", category: "Gündem", status: "draft", sourceUrl: "https://example.com/haber", videoUrl: "/media/2026/09/0123456789abcdef0123456789abcdef.mp4", homepagePlacement: "side", headlinePosition: "right-top" });
   assert.equal(valid.valid, true);
-  const invalid = validateArticleInput({ title: "Kısa", spot: "Kısa", body: "Kısa", category: "", status: "published", sourceUrl: "javascript:alert(1)", videoUrl: "javascript:alert(1)" });
+  const invalid = validateArticleInput({ title: "Kısa", spot: "Kısa", body: "Kısa", category: "", status: "published", sourceUrl: "javascript:alert(1)", videoUrl: "javascript:alert(1)", homepagePlacement: "rastgele", headlinePosition: "middle" });
   assert.equal(invalid.valid, false);
   assert.ok(invalid.errors.title);
   assert.ok(invalid.errors.body);
   assert.ok(invalid.errors.videoUrl);
+  assert.ok(invalid.errors.homepagePlacement);
+  assert.ok(invalid.errors.headlinePosition);
 });
 
 test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı tutar", async () => {
   const article = {
     slug: "", title: "Koza TV otomatik yayın akışı test haberi", spot: "Editör kontrolündeki yayın akışını doğrulayan ayrıntılı test spotu.",
     body: "Bu içerik önce taslak olarak kaydedilir. Ardından editör tarafından kontrol edilerek yayına alınır. Böylece ziyaretçi sayfası yalnızca onaylanan haberi gösterir.",
-    category: "Teknoloji", status: "draft", heroImage: "/news/studio.jpg", imageAlt: "Koza TV test haber masası", videoUrl: "", author: "Test Editörü", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0,
+    category: "Teknoloji", status: "draft", heroImage: "/news/studio.jpg", imageAlt: "Koza TV test haber masası", videoUrl: "", author: "Test Editörü", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0, homepagePlacement: "side", headlinePosition: "right-top",
   };
   const created = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(article) });
   assert.equal(created.status, 201);
   const createdBody = await created.json();
   assert.equal(createdBody.article.status, "draft");
   assert.equal(createdBody.article.slug, "koza-tv-otomatik-yayin-akisi-test-haberi");
+  assert.equal(createdBody.article.homepagePlacement, "side", "Ana sayfa konumu SQLite üzerinde korunmalı");
+  assert.equal(createdBody.article.isFeatured, 0, "Yalnız slider konumu eski manşet işaretini taşımalı");
+  assert.equal(createdBody.article.headlinePosition, "right-top", "Manşet yazısı konumu SQLite üzerinde korunmalı");
 
   const hidden = await notFoundHtml(`/haber/${createdBody.article.slug}`);
   assert.match(hidden, /bulunamadı/, "Yayınlanmamış haber ziyaretçiye gösterilmemeli");
@@ -643,6 +648,7 @@ test("yalnız yönetici Şimdi yayınla ile haberi doğrudan yayına alabilir", 
   const publishedArticle = (await published.json()).article;
   assert.equal(publishedArticle.status, "published");
   assert.equal(publishedArticle.workflowState, "published");
+  assert.equal(publishedArticle.homepagePlacement, "latest", "Konum seçilmeyen haber Son Haberler varsayılanına gitmeli");
   assert.match(await html(`/haber/${publishedArticle.slug}`), /Yönetici doğrudan yayınlama regresyon haberi/);
 
   const publisher = await createRoleSession("publisher", "DogrudanYayinYetkisi");
@@ -1792,8 +1798,13 @@ test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async
   }
   const cards = body.match(/class="news-card/g) ?? [];
   assert.ok(cards.length >= 4, `Haber ızgarasında yeterli kart olmalı, bulunan: ${cards.length}`);
-  const spotlightCards = body.match(/class="spotlight-card/g) ?? [];
-  assert.equal(spotlightCards.length, 4, "Büyük manşetin altında eski vitrindeki ritme uygun dört güncel haber olmalı");
+  assert.match(body, /class="hero-side-news"/, "Eski Günün Akışı alanında görselli manşet yanı haberleri olmalı");
+  assert.match(body, /class="hero-side-card/, "Manşet yanında en az bir haber kartı olmalı");
+  assert.match(body, /class="headline-below"/, "Manşet altı için ayrı haber alanı olmalı");
+  assert.match(body, /class="headline-below-card/, "Manşet altı alanında haber kartı olmalı");
+  assert.match(body, /class="home-flow-lower"/, "Günün Akışı ana manşetin altına taşınmalı");
+  assert.ok(body.indexOf('class="hero-side-news"') < body.indexOf('class="home-flow-lower"'), "Günün Akışı hero alanından sonra gelmeli");
+  assert.doesNotMatch(body, /class="spotlight(?:-card)?/, "Manşetin altında resmi tekrar kapatan Spotlight alanı bulunmamalı");
 
   /* Masthead'deki boş reklam kutusu kaldırıldı. */
   assert.doesNotMatch(body, /970 × 90/, "Ana sayfada boş reklam yer tutucusu kalmamalı");
@@ -1803,6 +1814,18 @@ test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async
   assert.match(body, /aria-roledescription="carousel"/, "Manşet erişilebilir carousel olarak tanımlanmalı");
   assert.match(body, /Otomatik geçişi duraklat/, "Otomatik manşetin duraklatma kontrolü olmalı");
   assert.match(body, /Günün Öne Çıkanları/, "Ana sayfa güçlü bir editoryal giriş taşımalı");
+
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(pageSource, /selectHomepageLeads/, "Konumu seçilmeyen Son Haberler otomatik olarak slidera taşınmamalı");
+  const panelSource = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const studioSource = await readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8");
+  for (const source of [panelSource, studioSource]) {
+    assert.match(source, /Ana sayfa konumu/);
+    assert.match(source, /Manşet · Slider/);
+    assert.match(source, /Manşet-sol · Günün Akışı alanı/);
+    assert.match(source, /Manşet altı/);
+    assert.match(source, /Son Haberler \(varsayılan\)/);
+  }
 });
 
 test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async () => {
@@ -1824,8 +1847,14 @@ test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async (
   assert.match(slider, /window\.setTimeout/, "Manşet belirli aralıkla otomatik ilerlemeli");
   assert.match(slider, /prefers-reduced-motion: reduce/, "Hareket azaltma tercihi otomatik geçişi durdurmalı");
   assert.match(slider, /Otomatik geçişi sürdür/);
-
+  assert.doesNotMatch(slider, /KOZA TV MANŞET/, "Gereksiz manşet etiketi kaldırılmalı");
+  assert.doesNotMatch(slider, /<p>\{item\.summary\}<\/p>/, "Manşet görselinin üstünde spot/alt yazı gösterilmemeli");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  for (const position of ["left-top", "left-bottom", "right-top", "right-bottom"]) {
+    assert.match(slider, new RegExp(`lead-copy-\\$\\{position\\}`), "Manşet metni seçilen köşe sınıfını kullanmalı");
+    assert.match(css, new RegExp(`\\.home \\.lead-copy-${position}`), `${position} konumu stillenmiş olmalı`);
+  }
+
   assert.equal(SWIPE_THRESHOLD_PX, 42);
   assert.equal(getSwipeDirection({ x: 240, y: 100 }, { x: 160, y: 104 }), "next", "Sola kaydırma sonraki manşeti açmalı");
   assert.equal(getSwipeDirection({ x: 120, y: 100 }, { x: 205, y: 97 }), "previous", "Sağa kaydırma önceki manşeti açmalı");
@@ -1836,6 +1865,11 @@ test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async (
   assert.match(slider, /suppressClickRef/, "Kaydırma sonrasında haber bağlantısı yanlışlıkla açılmamalı");
   assert.match(css, /\.home \.lead\{[^}]*touch-action:pan-y/, "Mobil dikey sayfa kaydırması korunmalı");
   assert.match(css, /\.home \.lead-copy\{z-index:3;[^}]*opacity:1\}/, "Manşet metni animasyon beklemeden görünür olmalı");
+  assert.match(css, /font-size:clamp\(34px,calc\(3\.25vw - 2px\),50px\)/, "Masaüstü manşet başlığı tam 2 px küçülmeli");
+  assert.doesNotMatch(css, /\.home \.lead-shade\{[^}]*rgba\([^)]*,\.96\)/, "Manşetteki ağır yüzde 96 karartma kaldırılmalı");
+  const admin = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  assert.match(admin, /Manşet yazısı konumu/, "Editörde dört köşeli manşet yerleşimi seçilebilmeli");
+  for (const position of ["left-top", "left-bottom", "right-top", "right-bottom"]) assert.match(admin, new RegExp(`value="${position}"`));
   assert.match(css, /@media\(max-width:500px\)\{[\s\S]*\.home \.writer-list\{grid-template-columns:1fr\}/,
     "Mobil yazar şeridi sayfayı yatay genişletmemeli");
 });
@@ -1911,7 +1945,7 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
   const latestItems = home.match(/class="latest-item"/g) ?? [];
   assert.ok(latestItems.length > 0 && latestItems.length <= 5, `Son dakika sütunu en fazla 5 kompakt satır göstermeli; bulunan: ${latestItems.length}`);
   const flowItems = home.match(/class="flow-item/g) ?? [];
-  assert.equal(flowItems.length, 4, "Günün Akışı masaüstü manşet oranını bozmayacak dört kompakt gelişme göstermeli");
+  assert.equal(flowItems.length, 6, "Aşağı taşınan Günün Akışı altı güncel gelişme göstermeli");
   assert.match(home, /class="latest-more"[^>]*><span>Tüm son dakika haberleri<\/span>/, "Çağrı bağlantısı tek bir anlamlı metin taşımalı");
   assert.match(home, /class="breaking-ribbon/, "Admin tarafından işaretlenen haber kırmızı şerit taşımalı");
 

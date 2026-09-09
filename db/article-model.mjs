@@ -1,4 +1,6 @@
 export const articleStatuses = ["draft", "review", "scheduled", "published"];
+export const headlinePositions = ["left-top", "left-bottom", "right-top", "right-bottom"];
+export const homepagePlacements = ["latest", "slider", "side", "below"];
 
 export function slugify(value) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ı/g, "i").replace(/İ/g, "i").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 120);
@@ -12,6 +14,8 @@ export function validateArticleInput(payload) {
   if (String(payload.body ?? "").trim().length < 80) errors.body = "Haber metni en az 80 karakter olmalı";
   if (!String(payload.category ?? "").trim()) errors.category = "Kategori seçilmeli";
   if (!articleStatuses.includes(payload.status)) errors.status = "Geçerli bir yayın durumu seçilmeli";
+  if (payload.homepagePlacement != null && !homepagePlacements.includes(payload.homepagePlacement)) errors.homepagePlacement = "Geçerli bir ana sayfa konumu seçilmeli";
+  if (payload.headlinePosition != null && !headlinePositions.includes(payload.headlinePosition)) errors.headlinePosition = "Geçerli bir manşet yazısı konumu seçilmeli";
   if (payload.status === "scheduled" && !payload.scheduledAt) errors.scheduledAt = "Planlı yayın tarihi gerekli";
   if (payload.sourceUrl) {
     try {

@@ -1,5 +1,4 @@
-import { listAuthors, listLatestArticles, listPublishedArticles, listVideoArticles } from "../db";
-import { selectHomepageLeads } from "../db/homepage-model.mjs";
+import { listAuthors, listHomepageArticles, listLatestArticles, listVideoArticles } from "../db";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
@@ -38,42 +37,28 @@ function authorKind(value: string) {
 }
 export default async function Home() {
   const categories = navCategories();
-  const featured = listPublishedArticles(20).filter((article) => article.isFeatured);
-  const latest = listLatestArticles(50);
+  const latest = listLatestArticles(100);
   const authors = listAuthors().slice(0, 4);
   const videos = listVideoArticles(6);
 
-  /* Yalnız güncel havuzdaki editör seçimleri öne alınır; eski demo manşetleri
-     binlerce gerçek haber aktarıldıktan sonra vitrini işgal etmez. */
-  const leadPool = selectHomepageLeads({ featured, latest, limit: 5, recentWindow: 40 });
+  /* Haber yalnız editörün yayın sırasında seçtiği ana sayfa bölgesine gider.
+     Konum seçilmeyen kayıtlar slidera taşınmaz; Son Haberler havuzunda kalır. */
+  const leadPool = listHomepageArticles("slider", 5);
+  const sideNews = listHomepageArticles("side", 2);
+  const belowNews = listHomepageArticles("below", 4);
+  const grid = latest.filter((article) => article.homepagePlacement === "latest").slice(0, 8);
+  const flow = latest.slice(0, 6);
   const leads = leadPool.map((article) => ({
     category: article.category,
     title: displayTitle(article.title),
-    summary: displaySpot(article.spot, article.title),
     image: article.heroImage,
     imageAlt: article.imageAlt,
     href: `/haber/${article.slug}`,
     published: stamp(article.publishedAt),
     isBreaking: Boolean(article.isBreaking),
+    headlinePosition: article.headlinePosition,
   }));
 
-  /* Bölümler sırayla doldurulur. Yeni kurulumda ya da az haber varken havuz tükenirse
-     bölüm boş bırakılmaz; en güncel haberlerle tamamlanır. */
-  const used = new Set(leadPool.map((article) => article.id));
-  function take(count: number) {
-    const picked = latest.filter((article) => !used.has(article.id)).slice(0, count);
-    picked.forEach((article) => used.add(article.id));
-    if (picked.length >= count) return picked;
-    const chosen = new Set(picked.map((article) => article.id));
-    return [...picked, ...latest.filter((article) => !chosen.has(article.id)).slice(0, count - picked.length)];
-  }
-
-  /* Eski vitrindeki büyük manşet + dört güncel haber ritmi korunur; kartlarda aktif
-     manşet tekrar edilmez ve tasarım yeni sitenin premium diliyle sunulur. */
-  const spotlight = leadPool.slice(1, 5);
-  if (spotlight.length < 4) spotlight.push(...take(4 - spotlight.length));
-  const flow = take(4);
-  const grid = take(8);
   const breakingPool = latest.filter((article) => article.isBreaking);
   const sidebar = [...breakingPool, ...latest.filter((article) => !article.isBreaking)].slice(0, 5);
   const breaking = breakingPool[0];
@@ -106,32 +91,32 @@ export default async function Home() {
 
         <section className="hero-grid" aria-label="Öne çıkan haberler">
           <LeadSlider items={leads} />
-          <aside className="hero-flow">
-            <div className="hero-flow-head"><span>CANLI</span><strong>Günün Akışı</strong><small>Son güncelleme {clock(latest[0]?.publishedAt ?? null)}</small></div>
-            {flow.map((article, index) => (
-              <a href={`/haber/${article.slug}`} className={index === 0 ? "flow-item active" : "flow-item"} key={article.id}>
-                <time>{clock(article.publishedAt)}</time>
-                <div>
-                  <span>{article.isBreaking ? "SON DAKİKA" : article.category.toLocaleUpperCase("tr-TR")}</span>
-                  <h2>{displayTitle(article.title)}</h2>
-                </div>
-              </a>
-            ))}
-            <a className="flow-more" href="/son-dakika">Tüm gelişmeleri gör <span>→</span></a>
-          </aside>
+          {sideNews.length > 0 && (
+            <aside className="hero-side-news" aria-label="Manşet yanı haberleri">
+              {sideNews.map((article, index) => (
+                <a href={`/haber/${article.slug}`} className={`hero-side-card hero-side-card-${index + 1}`} key={article.id}>
+                  <img src={article.heroImage} alt={article.imageAlt} loading={index === 0 ? "eager" : "lazy"} />
+                  {article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}
+                  <div>
+                    <span>{article.category}</span>
+                    <h2>{displayTitle(article.title)}</h2>
+                    <time>{dayStamp(article.publishedAt)}</time>
+                  </div>
+                </a>
+              ))}
+            </aside>
+          )}
         </section>
 
-        {spotlight.length > 0 && (
-          <section className="spotlight" aria-label="Öne çıkan başlıklar">
-            <div className="spotlight-label"><span>ŞİMDİ</span><strong>Öne Çıkanlar</strong></div>
-            {spotlight.map((article) => (
-              <a className="spotlight-card" href={`/haber/${article.slug}`} key={article.id}>
-                <img src={article.heroImage} alt={article.imageAlt} loading="lazy" />
-                <div>
-                  <span>{article.category}</span>
-                  <h2>{displayTitle(article.title)}</h2>
-                  <time>{clock(article.publishedAt)}</time>
+        {belowNews.length > 0 && (
+          <section className="headline-below" aria-label="Manşet altı haberleri">
+            {belowNews.map((article) => (
+              <a href={`/haber/${article.slug}`} className="headline-below-card" key={article.id}>
+                <div className="headline-below-image">
+                  <img src={article.heroImage} alt={article.imageAlt} loading="lazy" />
+                  {article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}
                 </div>
+                <div><span>{article.category}</span><h2>{displayTitle(article.title)}</h2><time>{dayStamp(article.publishedAt)}</time></div>
               </a>
             ))}
           </section>
@@ -173,6 +158,24 @@ export default async function Home() {
             </div>
             <a className="latest-more" href="/son-dakika"><span>Tüm son dakika haberleri</span><b aria-hidden="true">→</b></a>
           </aside>
+        </section>
+
+        <section className="home-flow-lower" aria-labelledby="home-flow-title">
+          <header className="home-flow-lower-head">
+            <div><span>CANLI</span><div><h2 id="home-flow-title">Günün Akışı</h2><small>Son güncelleme {clock(latest[0]?.publishedAt ?? null)}</small></div></div>
+            <a href="/son-dakika">Tüm gelişmeleri gör <b aria-hidden="true">→</b></a>
+          </header>
+          <div className="home-flow-grid">
+            {flow.map((article, index) => (
+              <a href={`/haber/${article.slug}`} className={index === 0 ? "flow-item active" : "flow-item"} key={article.id}>
+                <time>{clock(article.publishedAt)}</time>
+                <div>
+                  <span>{article.isBreaking ? "SON DAKİKA" : article.category.toLocaleUpperCase("tr-TR")}</span>
+                  <h2>{displayTitle(article.title)}</h2>
+                </div>
+              </a>
+            ))}
+          </div>
         </section>
 
         {authors.length > 0 && (
@@ -220,7 +223,7 @@ export default async function Home() {
               </a>
             )}
             <div className="video-list">
-              {(videos.length > 1 ? videos.slice(1, 4) : spotlight.slice(0, 3)).map((article) => (
+              {(videos.length > 1 ? videos.slice(1, 4) : latest.slice(0, 3)).map((article) => (
                 <a href={`/haber/${article.slug}`} key={article.id}>
                   <div><img src={article.heroImage} alt={article.imageAlt} loading="lazy" /><i>▶</i></div>
                   <p><span>{article.category}</span>{displayTitle(article.title)}</p>
