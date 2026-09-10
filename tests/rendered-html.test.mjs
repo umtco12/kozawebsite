@@ -18,7 +18,7 @@ import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "../db/demo-content-mo
 import { defaultSettings, normalizePath, officialSocialAccounts, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
 import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseHomepageEntries, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
 import { selectHomepageLeads } from "../db/homepage-model.mjs";
-import { HOMEPAGE_ORDER_REPAIR_KEY, promoteHomepageArticle, repairUnrankedSliderArticles } from "../db/homepage-order.mjs";
+import { HOMEPAGE_ORDER_REPAIR_KEY, homepagePlacementLimits, normalizeHomepagePlacementLimits, promoteHomepageArticle, repairUnrankedSliderArticles, validateHomepageLayout } from "../db/homepage-order.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { parseMynetMarketPayload } from "../app/api/piyasa/market-model.mjs";
 import { agencyUpdateDecision, applyCategoryMap, buildAgencyHeaders, normalizeAgencyPayload, renderAgencyDisclaimer, validateAgencySource } from "../db/agency-model.mjs";
@@ -26,6 +26,7 @@ import { canAccessArticle, canEditArticle, canManageAgencyMetadata, canPublish, 
 import { adPlacements, advertisementState, validateAdvertisement } from "../db/ad-model.mjs";
 import { ensureAdvertisementSchema } from "../db/ad-schema.mjs";
 import { formSignature, istanbulInputTimestamp, istanbulInputValue, toggleConfirmation } from "../app/admin/ad-form-model.mjs";
+import { homepageLayoutSignature, moveHomepageLayoutCard } from "../app/admin/homepage-layout-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -218,9 +219,11 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(body, /Kullanıcılar/);
   assert.match(body, /Yayın Stüdyosu/);
   assert.match(body, /Reklam Merkezi/);
-  const [adminPanel, workflowStudio, globalStyles] = await Promise.all([
+  assert.match(body, /Ana Sayfa Düzeni/);
+  const [adminPanel, workflowStudio, homepageLayout, globalStyles] = await Promise.all([
     readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/homepage-layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(adminPanel, /Kütüphanede ara/);
@@ -254,6 +257,25 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   );
   assert.match(adminPanel, /Habere git <span aria-hidden="true">↗<\/span>/);
   assert.match(adminPanel, /Düzenle <span aria-hidden="true">→<\/span>/);
+  assert.match(homepageLayout, /Manşet · Slider/);
+  assert.match(homepageLayout, /Manşet yanı/);
+  assert.match(homepageLayout, /Manşet altı/);
+  assert.match(homepageLayout, /Son Haberler/);
+  assert.match(homepageLayout, /onPointerMove=\{pointerMove\}/, "Dokunarak taşıma desteği bulunmalı");
+  assert.match(homepageLayout, /setPointerCapture/, "Fare ve parmak taşıması tutamaçtan başlamalı");
+  assert.doesNotMatch(homepageLayout, /\sdraggable(?:\s|=)/, "Yerleşik HTML sürüklemesi Pointer Events ile çakışmamalı");
+  assert.match(homepageLayout, /Düzeni kaydet/);
+  assert.match(homepageLayout, /1\. Haberi tut/);
+  assert.match(homepageLayout, /2\. Yerini seç/);
+  assert.match(homepageLayout, /3\. Düzeni kaydet/);
+  assert.match(homepageLayout, /Değişiklikleri geri al/, "Yanlış taşıma tek işlemle geri alınabilmeli");
+  assert.match(homepageLayout, /placement !== "latest"/, "Son Haberler havuzunda gereksiz sıra düğmeleri gösterilmemeli");
+  assert.match(homepageLayout, /Son Haberler'de başka yayın bulunmuyor\./, "Boş havuz yanlışlıkla arama hatası gibi anlatılmamalı");
+  assert.match(homepageLayout, /beforeunload/, "Kaydedilmemiş ana sayfa düzeni çıkışta korunmalı");
+  assert.doesNotMatch(homepageLayout, /setTimeout\([^)]*save|Otomatik kaydedildi/, "Ana sayfa düzeni kendiliğinden kaydedilmemeli");
+  assert.match(globalStyles, /\.homepage-layout-zones\{[^}]*grid-template-columns:/, "Yerleşim alanları masaüstünde yan yana görünmeli");
+  assert.match(globalStyles, /@media\(max-width:760px\)\{\.homepage-layout-manager/, "Yerleşim ekranının mobil düzeni olmalı");
+  assert.match(globalStyles, /\.homepage-layout-status\{display:none\}/, "Mobilde kaydetme çubuğu içeriği gereksiz yere kapatmamalı");
   assert.match(
     await readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     /media-search input,.media-library-search input\{height:44px;font-size:16px\}/,
@@ -690,6 +712,67 @@ test("önceki sürümde sıra 100'de kalan manşetler bir kez görünür sıraya
   sliderDb.close();
 });
 
+test("ana sayfa kart taşıma modeli dolu alanı güvenle yönetir ve gereksiz değişiklik üretmez", () => {
+  const article = (id, title = `Haber ${id}`) => ({ id, title, slug: `haber-${id}`, category: "Gündem", heroImage: "/news/gundem.jpg", publishedAt: id });
+  const board = {
+    slider: [1, 2, 3, 4, 5].map((id) => article(id)),
+    side: [6, 7].map((id) => article(id)),
+    below: [8, 9].map((id) => article(id)),
+    latest: [10, 11, 12].map((id) => article(id)),
+  };
+  const limits = { slider: 5, side: 2, below: 4, latest: 60 };
+
+  const promoted = moveHomepageLayoutCard(board, 10, "slider", 0, limits);
+  assert.deepEqual(promoted.slider.map((item) => item.id), [10, 1, 2, 3, 4], "Dolu slidera alınan haber seçilen sıraya gelmeli");
+  assert.deepEqual(promoted.latest.map((item) => item.id), [5, 11, 12], "Sliderın son haberi kaybolmadan Son Haberler'e inmeli");
+  assert.equal(new Set(Object.values(promoted).flat().map((item) => item.id)).size, 12, "Taşıma haber çoğaltmamalı veya kaybetmemeli");
+
+  const reordered = moveHomepageLayoutCard(board, 2, "slider", 0, limits);
+  assert.deepEqual(reordered.slider.map((item) => item.id), [2, 1, 3, 4, 5], "Aynı alandaki sıra değiştirilebilmeli");
+  assert.deepEqual(reordered.latest.map((item) => item.id), [10, 11, 12], "Sadece sıra değişirken Son Haberler etkilenmemeli");
+
+  const latestReorder = moveHomepageLayoutCard(board, 11, "latest", 0, limits);
+  assert.equal(latestReorder, board, "Son Haberler havuzu elle sıralanmadığı için kendi içinde taşıma değişiklik oluşturmamalı");
+  assert.equal(homepageLayoutSignature(board), homepageLayoutSignature({ ...board, latest: [...board.latest].reverse() }), "Son Haberler'in tarih sırası kaydetme imzasına girmemeli");
+  assert.notEqual(homepageLayoutSignature(board), homepageLayoutSignature(reordered), "Yönetilen alan sırası değişince ekran kaydedilmemiş sayılmalı");
+});
+
+test("ana sayfa kapasitesi aşılınca haber kaybolmadan Son Haberler'e iner", () => {
+  const layoutDb = new Database(":memory:");
+  layoutDb.exec(`
+    CREATE TABLE articles (
+      id INTEGER PRIMARY KEY,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL,
+      homepage_placement TEXT NOT NULL,
+      homepage_order INTEGER NOT NULL,
+      is_featured INTEGER NOT NULL DEFAULT 0,
+      published_at INTEGER,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+  const insert = layoutDb.prepare("INSERT INTO articles (id,title,status,homepage_placement,homepage_order,is_featured,published_at,updated_at) VALUES (?,?,?,?,1,1,?,?)");
+  for (let index = 1; index <= 7; index += 1) insert.run(index, `Slider haberi ${index}`, "published", "slider", 800 - index, 800 - index);
+
+  const result = normalizeHomepagePlacementLimits(layoutDb, 1_000);
+  const slider = layoutDb.prepare("SELECT id,homepage_order AS homepageOrder FROM articles WHERE homepage_placement='slider' ORDER BY homepage_order").all();
+  const latest = layoutDb.prepare("SELECT id,is_featured AS isFeatured FROM articles WHERE homepage_placement='latest' ORDER BY id").all();
+
+  assert.equal(homepagePlacementLimits.slider, 5);
+  assert.deepEqual(slider.map((article) => article.id), [1, 2, 3, 4, 5]);
+  assert.deepEqual(slider.map((article) => article.homepageOrder), [1, 2, 3, 4, 5]);
+  assert.deepEqual(latest.map((article) => article.id), [6, 7], "Altıncı ve yedinci haber ana sayfadan kaybolmamalı");
+  assert.ok(latest.every((article) => article.isFeatured === 0), "Son Haberler'e inen kayıt manşet işaretini taşımamalı");
+  assert.deepEqual(result.movedToLatest, [6, 7]);
+
+  const valid = validateHomepageLayout({ slider: [5, 4, 3], side: [2], below: [1] });
+  assert.equal(valid.valid, true);
+  assert.equal(validateHomepageLayout({ slider: [1, 2, 3, 4, 5, 6], side: [], below: [] }).valid, false, "Slider beş haberi aşmamalı");
+  assert.equal(validateHomepageLayout({ slider: [1], side: [1], below: [] }).valid, false, "Bir haber iki konumda bulunmamalı");
+  assert.equal(validateHomepageLayout({ slider: [0], side: [], below: [] }).valid, false, "Geçersiz haber kimliği reddedilmeli");
+  layoutDb.close();
+});
+
 test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı tutar", async () => {
   const article = {
     slug: "", title: "Koza TV otomatik yayın akışı test haberi", spot: "Editör kontrolündeki yayın akışını doğrulayan ayrıntılı test spotu.",
@@ -726,6 +809,9 @@ test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı
 });
 
 test("Manşet seçilen yeni haberler görünür ilk beş slayda otomatik girer", async () => {
+  const beforeResponse = await request("/api/homepage-layout");
+  assert.equal(beforeResponse.status, 200);
+  const beforeLayout = (await beforeResponse.json()).layout;
   const titles = [
     "Manşet görünürlük test haberi bir",
     "Manşet görünürlük test haberi iki",
@@ -756,6 +842,50 @@ test("Manşet seçilen yeni haberler görünür ilk beş slayda otomatik girer",
 
   const home = await html("/");
   for (const title of titles) assert.match(home, new RegExp(title), `${title} görünür ilk beş manşette yer almalı`);
+  const afterLayout = (await (await request("/api/homepage-layout")).json()).layout;
+  assert.equal(afterLayout.slider.length, 5, "Canlı slider hiçbir zaman beş haberi aşmamalı");
+  const displaced = beforeLayout.slider.filter((article) => !afterLayout.slider.some((current) => current.id === article.id));
+  assert.ok(displaced.length >= 1, "Yeni manşetler eski manşetlerden en az birini dışarı çıkarmalı");
+  for (const article of displaced) assert.ok(afterLayout.latest.some((current) => current.id === article.id), `${article.title} kaybolmadan Son Haberler'e inmeli`);
+});
+
+test("Ana Sayfa Düzeni yalnız yönetici tarafından ve açık kaydetmeyle sıralanır", async () => {
+  const anonymous = await anonymousRequest("/api/homepage-layout");
+  assert.equal(anonymous.status, 401);
+  const publisher = await createRoleSession("publisher", "AnaSayfaDuzeniYetkisi");
+  const forbidden = await anonymousRequest("/api/homepage-layout", { headers: { cookie: publisher.cookie } });
+  assert.equal(forbidden.status, 403);
+
+  const response = await request("/api/homepage-layout");
+  assert.equal(response.status, 200);
+  const initial = await response.json();
+  assert.equal(initial.layout.slider.length, 5);
+  assert.ok(initial.layout.latest.length > 0);
+  assert.equal(typeof initial.revision, "string");
+
+  const allIds = [...initial.layout.slider, ...initial.layout.side, ...initial.layout.below, ...initial.layout.latest].map((article) => article.id);
+  const tooMany = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: initial.revision, layout: { slider: allIds.slice(0, 6), side: [], below: [] } }) });
+  assert.equal(tooMany.status, 400, "Slider için altıncı haber reddedilmeli");
+  const duplicate = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: initial.revision, layout: { slider: [allIds[0]], side: [allIds[0]], below: [] } }) });
+  assert.equal(duplicate.status, 400, "Aynı haber iki ana sayfa alanında bulunmamalı");
+  const stale = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: "eski-surum", layout: { slider: initial.layout.slider.map((article) => article.id), side: initial.layout.side.map((article) => article.id), below: initial.layout.below.map((article) => article.id) } }) });
+  assert.equal(stale.status, 409, "Eski ekran yeni düzenin üzerine yazmamalı");
+
+  const removed = initial.layout.slider.at(-1);
+  const nextLayout = {
+    slider: initial.layout.slider.slice(0, -1).reverse().map((article) => article.id),
+    side: initial.layout.side.map((article) => article.id),
+    below: initial.layout.below.map((article) => article.id),
+  };
+  const savedResponse = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: initial.revision, layout: nextLayout }) });
+  assert.equal(savedResponse.status, 200);
+  const saved = await savedResponse.json();
+  assert.deepEqual(saved.layout.slider.map((article) => article.id), nextLayout.slider);
+  assert.ok(saved.layout.latest.some((article) => article.id === removed.id), "Manşetten çıkarılan haber Son Haberler'e gitmeli");
+  assert.ok(saved.movedToLatest.includes(removed.id));
+
+  const restored = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: saved.revision, layout: { slider: initial.layout.slider.map((article) => article.id), side: initial.layout.side.map((article) => article.id), below: initial.layout.below.map((article) => article.id) } }) });
+  assert.equal(restored.status, 200, "Test sonunda ilk ana sayfa düzeni geri yüklenmeli");
 });
 
 test("yalnız yönetici Şimdi yayınla ile haberi doğrudan yayına alabilir", async () => {
