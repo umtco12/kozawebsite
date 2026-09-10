@@ -47,9 +47,12 @@ export function validateArticleInput(payload) {
   const errors = {};
   if (!payload || typeof payload !== "object") return { valid: false, errors: { form: "Geçersiz veri" } };
   if (String(payload.title ?? "").trim().length < 12) errors.title = "Başlık en az 12 karakter olmalı";
-  if (String(payload.spot ?? "").trim().length < 24) errors.spot = "Spot en az 24 karakter olmalı";
+  const spot = String(payload.spot ?? "").trim();
+  if (spot.length < 24) errors.spot = "Spot en az 24 karakter olmalı";
+  else if (spot.length > 500) errors.spot = "Spot en fazla 500 karakter olmalı";
   if (String(payload.body ?? "").trim().length < 80) errors.body = "Haber metni en az 80 karakter olmalı";
   if (!String(payload.category ?? "").trim()) errors.category = "Kategori seçilmeli";
+  if (!String(payload.heroImage ?? "").trim()) errors.heroImage = "Kapak fotoğrafı seçmeden haber kaydedilemez";
   if (!articleStatuses.includes(payload.status)) errors.status = "Geçerli bir yayın durumu seçilmeli";
   if (payload.homepagePlacement != null && !homepagePlacements.includes(payload.homepagePlacement)) errors.homepagePlacement = "Geçerli bir ana sayfa konumu seçilmeli";
   if (payload.headlinePosition != null && !headlinePositions.includes(payload.headlinePosition)) errors.headlinePosition = "Geçerli bir manşet yazısı konumu seçilmeli";

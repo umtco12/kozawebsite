@@ -96,11 +96,8 @@ export default async function Home() {
               {sideNews.map((article, index) => (
                 <a href={`/haber/${article.slug}`} className={`hero-side-card hero-side-card-${index + 1}`} key={article.id}>
                   <img src={article.heroImage} alt={article.imageAlt} loading={index === 0 ? "eager" : "lazy"} />
-                  {article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}
                   <div>
-                    <span>{article.category}</span>
                     <h2>{displayTitle(article.title)}</h2>
-                    <time>{dayStamp(article.publishedAt)}</time>
                   </div>
                 </a>
               ))}

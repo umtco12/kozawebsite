@@ -231,10 +231,21 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(adminPanel, /Kütüphanede video ara/);
   assert.match(adminPanel, /openMediaPicker\("video"\)/);
   assert.match(adminPanel, /Video, haberde kapak fotoğrafının altında ve haber metninden önce gösterilir/);
+  assert.match(adminPanel, /form\.spot\.length\}\/500/,
+    "Yeni Haber editörü spotu 500 karaktere kadar saymalı");
+  assert.match(adminPanel, /maxLength=\{500\}/, "Spot alanı 500 karakterle sınırlandırılmalı");
+  assert.match(adminPanel, /Hazır Son Dakika görselini kullan/);
+  assert.match(adminPanel, /\/news\/son-dakika-1280x720\.png/);
   assert.match(adminPanel, /Seçili metni ara başlık yap/, "Yeni Haber editörü seçili metni ara başlığa çevirebilmeli");
   assert.match(workflowStudio, /Seçileni ara başlık yap/, "Yayın Stüdyosu paragraf içindeki seçimi ayrı ara başlık bloğuna çevirebilmeli");
+  assert.match(workflowStudio, /Bu bloğun altına video ekle/, "Video seçilen içerik bloğunun arasına eklenebilmeli");
+  assert.match(workflowStudio, /selected\.spot\.length\}\/500/, "Yayın Stüdyosu spot sınırını göstermeli");
+  assert.doesNotMatch(workflowStudio, /Otomatik kaydedildi|setTimeout\(\(\) => void persist/, "Yayın Stüdyosu değişiklikleri kendiliğinden kaydetmemeli");
+  assert.match(workflowStudio, /beforeunload/, "Kaydedilmemiş değişiklikler sayfadan çıkarken korunmalı");
   assert.match(workflowStudio, /className="block-heading-action" disabled=\{!canEdit\}/, "Yetkisiz kullanıcı ara başlık dönüşümünü çalıştıramamalı");
   assert.match(globalStyles, /\.article-body h2,\.continuous-body h2\{[^}]*margin:42px 0 18px[^}]*color:#0b1117[^}]*font-weight:900/, "Ara başlıklar yayında üst-alt boşluklu, siyah ve kalın olmalı");
+  assert.match(globalStyles, /\.article-primary-video\{[^}]*width:min\(100%,720px\)[^}]*margin:28px auto/, "Ana haber videosu masaüstünde gereksiz büyümemeli");
+  assert.match(globalStyles, /\.article-body>\.article-video-player,\.continuous-body>\.article-video-player\{[^}]*width:min\(100%,640px\)/, "Metin arasındaki video daha kompakt olmalı");
   assert.match(adminPanel, /<span>İşlem<\/span>/, "Haber arşivinde işlem sütunu açıkça adlandırılmalı");
   assert.match(
     adminPanel,
@@ -610,7 +621,8 @@ test("rol sistemi ilk parola değişimini zorunlu tutar ve viewer yazma işlemin
 
 test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını doğrular", () => {
   assert.equal(slugify("İstanbul'da Önemli Gelişme!"), "istanbul-da-onemli-gelisme");
-  const valid = validateArticleInput({ title: "Test için yeterince uzun haber başlığı", spot: "Bu test için yeterince açıklayıcı bir haber spotudur.", body: "Bu haber metni doğrulama sınırını geçmek için yeterince uzun hazırlanmıştır. İkinci cümle içerik alanını tamamlar.", category: "Gündem", status: "draft", sourceUrl: "https://example.com/haber", videoUrl: "/media/2026/09/0123456789abcdef0123456789abcdef.mp4", homepagePlacement: "side", headlinePosition: "right-top" });
+  const validPayload = { title: "Test için yeterince uzun haber başlığı", spot: "Bu test için yeterince açıklayıcı bir haber spotudur.", body: "Bu haber metni doğrulama sınırını geçmek için yeterince uzun hazırlanmıştır. İkinci cümle içerik alanını tamamlar.", category: "Gündem", status: "draft", heroImage: "/news/studio.jpg", sourceUrl: "https://example.com/haber", videoUrl: "/media/2026/09/0123456789abcdef0123456789abcdef.mp4", homepagePlacement: "side", headlinePosition: "right-top" };
+  const valid = validateArticleInput(validPayload);
   assert.equal(valid.valid, true);
   const invalid = validateArticleInput({ title: "Kısa", spot: "Kısa", body: "Kısa", category: "", status: "published", sourceUrl: "javascript:alert(1)", videoUrl: "javascript:alert(1)", homepagePlacement: "rastgele", headlinePosition: "middle" });
   assert.equal(invalid.valid, false);
@@ -619,6 +631,8 @@ test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını
   assert.ok(invalid.errors.videoUrl);
   assert.ok(invalid.errors.homepagePlacement);
   assert.ok(invalid.errors.headlinePosition);
+  assert.match(validateArticleInput({ ...validPayload, heroImage: "" }).errors.heroImage, /Kapak fotoğrafı/);
+  assert.match(validateArticleInput({ ...validPayload, spot: "x".repeat(501) }).errors.spot, /500 karakter/);
 });
 
 test("editör seçili metni güvenli biçimde kalın ve boşluklu ara başlığa dönüştürür", () => {
@@ -806,6 +820,7 @@ test("haber API geçersiz içerik ve kaynak adreslerini reddeder", async () => {
   assert.equal(invalidArticle.status, 400);
   const invalidArticleBody = await invalidArticle.json();
   assert.ok(invalidArticleBody.fields.title);
+  assert.ok(invalidArticleBody.fields.heroImage, "Fotoğrafsız haber taslak olarak bile kaydedilmemeli");
 
   const invalidSource = await request("/api/sources", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Güvensiz", url: "javascript:alert(1)" }) });
   assert.equal(invalidSource.status, 400);
@@ -1233,6 +1248,7 @@ test("kritik marka ve haber görselleri projede bulunur ve boş değildir", asyn
     "public/news/dunya.jpg",
     "public/news/ekonomi.jpg",
     "public/news/studio.jpg",
+    "public/news/son-dakika-1280x720.png",
   ];
 
   for (const asset of assets) {
@@ -1240,6 +1256,10 @@ test("kritik marka ve haber görselleri projede bulunur ve boş değildir", asyn
     assert.ok(info.isFile(), `${asset} bir dosya olmalı`);
     assert.ok(info.size > 0, `${asset} boş olmamalı`);
   }
+
+  const breakingImage = await readFile(new URL("public/news/son-dakika-1280x720.png", projectRoot));
+  assert.equal(breakingImage.readUInt32BE(16), 1280, "Son Dakika görseli 1280 px genişliğinde olmalı");
+  assert.equal(breakingImage.readUInt32BE(20), 720, "Son Dakika görseli 720 px yüksekliğinde olmalı");
 });
 
 test("ortak çalışma dokümanı geliştiricilerin makinelerinden bağımsızdır", async () => {
@@ -1996,6 +2016,9 @@ test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async
   assert.ok(cards.length >= 4, `Haber ızgarasında yeterli kart olmalı, bulunan: ${cards.length}`);
   assert.match(body, /class="hero-side-news"/, "Eski Günün Akışı alanında görselli manşet yanı haberleri olmalı");
   assert.match(body, /class="hero-side-card/, "Manşet yanında en az bir haber kartı olmalı");
+  const sideNewsMarkup = body.match(/<aside class="hero-side-news"[\s\S]*?<\/aside>/)?.[0] ?? "";
+  assert.ok(sideNewsMarkup, "Manşet yanı haber alanı HTML içinde bulunmalı");
+  assert.doesNotMatch(sideNewsMarkup, /<span|<time|breaking-ribbon/, "Manşet yanı haberlerde etiket, tarih veya son dakika şeridi bulunmamalı");
   assert.match(body, /class="headline-below"/, "Manşet altı için ayrı haber alanı olmalı");
   assert.match(body, /class="headline-below-card/, "Manşet altı alanında haber kartı olmalı");
   assert.match(body, /class="home-flow-lower"/, "Günün Akışı ana manşetin altına taşınmalı");
