@@ -27,6 +27,7 @@ import { adPlacements, advertisementState, validateAdvertisement } from "../db/a
 import { ensureAdvertisementSchema } from "../db/ad-schema.mjs";
 import { formSignature, istanbulInputTimestamp, istanbulInputValue, toggleConfirmation } from "../app/admin/ad-form-model.mjs";
 import { homepageLayoutSignature, moveHomepageLayoutCard } from "../app/admin/homepage-layout-model.mjs";
+import { extractGalleryImages, selectPhotoGalleries } from "../db/photo-gallery-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -154,7 +155,14 @@ test("ana sayfa Koza TV haber deneyimini sunar", async () => {
   assert.match(body, /href="\/yazarlar"/);
   assert.match(body, /href="\/kategori\/ekonomi"/);
   assert.match(body, /href="\/son-dakika"/, "Son Dakika menüsü gerçek sayfaya gitmeli");
-  assert.match(body, /href="\/videolar"/, "Video merkezi menüde olmalı");
+  assert.match(body, /href="\/foto-galeri"/, "Foto Galeri menüde olmalı");
+  assert.match(body, /href="\/videolar"/, "Video Merkezi menüde olmalı");
+  const mainNav = body.match(/<nav class="nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+  const upperBar = body.match(/<div class="topbar">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? "";
+  assert.match(mainNav, />Foto Galeri<\/a>/);
+  assert.match(mainNav, />Video Merkezi<\/a>/);
+  assert.doesNotMatch(mainNav, />Video<\/a>|>Videolar<\/a>|>Yazarlar<\/a>/, "Üst menüde eski Video, Videolar ve Yazarlar bağlantıları kalmamalı");
+  assert.doesNotMatch(upperBar, /href="\/yazarlar"/, "İnce üst bantta Yazarlar bağlantısı kalmamalı");
   assert.match(body, /href="\/kurumsal\/iletisim"/, "İletişim alt bölümde bağlantı olmalı");
   assert.match(body, /href="\/kurumsal\/kvkk"/);
   assert.match(body, /aria-label="Haberlerde ara"/, "Menüde çalışan arama alanı olmalı");
@@ -1551,7 +1559,7 @@ test("başarılı dağıtım aktif sürümle birlikte yalnız son dört sürüm�
 });
 
 test("ziyaretçi sitesinde tıklanabilir tüm iç bağlantılar gerçek sayfaya gider", async () => {
-  const pages = ["/", "/son-dakika", "/videolar", "/yazarlar", "/canli", "/kategori/ekonomi", "/kurumsal/hakkimizda", "/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde"];
+  const pages = ["/", "/son-dakika", "/foto-galeri", "/videolar", "/yazarlar", "/canli", "/kategori/ekonomi", "/kurumsal/hakkimizda", "/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde"];
   const checked = new Map();
   const broken = [];
   for (const page of pages) {
@@ -1615,6 +1623,37 @@ test("video merkezi ve kurumsal sayfalar yayına hazır biçimde açılır", asy
   assert.match(missing, /name="robots" content="noindex"/i, "Bulunamayan sayfa indekslenmemeli");
 });
 
+test("foto galeri güvenli görselleri toplar, listeler ve ayrıntı sayfasında açar", async () => {
+  const images = extractGalleryImages({
+    heroImage: "/media/2026/09/kapak.webp",
+    imageAlt: "Ana fotoğraf",
+    blocks: [
+      { type: "image", content: "/media/2026/09/ikinci.jpg", caption: "İkinci kare" },
+      { type: "image", content: "/media/2026/09/kapak.webp", caption: "Tekrar" },
+      { type: "image", content: "/news/gorsel-yok.svg", caption: "Yer tutucu" },
+      { type: "paragraph", content: "Fotoğraf değil" },
+    ],
+  });
+  assert.deepEqual(images, [
+    { src: "/media/2026/09/kapak.webp", caption: "Ana fotoğraf" },
+    { src: "/media/2026/09/ikinci.jpg", caption: "İkinci kare" },
+  ], "Galeri gerçek görselleri sırayla ve tekrarsız toplamalı");
+  assert.equal(selectPhotoGalleries([{ id: 1, heroImage: "/news/gorsel-yok.svg", blocks: [] }], 10).length, 0, "Eksik görsel yer tutucusu galeri olmamalı");
+
+  const index = await html("/foto-galeri");
+  assert.match(index, /<title>Foto Galeri \| Koza TV<\/title>/i);
+  assert.match(index, /KOZA TV GÖRSEL HABER/);
+  assert.match(index, /class="photo-gallery-(?:lead|card)"/, "Galeri en az bir görsel haber göstermeli");
+  const galleryHref = index.match(/href="(\/foto-galeri\/[^"]+)"/)?.[1];
+  assert.ok(galleryHref, "Galeri kartı ayrıntı sayfasına bağlanmalı");
+  const detail = await html(galleryHref);
+  assert.match(detail, /class="photo-gallery-frames"/);
+  assert.match(detail, /FOTOĞRAF/);
+  assert.match(detail, /Haberin tamamını oku/);
+  const missing = await notFoundHtml("/foto-galeri/bulunmayan-foto-galeri");
+  assert.match(missing, /bulunamadı/);
+});
+
 test("yazar arşivi imzaya ait haberleri listeler ve bilinmeyen imzayı reddeder", async () => {
   const body = await html("/yazar/koza-tv-ekonomi-servisi");
   assert.match(body, /Koza TV Ekonomi Servisi/);
@@ -1639,7 +1678,7 @@ test("özel 404 ekranı ve arama motoru kuralları korunur", async () => {
   assert.match(robots, /Disallow: \/arama/);
 
   const sitemap = await (await request("/sitemap.xml")).text();
-  for (const path of ["/son-dakika", "/videolar", "/yazarlar", "/kurumsal/hakkimizda", "/yazar/koza-tv-haber-merkezi"]) {
+  for (const path of ["/son-dakika", "/foto-galeri", "/videolar", "/yazarlar", "/kurumsal/hakkimizda", "/yazar/koza-tv-haber-merkezi"]) {
     assert.ok(sitemap.includes(`https://www.kozatv.com.tr${path}`), `${path} sitemap'te olmalı`);
   }
 });
@@ -1728,7 +1767,7 @@ test("gezinme bağlantıları çerçeveye bağlı olmayan gerçek bağlantılard
 
   const body = await html("/");
   const navLinks = [...body.matchAll(/<a[^>]+href="(\/[^"]*)"/g)].map((match) => match[1]);
-  for (const path of ["/son-dakika", "/kategori/gundem", "/kategori/ekonomi", "/videolar", "/yazarlar", "/canli"]) {
+  for (const path of ["/son-dakika", "/kategori/gundem", "/kategori/ekonomi", "/foto-galeri", "/videolar", "/canli"]) {
     assert.ok(navLinks.includes(path), `${path} ana sayfada <a href> olarak yer almalı`);
   }
 });
@@ -2177,6 +2216,30 @@ test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async
   }
 });
 
+test("Son Haberler ana haberden sonra dörderli üç sırayı boş hücre bırakmadan doldurur", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const layoutSource = await readFile(new URL("../app/admin/homepage-layout.tsx", import.meta.url), "utf8");
+
+  assert.match(pageSource, /listHomepageArticles\("latest",\s*13\)/, "Son Haberler görünür sınırı 1 ana ve 12 kart için 13 olmalı");
+  assert.doesNotMatch(pageSource, /homepagePlacement === "latest"\)\.slice\(0, 8\)/, "Eski sekiz haber sınırı geri gelmemeli");
+  assert.match(layoutSource, /en güncel 13 haber görünür: 1 ana haber ve dörderli üç sıra kart/, "Yöneticiye görünür sınır açıkça anlatılmalı");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /\.home \.latest-news-grid\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/, "Masaüstünde Son Haberler dörderli olmalı");
+});
+
+test("ana sayfa haber kartlarının altında tarih ve saat göstermez", async () => {
+  const body = await html("/");
+  const belowStart = body.indexOf('class="headline-below"');
+  const belowEnd = body.indexOf('class="main-columns latest-news-section"', belowStart);
+  const latestStart = body.indexOf('class="news-grid latest-news-grid"');
+  const latestEnd = body.indexOf('class="home-flow-lower"', latestStart);
+
+  assert.ok(belowStart >= 0 && belowEnd > belowStart, "Manşet altı haber alanı bulunmalı");
+  assert.ok(latestStart >= 0 && latestEnd > latestStart, "Son Haberler kart alanı bulunmalı");
+  assert.doesNotMatch(body.slice(belowStart, belowEnd), /<time/, "Manşet altı haberlerin altında tarih veya saat olmamalı");
+  assert.doesNotMatch(body.slice(latestStart, latestEnd), /<time/, "Son Haberler kartlarının altında tarih veya saat olmamalı");
+});
+
 test("ana sayfa manşeti güncel ve gerçek görselli haberleri seçer", async () => {
   const latest = [
     { id: 10, heroImage: "/media/2026/08/guncel-1.webp" },
@@ -2283,7 +2346,7 @@ test("kapak görseli onarım aracı depolama kurallarını uygulamayla aynı tut
   assert.doesNotMatch(script, /DELETE|DROP/i, "Onarım aracı veri silmemeli");
 });
 
-test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir haber şeridi korunur", async () => {
+test("resmî sosyal hesaplar, sade Son Haberler ve yönetilebilir haber şeridi korunur", async () => {
   const defaults = defaultSettings();
   assert.deepEqual(
     Object.fromEntries(Object.keys(officialSocialAccounts).map((key) => [key, defaults[key]])),
@@ -2297,10 +2360,11 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
 
   const home = await html("/");
   const latestItems = home.match(/class="latest-item"/g) ?? [];
-  assert.ok(latestItems.length > 0 && latestItems.length <= 5, `Son dakika sütunu en fazla 5 kompakt satır göstermeli; bulunan: ${latestItems.length}`);
+  assert.equal(latestItems.length, 0, "Son Haberler yanında eski koyu canlı akış sütunu kalmamalı");
+  assert.doesNotMatch(home, /aria-label="Son dakika haber akışı"/, "Kaldırılan koyu akış erişilebilirlik ağacında da kalmamalı");
+  assert.match(home, /class="home-photo-gallery"/, "Son Haberler ana kartının yanında Foto Galeri bulunmalı");
   const flowItems = home.match(/class="flow-item/g) ?? [];
   assert.equal(flowItems.length, 6, "Aşağı taşınan Günün Akışı altı güncel gelişme göstermeli");
-  assert.match(home, /class="latest-more"[^>]*><span>Tüm son dakika haberleri<\/span>/, "Çağrı bağlantısı tek bir anlamlı metin taşımalı");
   assert.doesNotMatch(home, /class="breaking-ribbon breaking-ribbon-hero/, "Son dakika işareti slider görselini kapatmamalı");
 
   const breakingArticle = await html("/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde");
@@ -2316,7 +2380,7 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(client, /className="weather-chip"/);
   assert.match(client, /market-chip market-/, "Piyasa kartları yön durumunu sınıfında taşımalı");
-  assert.match(styles, /\.home \.latest \.latest-more\{[^}]*display:flex!important[^}]*white-space:nowrap/s, "Daha fazla bağlantısı kelime kelime kırılmamalı");
+  assert.match(styles, /\.home-photo-gallery\{[^}]*border-top:5px solid var\(--red\)/, "Foto Galeri güçlü fakat kompakt bir vitrin olmalı");
   assert.match(styles, /@media\(max-width:500px\)[\s\S]*\.breaking-ribbon/, "Haber şeridinin mobil boyutu tanımlanmalı");
   assert.match(styles, /\.weather-chip>span\{display:block!important\}/, "Mobilde sıcaklık metni güneş simgesiyle birlikte görünmeli");
   assert.match(styles, /\.masthead \.live-button\{[^}]*font-size:8px/, "Mobil canlı yayın düğmesi anlaşılır metnini korumalı");
@@ -2325,6 +2389,7 @@ test("resmî sosyal hesaplar, kompakt son dakika akışı ve yönetilebilir habe
   assert.match(styles, /@media\(min-width:1101px\)[\s\S]*?\.home \.lead\{[^}]*aspect-ratio:735\/410/, "Masaüstü manşet eski Koza görsel oranını korumalı");
   assert.match(styles, /\.home \.lead\{[^}]*width:100%[^}]*align-self:start/, "Masaüstü slider sağ akışın altında taşmamalı");
   assert.match(styles, /@media\(max-width:760px\)[\s\S]*?\.home \.lead-slides\{[^}]*aspect-ratio:735\/410/, "Mobil manşet görseli kırpılmadan kendi oranında kalmalı");
+  assert.match(styles, /@media\(max-width:520px\)\{[\s\S]*?\.home \.lead\{height:clamp\(330px,calc\(55\.8vw \+ 135px\),365px\);min-height:0\}/, "Mobil manşetin gereksiz siyah yüksekliği sınırlandırılmalı");
 });
 
 

@@ -8,7 +8,9 @@ import { AdSlot } from "./ad-slot";
 export type NavCategory = { id: number; name: string; slug: string };
 
 export function navCategories(): NavCategory[] {
-  return listCategories(true).map((category) => ({ id: category.id, name: category.name, slug: category.slug }));
+  return listCategories(true)
+    .filter((category) => category.slug !== "video")
+    .map((category) => ({ id: category.id, name: category.name, slug: category.slug }));
 }
 
 function istanbulDate() {
@@ -63,7 +65,6 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
           <span>{istanbulDate()}</span>
           <LiveData />
           <div className="top-links">
-            <a href="/yazarlar">Yazarlar</a>
             <a href="/canli">Yayın Akışı</a>
             <SocialCluster />
           </div>
@@ -84,8 +85,8 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
             {categories.map((category) => (
               <a href={`/kategori/${category.slug}`} key={category.id} aria-current={active === `kategori/${category.slug}` ? "page" : undefined}>{category.name}</a>
             ))}
-            <a href="/videolar" aria-current={active === "videolar" ? "page" : undefined}>Videolar</a>
-            <a href="/yazarlar" aria-current={active === "yazarlar" ? "page" : undefined}>Yazarlar</a>
+            <a href="/foto-galeri" aria-current={active === "foto-galeri" ? "page" : undefined}>Foto Galeri</a>
+            <a href="/videolar" aria-current={active === "videolar" ? "page" : undefined}>Video Merkezi</a>
             <SearchBox />
           </div>
         </nav>

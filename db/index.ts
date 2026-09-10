@@ -11,6 +11,7 @@ import { agencyUpdateDecision } from "./agency-model.mjs";
 import { advertisementState, houseAdSeeds } from "./ad-model.mjs";
 import { ensureAdvertisementSchema } from "./ad-schema.mjs";
 import { isVisibleHomepageStatus, normalizeHomepagePlacementLimits, promoteHomepageArticle, repairUnrankedSliderArticles } from "./homepage-order.mjs";
+import { extractGalleryImages, selectPhotoGalleries } from "./photo-gallery-model.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
@@ -20,6 +21,7 @@ export type HomepagePlacement = "latest" | "slider" | "side" | "below";
 export type WorkflowState = "reporter_draft" | "editor_review" | "changes_requested" | "approved" | "rejected" | "published" | "withdrawn";
 export type ContentBlock = { id: string; type: "paragraph" | "heading" | "quote" | "list" | "image" | "video" | "embed"; content: string; caption?: string };
 export type ArticleRecord = { id: number; slug: string; title: string; spot: string; body: string; blocks: ContentBlock[]; category: string; status: ArticleStatus; workflowState: WorkflowState; assignedTo: number | null; editVersion: number; correctionNote: string; withdrawnAt: number | null; heroImage: string; imageAlt: string; videoUrl: string; author: string; sourceName: string; sourceUrl: string; seoTitle: string; seoDescription: string; isBreaking: number; isFeatured: number; homepageOrder: number; homepagePlacement: HomepagePlacement; headlinePosition: HeadlinePosition; publishedAt: number | null; scheduledAt: number | null; agencySourceId: number | null; agencyExternalId: string; agencyCredit: string; agencyReceivedAt: number | null; agencyDisclaimer: string; agencyEditorialLock: number; agencyUpdatePending: number; createdAt: number; updatedAt: number };
+export type PhotoGalleryRecord = ArticleRecord & { galleryImages: { src: string; caption: string }[] };
 export type ArticleInput = Omit<ArticleRecord, "id" | "createdAt" | "updatedAt" | "publishedAt" | "scheduledAt" | "homepagePlacement" | "headlinePosition"> & { id?: number; publishedAt?: number | string | null; scheduledAt?: number | string | null; homepagePlacement?: HomepagePlacement; headlinePosition?: HeadlinePosition };
 export type NewsSource = { id: number; name: string; url: string; type: string; provider: string; feedFormat: string; authType: string; secretEnv: string; credentialReady: boolean; pollIntervalMinutes: number; publishMode: string; defaultCategory: string; categoryMap: string; disclaimer: string; active: number; lastCheckedAt: number | null; lastSuccessAt: number | null; lastError: string; nextPollAt: number | null; itemCount: number; createdAt: number; updatedAt: number };
 export type CategoryRecord = { id: number; name: string; slug: string; description: string; seoTitle: string; seoDescription: string; color: string; navOrder: number; isVisible: number; articleCount: number; createdAt: number; updatedAt: number };
@@ -764,6 +766,17 @@ export function listLatestArticles(limit = 30) {
   publishDueArticles();
   const safeLimit = Math.min(Math.max(limit, 1), 100);
   return (getDb().prepare("SELECT * FROM articles WHERE status='published' ORDER BY published_at DESC, id DESC LIMIT ?").all(safeLimit) as Record<string, unknown>[]).map(mapArticle);
+}
+
+export function listPhotoGalleries(limit = 24): PhotoGalleryRecord[] {
+  return selectPhotoGalleries(listLatestArticles(100), limit) as PhotoGalleryRecord[];
+}
+
+export function getPhotoGalleryBySlug(slug: string): PhotoGalleryRecord | null {
+  const article = getArticleBySlug(slug);
+  if (!article) return null;
+  const galleryImages = extractGalleryImages(article) as { src: string; caption: string }[];
+  return galleryImages.length ? { ...article, galleryImages } : null;
 }
 
 /* Kategori sayfalaması: arşiv aktarımından sonra bazı kategorilerde yüzlerce haber var;

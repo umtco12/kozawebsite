@@ -1,4 +1,4 @@
-import { listAuthors, listHomepageArticles, listLatestArticles, listVideoArticles } from "../db";
+import { listAuthors, listHomepageArticles, listLatestArticles, listPhotoGalleries, listVideoArticles } from "../db";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
@@ -9,16 +9,6 @@ export const dynamic = "force-dynamic";
 function clock(value: number | null) {
   if (!value) return "Şimdi";
   return new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }).format(value);
-}
-
-function stamp(value: number | null) {
-  if (!value) return "Koza TV Haber Merkezi";
-  return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }).format(value);
-}
-
-function dayStamp(value: number | null) {
-  if (!value) return "";
-  return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }).format(value);
 }
 
 function authorName(value: string) {
@@ -46,7 +36,9 @@ export default async function Home() {
   const leadPool = listHomepageArticles("slider", 5);
   const sideNews = listHomepageArticles("side", 2);
   const belowNews = listHomepageArticles("below", 4);
-  const grid = latest.filter((article) => article.homepagePlacement === "latest").slice(0, 8);
+  /* İlk kart foto galeri vitriniyle yan yana durur; ardından 12 kart dörderli üç sıra oluşturur. */
+  const grid = listHomepageArticles("latest", 13);
+  const photoGalleries = listPhotoGalleries(8).filter((gallery) => gallery.id !== grid[0]?.id).slice(0, 3);
   const flow = latest.slice(0, 6);
   const leads = leadPool.map((article) => ({
     category: article.category,
@@ -54,13 +46,11 @@ export default async function Home() {
     image: article.heroImage,
     imageAlt: article.imageAlt,
     href: `/haber/${article.slug}`,
-    published: stamp(article.publishedAt),
     isBreaking: Boolean(article.isBreaking),
     headlinePosition: article.headlinePosition,
   }));
 
   const breakingPool = latest.filter((article) => article.isBreaking);
-  const sidebar = [...breakingPool, ...latest.filter((article) => !article.isBreaking)].slice(0, 5);
   const breaking = breakingPool[0];
   const gundemHref = categories.find((category) => category.slug === "gundem") ? "/kategori/gundem" : "/son-dakika";
   const videoLead = videos[0];
@@ -113,7 +103,7 @@ export default async function Home() {
                   <img src={article.heroImage} alt={article.imageAlt} loading="lazy" />
                   {article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}
                 </div>
-                <div><span>{article.category}</span><h2>{displayTitle(article.title)}</h2><time>{dayStamp(article.publishedAt)}</time></div>
+                <div><span>{article.category}</span><h2>{displayTitle(article.title)}</h2></div>
               </a>
             ))}
           </section>
@@ -121,40 +111,49 @@ export default async function Home() {
 
         <AdSlot placement="home_billboard" className="ad-home-billboard" />
 
-        <section className="main-columns" id="gundem">
+        <section className="main-columns latest-news-section" id="gundem">
           <div>
             <div className="section-head"><div><span>GÜNCEL</span><h2>Son Haberler</h2></div><a href={gundemHref}>Tümünü Gör →</a></div>
-            <div className="news-grid">
-              {grid.map((article, index) => (
-                <a href={`/haber/${article.slug}`} className={index === 0 ? "news-card featured" : "news-card"} key={article.id}>
+            <div className={`latest-lead-layout${photoGalleries.length ? "" : " no-gallery"}`}>
+              {grid[0] ? (
+                <a href={`/haber/${grid[0].slug}`} className="news-card featured" key={grid[0].id}>
+                  <div className="news-thumb"><img src={grid[0].heroImage} alt={grid[0].imageAlt} loading="lazy" />{grid[0].isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
+                  <div className="card-body">
+                    <span>{grid[0].category}</span>
+                    <h3>{displayTitle(grid[0].title)}</h3>
+                    <p>{displaySpot(grid[0].spot, grid[0].title)}</p>
+                  </div>
+                </a>
+              ) : null}
+              {photoGalleries.length ? (
+                <aside className="home-photo-gallery" aria-label="Foto Galeri">
+                  <header><div><span>GÖRSEL HABER</span><h2>Foto Galeri</h2></div><a href="/foto-galeri">Tümünü gör <i aria-hidden="true">→</i></a></header>
+                  <a className="home-photo-gallery-lead" href={`/foto-galeri/${photoGalleries[0].slug}`}>
+                    <img src={photoGalleries[0].galleryImages[0].src} alt={photoGalleries[0].galleryImages[0].caption || photoGalleries[0].imageAlt} loading="lazy" />
+                    <div><span>{photoGalleries[0].galleryImages.length} FOTOĞRAF</span><h3>{displayTitle(photoGalleries[0].title)}</h3></div>
+                  </a>
+                  {photoGalleries.length > 1 ? <div className="home-photo-gallery-list">{photoGalleries.slice(1).map((gallery) => (
+                    <a href={`/foto-galeri/${gallery.slug}`} key={gallery.id}>
+                      <img src={gallery.galleryImages[0].src} alt={gallery.galleryImages[0].caption || gallery.imageAlt} loading="lazy" />
+                      <div><span>{gallery.galleryImages.length} FOTOĞRAF</span><h3>{displayTitle(gallery.title)}</h3></div>
+                    </a>
+                  ))}</div> : null}
+                </aside>
+              ) : null}
+            </div>
+            <div className="news-grid latest-news-grid">
+              {grid.slice(1).map((article) => (
+                <a href={`/haber/${article.slug}`} className="news-card" key={article.id}>
                   <div className="news-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <div className="card-body">
                     <span>{article.category}</span>
                     <h3>{displayTitle(article.title)}</h3>
                     <p>{displaySpot(article.spot, article.title)}</p>
-                    <time>{dayStamp(article.publishedAt)}</time>
                   </div>
                 </a>
               ))}
             </div>
           </div>
-          <aside className="latest" aria-label="Son dakika haber akışı">
-            <div className="latest-title">
-              <span><i /> CANLI AKIŞ</span>
-              <strong>Son Dakika</strong>
-              <small>{sidebar.length} güncel gelişme</small>
-            </div>
-            <div className="latest-list">
-            {sidebar.map((article, index) => (
-              <a className="latest-item" href={`/haber/${article.slug}`} key={article.id}>
-                <time>{clock(article.publishedAt)}</time>
-                <p><span>{article.isBreaking ? "SON DAKİKA" : article.category}</span>{displayTitle(article.title)}</p>
-                <b aria-hidden="true">{String(index + 1).padStart(2, "0")}</b>
-              </a>
-            ))}
-            </div>
-            <a className="latest-more" href="/son-dakika"><span>Tüm son dakika haberleri</span><b aria-hidden="true">→</b></a>
-          </aside>
         </section>
 
         <section className="home-flow-lower" aria-labelledby="home-flow-title">

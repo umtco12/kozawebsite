@@ -264,7 +264,7 @@ export function LeadSlider({ items }: { items: Lead[] }) {
 
 export function MobileMenu({ categories }: { categories: { name: string; slug: string }[] }) {
   const [open, setOpen] = useState(false);
-  const mobileLinks = [["Ana Sayfa", "/"], ["Son Dakika", "/son-dakika"], ...categories.map((category) => [category.name, `/kategori/${category.slug}`]), ["Videolar", "/videolar"], ["Yazarlar", "/yazarlar"], ["Canlı Yayın", "/canli"], ["Arama", "/arama"], ["İletişim", "/kurumsal/iletisim"]];
+  const mobileLinks = [["Ana Sayfa", "/"], ["Son Dakika", "/son-dakika"], ...categories.map((category) => [category.name, `/kategori/${category.slug}`]), ["Foto Galeri", "/foto-galeri"], ["Video Merkezi", "/videolar"], ["Canlı Yayın", "/canli"], ["Arama", "/arama"], ["İletişim", "/kurumsal/iletisim"]];
 
   return (
     <>

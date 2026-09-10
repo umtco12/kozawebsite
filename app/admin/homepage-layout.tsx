@@ -27,7 +27,7 @@ const descriptions: Record<Placement, string> = {
   slider: "Ana sayfadaki beşli büyük manşet alanı",
   side: "Manşetin yanındaki Günün Akışı alanı",
   below: "Manşetin hemen altındaki haber kartları",
-  latest: "Manşetten çıkan ve normal akışta görünen haberler",
+  latest: "Manşetten çıkan ve yayın tarihine göre sıralanan haberler",
 };
 
 function publishedDate(value: number | null) {
@@ -171,7 +171,7 @@ export function HomepageLayout({ onDirtyChange }: { onDirtyChange?: (dirty: bool
     </div>
 
     <section className="homepage-latest-zone" data-home-layout-zone data-placement="latest">
-      <header><div><span>SON HABERLER</span><h3>Yayındaki diğer haberler</h3><p>Buradaki bir haberi tutup yukarıdaki alanlardan birine bırakabilirsiniz.</p></div><label><span>Haber ara</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Başlık veya kategori…" /></label></header>
+      <header><div><span>SON HABERLER</span><h3>Yayındaki diğer haberler</h3><p>Ana sayfada yayın tarihine göre en güncel 13 haber görünür: 1 ana haber ve dörderli üç sıra kart. Daha eski haberler “Tümünü Gör” sayfasında kalır.</p></div><label><span>Haber ara</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Başlık veya kategori…" /></label></header>
       <div className="homepage-latest-list">
         {visibleLatest.map(({ article, index }) => <LayoutCard article={article} placement="latest" index={index} total={board.latest.length} dragging={draggingId === article.id} onMove={moveCard} onNudge={nudge} onDragStart={(id) => { dragRef.current = id; setDraggingId(id); }} key={article.id} />)}
         {!visibleLatest.length && <div className="homepage-layout-search-empty">{normalizedQuery ? "Aramanıza uygun haber bulunamadı." : "Son Haberler'de başka yayın bulunmuyor."}</div>}
