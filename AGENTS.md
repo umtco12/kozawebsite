@@ -679,6 +679,14 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Doğrulama: Yeni regresyonlar uygulamadan önce spot, kapak zorunluluğu ve editör sözleşmelerinde beklenen biçimde başarısız oldu; uygulamadan sonra `npm test` production build ile **77 test geçti; 0 başarısız, 0 atlandı**. `npx tsc --noEmit` ve bağımsız `npm run build` başarılı; `npm run lint` **0 hata/36 bilinen ham görsel uyarısı**, `npm audit --omit=dev` **0 production açığı** verdi. Gerçek tarayıcıda fotoğrafsız kaydın iki ayrı uyarıyla engellendiği, hazır görselle taslağın kaydolduğu, 4,5 saniyede otomatik kayıt oluşmadığı, manuel kaydın yeni sürüm oluşturduğu ve videonun seçilen paragrafın hemen altına eklendiği doğrulandı. Chrome 1280/900/390 px ölçümlerinde editör ve haber sayfasında yatay taşma yoktu; metin içi video genişliği sırasıyla 640/640/364 px ölçüldü.
 - Kalan karar veya risk: Ham `<img>` performans uyarıları ayrı optimizasyon işidir. Son Dakika kapağı acil kullanım için güvenli bir yedektir; gerçek olay fotoğrafı bulunduğunda editörün doğru fotoğraf ve alt metinle değiştirmesi beklenir. Staging yayın sonucu ayrı kayıtla eklenecektir.
 
+### 2026-09-10 — Editör ve manşet yanı iyileştirmelerinin staging dağıtımı
+
+- İstek: Spot, zorunlu fotoğraf, kompakt/yerleştirilebilir video, manuel kayıt ve Son Dakika kapağı geliştirmeleri ile bekleyen manşet yanı sadeleştirmesinin test edilip staging ortamına yayınlanması.
+- Yapılanlar: `96faba2` uygulama commit'i fast-forward olarak `main` branch'ine gönderildi. GitHub Actions temiz kurulum, production bağımlılık denetimi, test/build, lint, SSH aktarımı, sunucuda ikinci test, atomik sürüm değişimi ve dış smoke adımlarının tamamını başarıyla bitirdi.
+- Değişen ana dosyalar: Dağıtılan uygulama sürümü `96faba229e96b571203b489a00bb33d1eea8bb77`; yayın kaydı için `AGENTS.md`.
+- Doğrulama: GitHub Actions çalışması `34507434182` **1 dakika 59 saniyede başarılı** tamamlandı. Dış kontrolde `/`, `/kategori/gundem`, `/son-dakika`, `/canli`, `/yazarlar` ve `/admin/giris` HTTP 200; `/admin` HTTP 307 ve `/api/auth/me` HTTP 401 döndürdü. Yeni Son Dakika görseli staging'de HTTP 200 `image/png` yanıtıyla açıldı ve gerçek dosya ölçüsü **1280×720** doğrulandı. Ana sayfa sunucu HTML'inde manşet yanı alanı ve haber başlığı bulunurken kategori `span`ı, tarih `time`ı ve Son Dakika şeridi bulunmadı.
+- Kalan karar veya risk: Yayın Hetzner staging IP'sinde HTTP çalışmaktadır; canlı marka alan adı/DNS/HTTPS geçişi bu kapsamda değildir. Ham `<img>` performans uyarıları ayrı optimizasyon işidir.
+
 ### 2026-09-09 — Haber editöründe seçili metni gerçek ara başlığa dönüştürme
 
 - İstek: Haber metninde büyük harflerle yazılan ara başlıklara üst/alt boşluk verilememesi ve bu metinlerin siyah, kalın gösterilememesi.
