@@ -1644,11 +1644,12 @@ test("foto galeri güvenli görselleri toplar, listeler ve ayrıntı sayfasında
   assert.match(index, /<title>Foto Galeri \| Koza TV<\/title>/i);
   assert.match(index, /KOZA TV GÖRSEL HABER/);
   assert.match(index, /class="photo-gallery-(?:lead|card)"/, "Galeri en az bir görsel haber göstermeli");
+  assert.doesNotMatch(index, />\d+ FOTOĞRAF</, "Foto galeri kartlarında kırmızı fotoğraf sayacı gösterilmemeli");
   const galleryHref = index.match(/href="(\/foto-galeri\/[^"]+)"/)?.[1];
   assert.ok(galleryHref, "Galeri kartı ayrıntı sayfasına bağlanmalı");
   const detail = await html(galleryHref);
   assert.match(detail, /class="photo-gallery-frames"/);
-  assert.match(detail, /FOTOĞRAF/);
+  assert.doesNotMatch(detail, />\d+ FOTOĞRAF</, "Galeri başlığında kırmızı fotoğraf sayacı gösterilmemeli");
   assert.match(detail, /Haberin tamamını oku/);
   const missing = await notFoundHtml("/foto-galeri/bulunmayan-foto-galeri");
   assert.match(missing, /bulunamadı/);
@@ -2363,6 +2364,7 @@ test("resmî sosyal hesaplar, sade Son Haberler ve yönetilebilir haber şeridi 
   assert.equal(latestItems.length, 0, "Son Haberler yanında eski koyu canlı akış sütunu kalmamalı");
   assert.doesNotMatch(home, /aria-label="Son dakika haber akışı"/, "Kaldırılan koyu akış erişilebilirlik ağacında da kalmamalı");
   assert.match(home, /class="home-photo-gallery"/, "Son Haberler ana kartının yanında Foto Galeri bulunmalı");
+  assert.doesNotMatch(home, />\d+ FOTOĞRAF</, "Ana sayfa Foto Galeri kartlarında fotoğraf sayacı gösterilmemeli");
   const flowItems = home.match(/class="flow-item/g) ?? [];
   assert.equal(flowItems.length, 6, "Aşağı taşınan Günün Akışı altı güncel gelişme göstermeli");
   assert.doesNotMatch(home, /class="breaking-ribbon breaking-ribbon-hero/, "Son dakika işareti slider görselini kapatmamalı");
@@ -2381,6 +2383,10 @@ test("resmî sosyal hesaplar, sade Son Haberler ve yönetilebilir haber şeridi 
   assert.match(client, /className="weather-chip"/);
   assert.match(client, /market-chip market-/, "Piyasa kartları yön durumunu sınıfında taşımalı");
   assert.match(styles, /\.home-photo-gallery\{[^}]*border-top:5px solid var\(--red\)/, "Foto Galeri güçlü fakat kompakt bir vitrin olmalı");
+  assert.match(styles, /\.home-photo-gallery\{[^}]*display:grid[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*align-self:start/, "Foto Galeri bir büyük ve iki küçük görselli mozaik olmalı");
+  assert.match(styles, /\.home-photo-gallery-lead\{[^}]*grid-column:1\/-1[^}]*grid-row:2[^}]*aspect-ratio:16\/9/, "Ana galeri görseli tam 16:9 çerçevede gösterilmeli");
+  assert.match(styles, /\.home-photo-gallery-lead>img\{[^}]*object-fit:contain/, "Ana galeri fotoğrafı kırpılmadan bütünüyle görünmeli");
+  assert.match(styles, /\.home-photo-gallery-list\{[^}]*grid-column:1\/-1[^}]*grid-row:3[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*margin-top:0/, "İki küçük galeri görseli ana karenin altında yan yana durmalı");
   assert.match(styles, /@media\(max-width:500px\)[\s\S]*\.breaking-ribbon/, "Haber şeridinin mobil boyutu tanımlanmalı");
   assert.match(styles, /\.weather-chip>span\{display:block!important\}/, "Mobilde sıcaklık metni güneş simgesiyle birlikte görünmeli");
   assert.match(styles, /\.masthead \.live-button\{[^}]*font-size:8px/, "Mobil canlı yayın düğmesi anlaşılır metnini korumalı");

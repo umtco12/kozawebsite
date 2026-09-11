@@ -26,13 +26,13 @@ export default async function PhotoGalleryIndex() {
 
       <div className="wrap photo-gallery-shell">
         {lead ? <a className="photo-gallery-lead" href={`/foto-galeri/${lead.slug}`}>
-          <div className="photo-gallery-lead-media"><img src={lead.galleryImages[0].src} alt={lead.galleryImages[0].caption || lead.imageAlt} /><span>{lead.galleryImages.length} FOTOĞRAF</span></div>
+          <div className="photo-gallery-lead-media"><img src={lead.galleryImages[0].src} alt={lead.galleryImages[0].caption || lead.imageAlt} /></div>
           <div><small>{lead.category}</small><h2>{displayTitle(lead.title)}</h2>{displaySpot(lead.spot, lead.title) ? <p>{displaySpot(lead.spot, lead.title)}</p> : null}<strong>Galeriyi aç <i aria-hidden="true">→</i></strong></div>
         </a> : <section className="photo-gallery-empty"><h2>Foto galeriler hazırlanıyor.</h2><p>Yayınlanan görsel haberler burada yer alacak.</p></section>}
 
         {others.length > 0 ? <section className="photo-gallery-grid" aria-label="Foto galeriler">
           {others.map((gallery) => <a className="photo-gallery-card" href={`/foto-galeri/${gallery.slug}`} key={gallery.id}>
-            <div><img src={gallery.galleryImages[0].src} alt={gallery.galleryImages[0].caption || gallery.imageAlt} loading="lazy" /><span>{gallery.galleryImages.length} FOTOĞRAF</span></div>
+            <div><img src={gallery.galleryImages[0].src} alt={gallery.galleryImages[0].caption || gallery.imageAlt} loading="lazy" /></div>
             <small>{gallery.category}</small><h2>{displayTitle(gallery.title)}</h2><b>Galeriyi görüntüle <i aria-hidden="true">↗</i></b>
           </a>)}
         </section> : null}

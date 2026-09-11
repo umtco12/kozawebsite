@@ -126,16 +126,16 @@ export default async function Home() {
                 </a>
               ) : null}
               {photoGalleries.length ? (
-                <aside className="home-photo-gallery" aria-label="Foto Galeri">
+                <aside className={`home-photo-gallery${photoGalleries.length === 1 ? " home-photo-gallery-single" : photoGalleries.length === 2 ? " home-photo-gallery-duo" : ""}`} aria-label="Foto Galeri">
                   <header><div><span>GÖRSEL HABER</span><h2>Foto Galeri</h2></div><a href="/foto-galeri">Tümünü gör <i aria-hidden="true">→</i></a></header>
                   <a className="home-photo-gallery-lead" href={`/foto-galeri/${photoGalleries[0].slug}`}>
                     <img src={photoGalleries[0].galleryImages[0].src} alt={photoGalleries[0].galleryImages[0].caption || photoGalleries[0].imageAlt} loading="lazy" />
-                    <div><span>{photoGalleries[0].galleryImages.length} FOTOĞRAF</span><h3>{displayTitle(photoGalleries[0].title)}</h3></div>
+                    <div><small>{photoGalleries[0].category}</small><h3>{displayTitle(photoGalleries[0].title)}</h3><b>Galeriyi aç <i aria-hidden="true">↗</i></b></div>
                   </a>
                   {photoGalleries.length > 1 ? <div className="home-photo-gallery-list">{photoGalleries.slice(1).map((gallery) => (
                     <a href={`/foto-galeri/${gallery.slug}`} key={gallery.id}>
                       <img src={gallery.galleryImages[0].src} alt={gallery.galleryImages[0].caption || gallery.imageAlt} loading="lazy" />
-                      <div><span>{gallery.galleryImages.length} FOTOĞRAF</span><h3>{displayTitle(gallery.title)}</h3></div>
+                      <div><small>{gallery.category}</small><h3>{displayTitle(gallery.title)}</h3></div>
                     </a>
                   ))}</div> : null}
                 </aside>

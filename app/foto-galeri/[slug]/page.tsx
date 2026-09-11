@@ -24,7 +24,7 @@ export default async function PhotoGalleryDetail({ params }: Props) {
     <main className="photo-gallery-detail-page">
       <SiteHeader categories={categories} active="foto-galeri" />
       <article className="wrap photo-gallery-detail">
-        <header><a href="/foto-galeri">← Foto Galeri</a><span>{gallery.category}</span><h1>{displayTitle(gallery.title)}</h1>{gallery.spot ? <p>{gallery.spot}</p> : null}<div><strong>{gallery.galleryImages.length} FOTOĞRAF</strong><a href={articleHref}>Haberi oku ↗</a></div></header>
+        <header><a href="/foto-galeri">← Foto Galeri</a><span>{gallery.category}</span><h1>{displayTitle(gallery.title)}</h1>{gallery.spot ? <p>{gallery.spot}</p> : null}<div><a href={articleHref}>Haberi oku ↗</a></div></header>
         <section className="photo-gallery-frames" aria-label={`${displayTitle(gallery.title)} fotoğrafları`}>
           {gallery.galleryImages.map((image, index) => <figure id={`fotograf-${index + 1}`} key={image.src}>
             <div><img src={image.src} alt={image.caption || `${displayTitle(gallery.title)} — ${index + 1}. fotoğraf`} loading={index === 0 ? "eager" : "lazy"} /><span>{String(index + 1).padStart(2, "0")} / {String(gallery.galleryImages.length).padStart(2, "0")}</span></div>
