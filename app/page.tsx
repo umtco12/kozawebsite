@@ -1,8 +1,9 @@
-import { listHomepageArticles, listHomepagePhotoGalleries, listLatestArticles, listVideoArticles } from "../db";
+import { getBroadcastSchedule, listHomepageArticles, listHomepagePhotoGalleries, listLatestArticles, listVideoArticles } from "../db";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
 import { AdSlot } from "./ad-slot";
+import { BroadcastStrip } from "./broadcast-strip";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,8 @@ export default async function Home() {
   const categories = navCategories();
   const latest = listLatestArticles(100);
   const videos = listVideoArticles(6);
+  // eslint-disable-next-line react-hooks/purity -- Dynamic server request snapshot, also used for the client's identical first render.
+  const broadcastNow = Date.now();
 
   /* Haber yalnız editörün yayın sırasında seçtiği ana sayfa bölgesine gider.
      Konum seçilmeyen kayıtlar slidera taşınmaz; Son Haberler havuzunda kalır. */
@@ -63,8 +66,11 @@ export default async function Home() {
           <p>Türkiye ve dünyadan doğrulanmış gelişmeler, canlı akış ve güçlü yorum.</p>
         </header>
 
-        <section className="hero-grid" aria-label="Öne çıkan haberler">
-          <LeadSlider items={leads} />
+        <section className={`hero-grid${sideNews.length ? "" : " hero-grid-no-side"}`} aria-label="Öne çıkan haberler">
+          <div className="hero-main">
+            <LeadSlider items={leads} />
+            <BroadcastStrip schedule={getBroadcastSchedule()} initialNow={broadcastNow} />
+          </div>
           {sideNews.length > 0 && (
             <aside className="hero-side-news" aria-label="Manşet yanı haberleri">
               {sideNews.map((article, index) => (

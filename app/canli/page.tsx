@@ -40,7 +40,7 @@ export default async function Live() {
             <div><strong>Yayın merkezi</strong><span>Koza TV Haber Merkezi</span></div>
           </div>
         </section>
-        <aside className="live-flow">
+        <aside className="live-flow" id="yayin-akisi">
           <div className="live-flow-head"><span>BUGÜN</span><strong>Yayın Akışı</strong></div>
           {schedule.map((item) => (
             <div className="live-flow-row" key={item.time}>

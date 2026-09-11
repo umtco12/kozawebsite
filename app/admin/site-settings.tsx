@@ -73,7 +73,7 @@ export function SiteSettingsPanel({ canEdit }: { canEdit: boolean }) {
         ))}
 
         <section className="editor-section">
-          <div className="editor-section-head"><span>04</span><div><h2>Yayın akışı</h2><p>Canlı yayın sayfasındaki günün program akışı.</p></div></div>
+          <div className="editor-section-head"><span>04</span><div><h2>Yayın akışı</h2><p>Ana sayfadaki yatay şerit ve canlı yayın sayfası bu günlük akışı kullanır. Saatler Türkiye saatidir; bir program sonraki başlangıca kadar gösterilir.</p></div></div>
           <div className="schedule-editor">
             {schedule.map((row, index) => (
               <div className="schedule-row" key={index}>
@@ -102,7 +102,7 @@ export function SiteSettingsPanel({ canEdit }: { canEdit: boolean }) {
           <li><b>Sosyal hesaplar</b> → üst bant ve alt bölüm simgeleri. Boş hesap bağlantı olarak gösterilmez.</li>
           <li><b>Künye alanları</b> → <code>/kurumsal/kunye</code> ve <code>/kurumsal/iletisim</code>.</li>
           <li><b>Piyasa göstergesi</b> → BIST 100, gram altın, Dolar ve Euro değişimleri otomatik okunur; ana akış kesilirse TCMB döviz verisi güvenli yedektir.</li>
-          <li><b>Yayın akışı</b> → <code>/canli</code> sayfasındaki program listesi.</li>
+          <li><b>Yayın akışı</b> → Ana sayfadaki yatay şerit ve <code>/canli</code> sayfasındaki program listesi.</li>
         </ul>
       </aside>
     </div>

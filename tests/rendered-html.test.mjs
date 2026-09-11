@@ -1976,6 +1976,79 @@ test("gezinme bağlantıları çerçeveye bağlı olmayan gerçek bağlantılard
   }
 });
 
+test("yatay yayın akışı İstanbul saatinde program geçişini ve gece yarısını doğru seçer", async () => {
+  const { selectBroadcastWindow } = await import("../db/broadcast-schedule.mjs");
+  const rows = [{ time: "19:00", title: "Ana Haber", host: "Merkez" }, { time: "07:00", title: "Günaydın", host: "Sabah" }, { time: "12:30", title: "Öğle Bülteni", host: "Haber" }];
+  const at = (time) => selectBroadcastWindow(rows, Date.parse(`2026-09-11T${time}:00+03:00`));
+  assert.deepEqual(at("07:00").map((item) => item.title), ["Günaydın", "Öğle Bülteni", "Ana Haber"]);
+  assert.equal(at("07:00")[0].progress, 0);
+  assert.equal(at("12:29")[0].title, "Günaydın");
+  assert.equal(at("12:30")[0].title, "Öğle Bülteni");
+  assert.equal(at("12:30")[0].progress, 0);
+  assert.deepEqual(at("19:00").map((item) => item.dayOffset), [0, 1, 1]);
+  assert.deepEqual(at("00:00").map((item) => item.dayOffset), [-1, 0, 0]);
+  assert.equal(at("06:59")[0].title, "Ana Haber");
+  assert.equal(at("06:59")[1].title, "Günaydın");
+  assert.ok(at("06:59")[0].progress < 1);
+  assert.deepEqual(selectBroadcastWindow([], Date.now()), []);
+  assert.deepEqual(selectBroadcastWindow([{ time: "29:00", title: "Geçersiz" }], Date.now()), []);
+  assert.deepEqual(selectBroadcastWindow(rows, NaN), []);
+  const single = selectBroadcastWindow([rows[0], { ...rows[0], title: "Yeni program" }], Date.parse("2026-09-11T20:00:00+03:00"));
+  assert.equal(single.length, 1, "Aynı saat veya tek program üç kere tekrarlanmamalı");
+  assert.equal(single[0].title, "Yeni program");
+  assert.equal(single[0].progress, 1 / 24);
+});
+
+test("ana sayfadaki yatay yayın akışı panel verisini gösterir ve yetkisiz değiştirilemez", async (t) => {
+  const original = (await (await request("/api/settings")).json()).settings.broadcastSchedule;
+  t.after(async () => {
+    await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastSchedule: JSON.parse(original) }) });
+  });
+  const broadcastSchedule = [
+    { time: "07:00", title: "Koza Sabah Akışı", host: "Sabah Ekibi" },
+    { time: "12:30", title: "Kent, kültür ve gündem üzerine çok uzun Türkçe program başlığı", host: "Yayın Merkezi" },
+    { time: "19:00", title: "Ana Haber <script>test</script>", host: "Akşam Ekibi" },
+  ];
+  const payload = { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastSchedule }) };
+  assert.equal((await request("/api/settings", payload)).status, 200);
+  const home = await html("/");
+  const strip = home.match(/<section class="broadcast-strip"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(strip, "Manşetin altında yatay Yayın Akışı bulunmalı");
+  assert.match(strip, /Koza Sabah Akışı/);
+  assert.match(strip, /çok uzun Türkçe program başlığı/);
+  assert.match(strip, /Yayın Merkezi/);
+  assert.doesNotMatch(strip, /<script>test<\/script>/, "Program metni HTML olarak çalıştırılmamalı");
+  assert.equal((strip.match(/aria-current="time"/g) || []).length, 1);
+  assert.match(strip, /href="\/canli#yayin-akisi"/);
+  assert.match(await html("/canli"), /id="yayin-akisi"/);
+  const unauthorized = await anonymousRequest("/api/settings", payload);
+  assert.equal(unauthorized.status, 401);
+  const viewer = await createRoleSession("viewer", "YayinAkisi");
+  assert.equal((await anonymousRequest("/api/settings", { ...payload, headers: { ...payload.headers, cookie: viewer.cookie } })).status, 403);
+  const invalid = await request("/api/settings", { ...payload, body: JSON.stringify({ broadcastSchedule: [{ time: "25:90", title: "Bozuk" }] }) });
+  assert.equal(invalid.status, 400);
+  assert.match(await html("/"), /Koza Sabah Akışı/, "Reddedilen kayıt yayındaki programları değiştirmemeli");
+  const source = await readFile(new URL("../app/broadcast-strip.tsx", import.meta.url), "utf8");
+  assert.match(source, /60_000 - current % 60_000/, "Açık sayfada program her dakika başında güncellenmeli");
+  assert.match(source, /visibilitychange/);
+  assert.match(source, /removeEventListener/);
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.home \.hero-main>\.broadcast-strip\{margin:0\}/, "Genel bölüm boşluğu manşet ile yayın şeridini birbirinden koparmamalı");
+  assert.match(css, /\.broadcast-programs\{[^}]*overflow-x:auto/, "Mobil akış kendi içinde kaymalı");
+  assert.match(css, /\.broadcast-strip a:focus-visible/, "Program bağlantılarının klavye odağı görünür olmalı");
+  const fixtureDb = new Database(process.env.KOZA_DB_PATH);
+  const sideIds = fixtureDb.prepare("SELECT id FROM articles WHERE homepage_placement='side'").all();
+  t.after(() => {
+    const restore = fixtureDb.prepare("UPDATE articles SET homepage_placement='side' WHERE id=?");
+    for (const row of sideIds) restore.run(row.id);
+    fixtureDb.close();
+  });
+  fixtureDb.prepare("UPDATE articles SET homepage_placement='latest' WHERE homepage_placement='side'").run();
+  const noSide = await html("/");
+  assert.match(noSide, /class="hero-grid hero-grid-no-side"/, "Yan haber yokken boş sağ sütun ayrılmamalı");
+  assert.match(noSide, /class="hero-main"[\s\S]*class="broadcast-strip"/, "Yayın akışı manşetle aynı sütunda kalmalı");
+});
+
 test("site ayarları modeli adres, e-posta ve yayın akışı kurallarını uygular", () => {
   assert.equal(defaultSettings().siteMotto, "Şimdi konuşma zamanı", "Yeni kurulumun marka mottosu doğru olmalı");
   const good = validateSettings({ siteMotto: "  Şimdi konuşma zamanı  ", liveHlsUrl: "https://yayin.example.com/koza.m3u8", newsEmail: "Haber@KozaTV.com.tr", satelliteInfo: "Türksat 3A", showMarketTicker: false });
