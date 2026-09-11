@@ -782,3 +782,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: Yeni regresyon testi önce ayrı başlık alanını ve uzun alt kareleri yakalayarak beklendiği gibi başarısız oldu. Uygulamadan sonra `npm test` production build ile **83 test geçti; 0 başarısız, 0 atlandı**. Üç galerili ayrı test verisiyle gerçek Chrome motorunda 1440 px masaüstü, 900 px tablet ve 390 px mobil ana sayfa incelendi; başlık için ayrılmış boş satır kalmadı, ana görselin tamamı göründü, iki kısa görsel altta farklı ölçüde yer aldı ve yatay taşma oluşmadı.
 - Kalan karar veya risk: Son düzeltme henüz commit edilmedi ve staging ortamına dağıtılmadı. Ham `<img>` performans uyarıları ayrı optimizasyon işidir.
+
+### 2026-09-11 — Kompakt Foto Galeri kolajının staging dağıtımı
+
+- İstek: Verilen asimetrik görsel kolaj referanslarına göre küçültülen Foto Galeri vitrininin staging ortamına gönderilmesi.
+- Yapılanlar: Fotoğraf sayaçlarını kaldıran `f983ff9` sürümünün ardından ayrı başlık boşluğunu kaldırıp başlığı görsele bindiren, ana fotoğrafı kırpmayan ve iki alt görseli kısa mozaik parçalarına dönüştüren `8658412` düzeltmesi fast-forward olarak `main` branch'ine gönderildi. GitHub Actions temiz kurulum, production bağımlılık denetimi, test/build, lint, sunucu aktarımı, atomik sürüm değişimi ve dış smoke adımlarını başarıyla tamamladı.
+- Değişen ana dosyalar: Dağıtılan son uygulama sürümü `86584123dc3aa392f9f20bcd2948e3c830a39426`; yayın kaydı için `AGENTS.md`.
+- Doğrulama: GitHub Actions çalışması `34569747505` **2 dakika 3 saniyede başarıyla** tamamlandı. Production build ile **83 test geçti; 0 başarısız, 0 atlandı**; typecheck başarılı, lint **0 hata/43 bilinen ham görsel uyarısı** verdi. Dış kontrolde `/`, `/foto-galeri` ve `/admin/giris` HTTP 200, `/admin` HTTP 307 döndürdü. Staging HTML/CSS kontrolünde üç galeri bağlantısı, sıfır fotoğraf sayacı, görsel üzerine bindirilmiş başlık, 16:7 kısa alt kareler ve ana fotoğrafta `object-fit:contain` doğrulandı.
+- Kalan karar veya risk: Yayın Hetzner staging IP'sinde HTTP çalışmaktadır; canlı marka alan adı/DNS/HTTPS geçişi bu kapsamda değildir. Ham `<img>` performans uyarıları ayrı optimizasyon işidir.
