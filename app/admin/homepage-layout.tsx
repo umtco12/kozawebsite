@@ -123,6 +123,7 @@ export function HomepageLayout({ onDirtyChange }: { onDirtyChange?: (dirty: bool
       slider: board.slider.map((article) => article.id),
       side: board.side.map((article) => article.id),
       below: board.below.map((article) => article.id),
+      latest: board.latest.map((article) => article.id),
     };
     try {
       const response = await fetch("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision, layout }) });
@@ -157,7 +158,7 @@ export function HomepageLayout({ onDirtyChange }: { onDirtyChange?: (dirty: bool
       </div>
       <a href="/" target="_blank" rel="noreferrer">Ana sayfayı aç ↗</a>
     </header>
-    <div className="homepage-layout-rule"><strong>Haber kaybolmaz:</strong> Slider 5, Manşet yanı 2, Manşet altı 4 haber alır. Dolu alana yeni haber koyarsanız son sıradaki haber otomatik olarak Son Haberler&apos;e geçer.</div>
+    <div className="homepage-layout-rule"><strong>Haber kaybolmaz:</strong> Slider 5, Manşet yanı 2, Manşet altı 4 haber alır. Dolu alana yeni haber koyarsanız son sıradaki haber otomatik olarak Son Haberler&apos;in başına geçer. Son düşen haber ilk sırada görünür; önceki haberler sırayla aşağı iner.</div>
     {message && <div className={message.includes("kaydedilemedi") || message.includes("değiştirildi") ? "homepage-layout-message error" : "homepage-layout-message"} role="status">{message}</div>}
 
     <div className="homepage-layout-zones">
@@ -171,7 +172,7 @@ export function HomepageLayout({ onDirtyChange }: { onDirtyChange?: (dirty: bool
     </div>
 
     <section className="homepage-latest-zone" data-home-layout-zone data-placement="latest">
-      <header><div><span>SON HABERLER</span><h3>Yayındaki diğer haberler</h3><p>Ana sayfada yayın tarihine göre en güncel 13 haber görünür: 1 ana haber ve dörderli üç sıra kart. Daha eski haberler “Tümünü Gör” sayfasında kalır.</p></div><label><span>Haber ara</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Başlık veya kategori…" /></label></header>
+      <header><div><span>SON HABERLER</span><h3>Yayındaki diğer haberler</h3><p>Yeni yayınlanan veya manşet alanlarından çıkan haberler bu listenin başına gelir. Ana sayfada en güncel 13 haber görünür: 1 ana haber ve dörderli üç sıra kart. Daha eski haberler “Tümünü Gör” sayfasında kalır.</p></div><label><span>Haber ara</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Başlık veya kategori…" /></label></header>
       <div className="homepage-latest-list">
         {visibleLatest.map(({ article, index }) => <LayoutCard article={article} placement="latest" index={index} total={board.latest.length} dragging={draggingId === article.id} onMove={moveCard} onNudge={nudge} onDragStart={(id) => { dragRef.current = id; setDraggingId(id); }} key={article.id} />)}
         {!visibleLatest.length && <div className="homepage-layout-search-empty">{normalizedQuery ? "Aramanıza uygun haber bulunamadı." : "Son Haberler'de başka yayın bulunmuyor."}</div>}

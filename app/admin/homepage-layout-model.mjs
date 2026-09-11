@@ -17,8 +17,10 @@ export function moveHomepageLayoutCard(board, id, target, targetIndex, limits) {
   const next = Object.fromEntries(
     allPlacements.map((placement) => [placement, board[placement].filter((item) => item.id !== id)]),
   );
-  const requestedIndex = Number.isFinite(targetIndex) ? targetIndex : next[target].length;
-  const index = Math.max(0, Math.min(requestedIndex, next[target].length));
+  const requestedIndex = Number.isFinite(targetIndex) ? targetIndex : 0;
+  // A new card must occupy a visible slot even if dropped below a full column.
+  const lastIndex = target === "latest" ? 0 : Math.min(next[target].length, limits[target] - 1);
+  const index = target === "latest" ? 0 : Math.max(0, Math.min(requestedIndex, lastIndex));
   next[target].splice(index, 0, article);
 
   if (target !== "latest" && next[target].length > limits[target]) {

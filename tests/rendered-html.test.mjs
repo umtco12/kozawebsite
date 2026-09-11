@@ -18,7 +18,8 @@ import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "../db/demo-content-mo
 import { defaultSettings, normalizePath, officialSocialAccounts, parseLiveSource, parseRedirectInventory, normalizeSchedule, validateRedirect, validateSettings } from "../db/settings-model.mjs";
 import { extractBodyBlocks, isAllowedSource, legacyPath, mapLegacyArticle, parseHomepageEntries, parseSitemapEntries, parseSitemapLocations, slugFromLegacyUrl } from "../db/import-model.mjs";
 import { selectHomepageLeads } from "../db/homepage-model.mjs";
-import { HOMEPAGE_ORDER_REPAIR_KEY, homepagePlacementLimits, normalizeHomepagePlacementLimits, promoteHomepageArticle, repairUnrankedSliderArticles, validateHomepageLayout } from "../db/homepage-order.mjs";
+import { HOMEPAGE_ORDER_REPAIR_KEY, homepagePlacementLimits, normalizeHomepagePlacementLimits, promoteHomepageArticle, repairUnrankedSliderArticles, syncLegacyHomepagePlacements, validateHomepageLayout } from "../db/homepage-order.mjs";
+import { ensureHomepageLatestSchema, homepageLatestOrderSql, moveHomepageArticlesToLatest, recordHomepageLatestEntries } from "../db/homepage-latest.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { parseMynetMarketPayload } from "../app/api/piyasa/market-model.mjs";
 import { agencyUpdateDecision, applyCategoryMap, buildAgencyHeaders, normalizeAgencyPayload, renderAgencyDisclaimer, validateAgencySource } from "../db/agency-model.mjs";
@@ -743,6 +744,14 @@ test("ana sayfa kart taşıma modeli dolu alanı güvenle yönetir ve gereksiz d
   assert.equal(latestReorder, board, "Son Haberler havuzu elle sıralanmadığı için kendi içinde taşıma değişiklik oluşturmamalı");
   assert.equal(homepageLayoutSignature(board), homepageLayoutSignature({ ...board, latest: [...board.latest].reverse() }), "Son Haberler'in tarih sırası kaydetme imzasına girmemeli");
   assert.notEqual(homepageLayoutSignature(board), homepageLayoutSignature(reordered), "Yönetilen alan sırası değişince ekran kaydedilmemiş sayılmalı");
+  const manualDrop = moveHomepageLayoutCard(board, 7, "latest", 2, limits);
+  assert.equal(manualDrop.latest[0].id, 7, "Son Haberler'e elle alınan haber de en başa gelmeli");
+  const selectedPlacement = moveHomepageLayoutCard(board, 10, "slider", undefined, limits);
+  assert.equal(selectedPlacement.slider[0].id, 10, "Konum açılır listesinden seçilen haber dolu alanın başına girmeli");
+  assert.equal(selectedPlacement.latest[0].id, 5);
+  const droppedAtEnd = moveHomepageLayoutCard(board, 10, "slider", 5, limits);
+  assert.deepEqual(droppedAtEnd.slider.map((article) => article.id), [1, 2, 3, 4, 10], "Dolu alanın sonuna bırakılan haber kendisini dışarı atmamalı");
+  assert.equal(droppedAtEnd.latest[0].id, 5);
 });
 
 test("ana sayfa kapasitesi aşılınca haber kaybolmadan Son Haberler'e iner", () => {
@@ -755,10 +764,13 @@ test("ana sayfa kapasitesi aşılınca haber kaybolmadan Son Haberler'e iner", (
       homepage_placement TEXT NOT NULL,
       homepage_order INTEGER NOT NULL,
       is_featured INTEGER NOT NULL DEFAULT 0,
+      edit_version INTEGER NOT NULL DEFAULT 1,
       published_at INTEGER,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE audit_logs (entity_type TEXT,entity_id INTEGER,action TEXT,actor TEXT,detail TEXT,created_at INTEGER);
   `);
+  ensureHomepageLatestSchema(layoutDb);
   const insert = layoutDb.prepare("INSERT INTO articles (id,title,status,homepage_placement,homepage_order,is_featured,published_at,updated_at) VALUES (?,?,?,?,1,1,?,?)");
   for (let index = 1; index <= 7; index += 1) insert.run(index, `Slider haberi ${index}`, "published", "slider", 800 - index, 800 - index);
 
@@ -779,6 +791,66 @@ test("ana sayfa kapasitesi aşılınca haber kaybolmadan Son Haberler'e iner", (
   assert.equal(validateHomepageLayout({ slider: [1], side: [1], below: [] }).valid, false, "Bir haber iki konumda bulunmamalı");
   assert.equal(validateHomepageLayout({ slider: [0], side: [], below: [] }).valid, false, "Geçersiz haber kimliği reddedilmeli");
   layoutDb.close();
+});
+
+test("Son Haberler geçiş sırası eşzamanlı düşmelerde ve tekrar açılışta korunur", () => {
+  const db = new Database(":memory:");
+  db.exec(`CREATE TABLE articles (id INTEGER PRIMARY KEY,status TEXT,homepage_placement TEXT,homepage_order INTEGER,is_featured INTEGER,edit_version INTEGER DEFAULT 1,published_at INTEGER,updated_at INTEGER);
+    CREATE TABLE audit_logs (entity_type TEXT,entity_id INTEGER,action TEXT,actor TEXT,detail TEXT,created_at INTEGER);
+    INSERT INTO articles (id,status,homepage_placement,homepage_order,is_featured,published_at,updated_at) VALUES
+      (1,'published','latest',1,0,900,900),(2,'published','latest',500,0,950,950),
+      (3,'published','slider',6,1,10,10),(4,'published','slider',7,1,20,20),
+      (5,'published','side',3,0,30,30),(6,'draft','below',5,0,NULL,40);`);
+  ensureHomepageLatestSchema(db);
+  const latest = () => db.prepare(`SELECT id FROM articles WHERE status='published' AND homepage_placement='latest' ORDER BY ${homepageLatestOrderSql}`).all().map((row) => row.id);
+  assert.deepEqual(latest(), [2, 1], "Eski sıra 1/500 değerleri Son Haberler'de yayın tarihini ezmemeli");
+  assert.deepEqual(moveHomepageArticlesToLatest(db, [3, 4], 1000), [3, 4]);
+  assert.deepEqual(latest(), [3, 4, 2, 1], "Tek partide düşenlerin kendi görünür sırası korunmalı");
+  assert.deepEqual(moveHomepageArticlesToLatest(db, [5, 6], 1000), [5]);
+  assert.deepEqual(latest(), [5, 3, 4, 2, 1], "Aynı milisaniyede ikinci düşme ilk sıraya gelmeli; taslak yayınlanmamalı");
+  const snapshot = db.prepare("SELECT * FROM articles ORDER BY id").all();
+  ensureHomepageLatestSchema(db);
+  assert.deepEqual(moveHomepageArticlesToLatest(db, [5, 3, 4], 2000), [], "Tekrar çalışma düşen haberleri yeniden öne taşımamalı");
+  assert.deepEqual(db.prepare("SELECT * FROM articles ORDER BY id").all(), snapshot);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_logs").get().count, 3);
+  assert.equal(snapshot.find((row) => row.id === 3).published_at, 10);
+  assert.equal(snapshot.find((row) => row.id === 3).edit_version, 2, "Eski editör formu düşen haberin konumunu geri yazamamalı");
+  db.prepare("UPDATE articles SET homepage_placement='below' WHERE id=3").run();
+  moveHomepageArticlesToLatest(db, [3], 999);
+  assert.deepEqual(latest(), [3, 5, 4, 2, 1], "Saat gerilese de tekrar manşetten düşen haber ilk sıraya dönmeli");
+  const beforeRollback = db.prepare("SELECT * FROM articles ORDER BY id").all();
+  assert.throws(() => db.transaction(() => { recordHomepageLatestEntries(db, [2], 3000); throw new Error("rollback"); })(), /rollback/);
+  assert.deepEqual(db.prepare("SELECT * FROM articles ORDER BY id").all(), beforeRollback, "Hatalı işlem giriş sırasını değiştirmemeli");
+  for (const latestIds of [[1, 1], [0], [1], Array.from({ length: 61 }, (_, index) => index + 10)]) {
+    assert.equal(validateHomepageLayout({ slider: [1], side: [], below: [], latest: latestIds }).valid, false);
+  }
+  db.close();
+});
+
+test("eski vitrin eşitlemesi düşen haberin giriş sırasını ve normalleştirme sınırlarını korur", () => {
+  const db = new Database(":memory:");
+  db.exec(`CREATE TABLE articles (id INTEGER PRIMARY KEY,status TEXT,homepage_placement TEXT,homepage_order INTEGER,is_featured INTEGER,is_breaking INTEGER DEFAULT 0,edit_version INTEGER DEFAULT 1,published_at INTEGER,updated_at INTEGER,source_name TEXT,source_url TEXT);
+    CREATE TABLE audit_logs (entity_type TEXT,entity_id INTEGER,action TEXT,actor TEXT,detail TEXT,created_at INTEGER);`);
+  ensureHomepageLatestSchema(db);
+  const insert = db.prepare("INSERT INTO articles(id,status,homepage_placement,homepage_order,is_featured,published_at,updated_at,source_name,source_url) VALUES (?,'published',?,?,?,10,10,'kozatv.com.tr',?)");
+  const urls = Array.from({ length: 7 }, (_, index) => `https://www.kozatv.com.tr/haber-${index + 1}.html`);
+  urls.forEach((url, index) => insert.run(index + 1, index < 5 ? "slider" : "latest", index + 1, index < 5 ? 1 : 0, url));
+  assert.equal(syncLegacyHomepagePlacements(db, [urls[5], ...urls.slice(0, 5)], 1000), 6);
+  let latest = db.prepare(`SELECT id,homepage_latest_at FROM articles WHERE homepage_placement='latest' ORDER BY ${homepageLatestOrderSql}`).all();
+  assert.equal(latest[0].id, 5, "Eski vitrinden düşen beşinci haber Son Haberler'in başına gitmeli");
+  const clock = latest[0].homepage_latest_at;
+  syncLegacyHomepagePlacements(db, [urls[5], ...urls.slice(0, 5)], 2000);
+  latest = db.prepare(`SELECT id,homepage_latest_at FROM articles WHERE homepage_placement='latest' ORDER BY ${homepageLatestOrderSql}`).all();
+  assert.equal(latest[0].homepage_latest_at, clock, "Aynı vitrini tekrar eşitlemek giriş tarihini değiştirmemeli");
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM articles WHERE homepage_placement='slider'").get().count, 5);
+  db.prepare("UPDATE articles SET homepage_placement='slider',homepage_order=6,is_featured=1 WHERE id=7").run();
+  normalizeHomepagePlacementLimits(db, 3000);
+  assert.equal(db.prepare(`SELECT id FROM articles WHERE homepage_placement='latest' ORDER BY ${homepageLatestOrderSql} LIMIT 1`).get().id, 7, "Başlangıçta fazla kalan manşet de ilk sıraya inmeli");
+  const before = db.prepare("SELECT * FROM articles ORDER BY id").all();
+  normalizeHomepagePlacementLimits(db, 4000);
+  assert.deepEqual(db.prepare("SELECT * FROM articles ORDER BY id").all(), before);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM articles").get().count, 7);
+  db.close();
 });
 
 test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı tutar", async () => {
@@ -907,6 +979,115 @@ test("Ana Sayfa Düzeni yalnız yönetici tarafından ve açık kaydetmeyle sır
 
   const restored = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: saved.revision, layout: { slider: initial.layout.slider.map((article) => article.id), side: initial.layout.side.map((article) => article.id), below: initial.layout.below.map((article) => article.id) } }) });
   assert.equal(restored.status, 200, "Test sonunda ilk ana sayfa düzeni geri yüklenmeli");
+});
+
+test("üç manşet alanından düşen eski haberler Son Haberler'in başında düşme sırasıyla görünür", async (t) => {
+  const fixtureDb = new Database(process.env.KOZA_DB_PATH);
+  const original = fixtureDb.prepare("SELECT * FROM articles").all();
+  const createdIds = [];
+  t.after(() => {
+    fixtureDb.pragma("foreign_keys = ON");
+    fixtureDb.transaction(() => {
+      for (const id of createdIds) fixtureDb.prepare("DELETE FROM articles WHERE id=?").run(id);
+      const columns = ["homepage_placement", "homepage_order", "is_featured", "edit_version", "updated_at"];
+      if (Object.hasOwn(original[0], "homepage_latest_at")) columns.push("homepage_latest_at");
+      const restore = fixtureDb.prepare(`UPDATE articles SET ${columns.map((column) => `${column}=?`).join(",")} WHERE id=?`);
+      for (const article of original) restore.run(...columns.map((column) => article[column]), article.id);
+    })();
+    fixtureDb.close();
+  });
+  const create = async (placement, publishedAt, status = "published") => {
+    const title = `Otomatik düşme testi ${createdIds.length + 1} ${placement}`;
+    const response = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      title, spot: `${title} için yeterince açıklayıcı regresyon testi spotu.`,
+      body: "Bu test, manşetten çıkan eski tarihli haberlerin arşivde kaybolmadan Son Haberler alanında ilk sırada görünmesini ve sıralarını kalıcı olarak korumasını doğrular.",
+      category: "Gündem", status, heroImage: "/news/studio.jpg", imageAlt: title, homepagePlacement: placement, publishedAt,
+      scheduledAt: status === "scheduled" ? Date.now() + 3600_000 : null,
+    }) });
+    assert.equal(response.status, 201, await response.clone().text());
+    const article = (await response.json()).article;
+    createdIds.push(article.id);
+    return article;
+  };
+  const layout = async () => (await (await request("/api/homepage-layout")).json());
+  const visibleLatest = async () => {
+    const home = await html("/");
+    const section = home.split('class="main-columns latest-news-section"')[1]?.split("</section>")[0] || "";
+    return [...section.matchAll(/href="\/haber\/([^"]+)" class="news-card/g)].map((match) => match[1]);
+  };
+  const oldDate = Date.UTC(2020, 0, 1);
+  for (const [placement, capacity] of Object.entries(homepagePlacementLimits)) {
+    for (let index = 0; index < capacity; index++) await create(placement, oldDate + index);
+  }
+  // Both public (13) and admin (60) limits used to hide these old displaced records.
+  for (let index = 0; index < 65; index++) await create("latest", Date.now() - 60_000 + index);
+  const fallen = [];
+  for (const placement of ["slider", "below", "side", "slider"]) {
+    const before = await layout();
+    const last = before.layout[placement].at(-1);
+    await create(placement, Date.now());
+    fallen.unshift(last);
+    const after = await layout();
+    assert.equal(after.layout[placement].length, homepagePlacementLimits[placement]);
+    assert.deepEqual(after.layout.latest.slice(0, fallen.length).map((article) => article.id), fallen.map((article) => article.id), `${placement}: eski tarihli düşen haberler ilk sıralarda olmalı`);
+    assert.deepEqual((await visibleLatest()).slice(0, fallen.length), fallen.map((article) => article.slug), "Ziyaretçi ve yönetici aynı Son Haberler sırasını görmeli");
+    const row = fixtureDb.prepare("SELECT published_at,is_featured FROM articles WHERE id=?").get(last.id);
+    assert.equal(row.published_at, last.publishedAt, "Gerçek yayın tarihi değiştirilmemeli");
+    assert.equal(row.is_featured, 0);
+  }
+  const unchanged = (await layout()).layout.latest.map((article) => article.id);
+  const edit = (await layout()).layout.latest[2];
+  const saved = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...edit, title: `${edit.title} düzeltildi` }) });
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await layout()).layout.latest.map((article) => article.id), unchanged, "Sadece metin düzeltmek haberin giriş sırasını değiştirmemeli");
+
+  // A draft or future scheduled article cannot evict a live headline.
+  const beforeSchedule = await layout();
+  const scheduled = await create("side", null, "scheduled");
+  await create("slider", null, "draft");
+  assert.deepEqual((await layout()).layout.side.map((article) => article.id), beforeSchedule.layout.side.map((article) => article.id));
+  fixtureDb.prepare("UPDATE articles SET scheduled_at=? WHERE id=?").run(Date.now() - 1, scheduled.id);
+  const due = await layout();
+  assert.equal(due.layout.side[0].id, scheduled.id);
+  assert.equal(due.layout.latest[0].id, beforeSchedule.layout.side.at(-1).id, "Planlı yayın da düşen haberi Son Haberler'in başına almalı");
+  assert.equal((await visibleLatest())[0], beforeSchedule.layout.side.at(-1).slug);
+
+  const draft = await create("below", null, "draft");
+  const beforeWorkflow = await layout();
+  for (const action of ["submit_review", "approve", "publish"]) {
+    const response = await request("/api/editorial", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "workflow", articleId: draft.id, action }) });
+    assert.equal(response.status, 200);
+  }
+  assert.equal((await layout()).layout.latest[0].id, beforeWorkflow.layout.below.at(-1).id, "Editoryal yayın aynı otomatik sırayı kullanmalı");
+
+  // Multiple moves in one explicit save retain the preview's arrival order.
+  const beforeMoves = await layout();
+  let preview = beforeMoves.layout;
+  const limits = { ...homepagePlacementLimits, latest: 60 };
+  const incoming = preview.latest.slice(0, 3);
+  const displaced = [];
+  for (const [index, placement] of ["slider", "side", "below"].entries()) {
+    displaced.unshift(preview[placement].at(-1));
+    preview = moveHomepageLayoutCard(preview, incoming[index].id, placement, 0, limits);
+  }
+  const payload = { revision: beforeMoves.revision, layout: Object.fromEntries(Object.entries(preview).map(([placement, articles]) => [placement, articles.map((article) => article.id)])) };
+  assert.equal((await layout()).revision, beforeMoves.revision, "Önizleme kaydedilmeden sıra değişmemeli");
+  const savedLayout = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+  assert.equal(savedLayout.status, 200);
+  assert.deepEqual((await savedLayout.json()).layout.latest.slice(0, 3).map((article) => article.id), displaced.map((article) => article.id));
+  assert.deepEqual((await visibleLatest()).slice(0, 3), displaced.map((article) => article.slug));
+  const current = await layout();
+  const staleSave = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+  assert.equal(staleSave.status, 409);
+  const staleArticle = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(displaced[0]) });
+  assert.equal(staleArticle.status, 409, "Açık eski haber formu düşen kaydı yeniden manşete taşıyamamalı");
+  const denied = await anonymousRequest("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...payload, revision: current.revision }) });
+  assert.equal(denied.status, 401);
+  const invalid = await request("/api/homepage-layout", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ revision: current.revision, layout: { slider: [999999999], side: [], below: [] } }) });
+  assert.equal(invalid.status, 400);
+  assert.deepEqual((await layout()).layout.latest.map((article) => article.id), current.layout.latest.map((article) => article.id), "Reddedilen işlemler kuyruğa dokunmamalı");
+  const fresh = await create("latest", Date.now());
+  assert.equal((await visibleLatest())[0], fresh.slug, "Doğrudan Son Haberler'e yayınlanan yeni haber de aynı sıranın başına girmeli");
 });
 
 test("yalnız yönetici Şimdi yayınla ile haberi doğrudan yayına alabilir", async () => {
@@ -2237,6 +2418,36 @@ test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async
     assert.match(source, /Manşet altı/);
     assert.match(source, /Son Haberler \(varsayılan\)/);
   }
+});
+
+test("Son Haberler ilk kartı galeri varken başlığı görselde, yokken tam genişlikte gösterir", async (t) => {
+  const fixtureDb = new Database(process.env.KOZA_DB_PATH);
+  const flags = fixtureDb.prepare("SELECT id,is_homepage_gallery FROM articles").all();
+  const lead = fixtureDb.prepare(`SELECT * FROM articles WHERE status='published' AND homepage_placement='latest' ORDER BY ${homepageLatestOrderSql} LIMIT 1`).get();
+  const title = "Çukurova’da uzun başlıklı haberler de eksiksiz okunmalı: mahalle sakinlerinin beklediği yeni düzenlemenin bütün ayrıntıları açıklandı";
+  t.after(() => {
+    const restore = fixtureDb.prepare("UPDATE articles SET is_homepage_gallery=? WHERE id=?");
+    fixtureDb.transaction(() => { for (const row of flags) restore.run(row.is_homepage_gallery, row.id); })();
+    fixtureDb.prepare("UPDATE articles SET title=? WHERE id=?").run(lead.title, lead.id);
+    fixtureDb.close();
+  });
+  fixtureDb.prepare("UPDATE articles SET title=? WHERE id=?").run(title, lead.id);
+  fixtureDb.prepare("UPDATE articles SET is_homepage_gallery=0").run();
+  const withoutGallery = await html("/");
+  assert.match(withoutGallery, /class="latest-lead-layout no-gallery"/);
+  assert.doesNotMatch(withoutGallery, /<aside class="home-photo-gallery/);
+  assert.ok(withoutGallery.includes(`<h3>${title}</h3>`));
+  fixtureDb.prepare("UPDATE articles SET is_homepage_gallery=1 WHERE id IN (SELECT id FROM articles WHERE status='published' AND id<>? AND hero_image<>'' AND hero_image<>'/news/gorsel-yok.svg' LIMIT 3)").run(lead.id);
+  const withGallery = await html("/");
+  assert.match(withGallery, /class="latest-lead-layout"/);
+  assert.match(withGallery, /<aside class="home-photo-gallery/);
+  assert.ok(withGallery.includes(`<h3>${title}</h3>`), "Uzun başlık galeri açılınca kaybolmamalı");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /\.latest-lead-layout\.no-gallery\{grid-template-columns:minmax\(0,1fr\)\}/, "Galeri yokken ilk haber bütün satıra yayılmalı; 820 px sınırında kalmamalı");
+  assert.match(styles, /\.home \.latest-lead-layout \.news-card\.featured \.news-thumb\{[^}]*width:100%[^}]*aspect-ratio:auto/, "Görsel sabit yüksekliği nedeniyle metin alanına doğru genişleyememeli");
+  assert.match(styles, /\.home \.latest-lead-layout \.news-card\.featured \.card-body\{[^}]*position:relative[^}]*z-index:1[^}]*min-width:0/, "Galeri varken metin görselin üstünde ve daralabilir bir alanda olmalı");
+  assert.match(styles, /\.home \.latest-lead-layout \.news-card\.featured h3\{[^}]*overflow-wrap:anywhere/, "Uzun ve boşluksuz başlıklar karttan taşmamalı");
+  assert.match(styles, /\.home \.latest-lead-layout\.no-gallery \.news-card\.featured\{[^}]*grid-template-columns:minmax\(0,1\.2fr\) minmax\(0,1fr\)/, "Galeri yokken görsel ve haber yazısı yan yana yerleşmeli");
 });
 
 test("Son Haberler ana haberden sonra dörderli üç sırayı boş hücre bırakmadan doldurur", async () => {
