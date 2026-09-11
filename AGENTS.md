@@ -798,3 +798,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: Regresyon testi değişiklikten önce eski `align-self:start` kuralını yakalayarak beklendiği gibi başarısız oldu; düzeltmeden sonra production build ile `npm test` **83 test geçti; 0 başarısız, 0 atlandı**. `npx tsc --noEmit` başarılı; `npm run lint` **0 hata**, mevcut ham `<img>` yüzeyleri için **43 bilinen performans uyarısı** ile tamamlandı. Gerçek tarayıcı motorunda 1280 px masaüstünde galeri satırının üst ve alt boşluğu ayrı ayrı **34 px**, alt iki görsel **221×111 px** ölçüldü. 900 px tablet ve 390 px mobil görünümler görsel olarak incelendi; galeri doğal akışta kaldı ve her iki görünümde de yatay taşma **0 px** oldu.
 - Kalan karar veya risk: Değişiklik staging ortamına gönderilmek üzere commit kapsamındadır. Ham `<img>` performans uyarıları ayrı Next Image/CDN optimizasyon işidir.
+
+### 2026-09-11 — Ortalanmış Foto Galeri vitrininin staging dağıtımı
+
+- İstek: Foto Galeri kutusunun dikey ortalama ve büyütülmüş alt görsel düzeltmesinin staging ortamına gönderilmesi.
+- Yapılanlar: `b580a87` uygulama commit'i fast-forward olarak `main` branch'ine gönderildi. GitHub Actions temiz kurulum, production bağımlılık denetimi, test/build, lint, SSH aktarımı, sunucuda ikinci test, atomik sürüm değişimi ve dış smoke adımlarını başarıyla tamamladı.
+- Değişen ana dosyalar: Dağıtılan uygulama sürümü `b580a8702f28a7c1e478d83bc0f32d7cfa5211d3`; yayın kaydı için `AGENTS.md`.
+- Doğrulama: GitHub Actions çalışması `34571316130` **2 dakika 6 saniyede başarılı** tamamlandı. Dış kontrolde `/`, `/foto-galeri` ve `/admin/giris` HTTP 200, `/admin` HTTP 307 döndürdü. Staging CSS'inde `align-self:center`, masaüstü için dengeli `margin-block` ve alt iki görsel için `aspect-ratio:2` doğrulandı. Gerçek staging tarayıcısında galeri alt görsellerinin büyüdüğü ve 992 px tablet görünümünde yatay taşma oluşmadığı görüldü.
+- Kalan karar veya risk: Yayın Hetzner staging IP'sinde HTTP çalışmaktadır; canlı marka alan adı/DNS/HTTPS geçişi bu kapsamda değildir. Ham `<img>` performans uyarıları ayrı optimizasyon işidir.
