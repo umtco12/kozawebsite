@@ -2383,13 +2383,14 @@ test("resmî sosyal hesaplar, sade Son Haberler ve yönetilebilir haber şeridi 
   assert.match(client, /className="weather-chip"/);
   assert.match(client, /market-chip market-/, "Piyasa kartları yön durumunu sınıfında taşımalı");
   assert.match(styles, /\.home-photo-gallery\{[^}]*border-top:3px solid var\(--red\)/, "Foto Galeri güçlü fakat kompakt bir vitrin olmalı");
-  assert.match(styles, /\.home-photo-gallery\{[^}]*position:relative[^}]*display:grid[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*align-self:start/, "Foto Galeri bir büyük ve iki küçük görselli mozaik olmalı");
+  assert.match(styles, /\.home-photo-gallery\{[^}]*position:relative[^}]*display:grid[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*align-self:center/, "Foto Galeri bir büyük ve iki küçük görselli mozaik olarak kendi sütununda ortalanmalı");
+  assert.match(styles, /@media\(min-width:1051px\)\{\.home-photo-gallery\{margin-block:clamp\(18px,2vw,30px\)\}\}/, "Masaüstü Foto Galeri vitrininin üst ve altında dengeli dış boşluk olmalı");
   assert.match(styles, /\.home-photo-gallery>header\{[^}]*position:absolute[^}]*z-index:3[^}]*background:linear-gradient/, "Foto Galeri başlığı ayrı boşluk üretmeden görselin üzerinde durmalı");
   assert.match(styles, /\.home-photo-gallery>header h2\{[^}]*font:700 20px/, "Foto Galeri başlığı görseli bastırmayacak kadar küçük olmalı");
   assert.match(styles, /\.home-photo-gallery-lead\{[^}]*grid-column:1\/-1[^}]*grid-row:1[^}]*aspect-ratio:16\/9/, "Ana galeri görseli tam 16:9 çerçevede gösterilmeli");
   assert.match(styles, /\.home-photo-gallery-lead>img\{[^}]*object-fit:contain/, "Ana galeri fotoğrafı kırpılmadan bütünüyle görünmeli");
   assert.match(styles, /\.home-photo-gallery-list\{[^}]*grid-column:1\/-1[^}]*grid-row:2[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*margin-top:0/, "İki küçük galeri görseli ana karenin altında yan yana durmalı");
-  assert.match(styles, /\.home-photo-gallery-list>a\{[^}]*aspect-ratio:16\/7/, "Alt galeri kareleri ana görselden daha kısa ve farklı boyutta olmalı");
+  assert.match(styles, /\.home-photo-gallery-list>a\{[^}]*aspect-ratio:2\/1/, "Alt galeri görselleri okunaklı olacak kadar yüksek ve farklı boyutta olmalı");
   assert.match(styles, /@media\(max-width:500px\)[\s\S]*\.breaking-ribbon/, "Haber şeridinin mobil boyutu tanımlanmalı");
   assert.match(styles, /\.weather-chip>span\{display:block!important\}/, "Mobilde sıcaklık metni güneş simgesiyle birlikte görünmeli");
   assert.match(styles, /\.masthead \.live-button\{[^}]*font-size:8px/, "Mobil canlı yayın düğmesi anlaşılır metnini korumalı");
