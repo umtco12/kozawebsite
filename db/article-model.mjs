@@ -56,6 +56,7 @@ export function validateArticleInput(payload) {
   if (!articleStatuses.includes(payload.status)) errors.status = "Geçerli bir yayın durumu seçilmeli";
   if (payload.homepagePlacement != null && !homepagePlacements.includes(payload.homepagePlacement)) errors.homepagePlacement = "Geçerli bir ana sayfa konumu seçilmeli";
   if (payload.headlinePosition != null && !headlinePositions.includes(payload.headlinePosition)) errors.headlinePosition = "Geçerli bir manşet yazısı konumu seçilmeli";
+  if (payload.isHomepageGallery != null && ![0, 1, true, false].includes(payload.isHomepageGallery)) errors.isHomepageGallery = "Ana sayfa Foto Galeri seçimi geçerli değil";
   if (payload.status === "scheduled" && !payload.scheduledAt) errors.scheduledAt = "Planlı yayın tarihi gerekli";
   if (payload.sourceUrl) {
     try {

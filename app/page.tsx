@@ -1,4 +1,4 @@
-import { listAuthors, listHomepageArticles, listLatestArticles, listPhotoGalleries, listVideoArticles } from "../db";
+import { listHomepageArticles, listHomepagePhotoGalleries, listLatestArticles, listVideoArticles } from "../db";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
@@ -11,24 +11,9 @@ function clock(value: number | null) {
   return new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }).format(value);
 }
 
-function authorName(value: string) {
-  const normalized = value.trim();
-  if (/^administrator administrator$/i.test(normalized)) return "Koza TV Editör Masası";
-  if (/^koza\s*tv$/i.test(normalized)) return "Koza TV";
-  return normalized;
-}
-
-function authorInitials(value: string) {
-  return authorName(value).split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toLocaleUpperCase("tr-TR") || "KT";
-}
-
-function authorKind(value: string) {
-  return /haber merkezi|koza\s*tv|administrator|haber servisi/i.test(value) ? "HABER SERVİSİ" : "KÖŞE YAZARI";
-}
 export default async function Home() {
   const categories = navCategories();
   const latest = listLatestArticles(100);
-  const authors = listAuthors().slice(0, 4);
   const videos = listVideoArticles(6);
 
   /* Haber yalnız editörün yayın sırasında seçtiği ana sayfa bölgesine gider.
@@ -38,8 +23,7 @@ export default async function Home() {
   const belowNews = listHomepageArticles("below", 4);
   /* İlk kart foto galeri vitriniyle yan yana durur; ardından 12 kart dörderli üç sıra oluşturur. */
   const grid = listHomepageArticles("latest", 13);
-  const photoGalleries = listPhotoGalleries(8).filter((gallery) => gallery.id !== grid[0]?.id).slice(0, 3);
-  const flow = latest.slice(0, 6);
+  const photoGalleries = listHomepagePhotoGalleries(8).filter((gallery) => gallery.id !== grid[0]?.id).slice(0, 3);
   const leads = leadPool.map((article) => ({
     category: article.category,
     title: displayTitle(article.title),
@@ -156,49 +140,6 @@ export default async function Home() {
           </div>
         </section>
 
-        <section className="home-flow-lower" aria-labelledby="home-flow-title">
-          <header className="home-flow-lower-head">
-            <div><span>CANLI</span><div><h2 id="home-flow-title">Günün Akışı</h2><small>Son güncelleme {clock(latest[0]?.publishedAt ?? null)}</small></div></div>
-            <a href="/son-dakika">Tüm gelişmeleri gör <b aria-hidden="true">→</b></a>
-          </header>
-          <div className="home-flow-grid">
-            {flow.map((article, index) => (
-              <a href={`/haber/${article.slug}`} className={index === 0 ? "flow-item active" : "flow-item"} key={article.id}>
-                <time>{clock(article.publishedAt)}</time>
-                <div>
-                  <span>{article.isBreaking ? "SON DAKİKA" : article.category.toLocaleUpperCase("tr-TR")}</span>
-                  <h2>{displayTitle(article.title)}</h2>
-                </div>
-              </a>
-            ))}
-          </div>
-        </section>
-
-        {authors.length > 0 && (
-          <section className="writers-showcase" aria-labelledby="writers-showcase-title">
-            <header className="writers-showcase-head">
-              <div>
-                <span>KÖŞE YAZARLARI · HABER SERVİSLERİ</span>
-                <h2 id="writers-showcase-title">Köşe Yazarları &amp; Haber Servisleri</h2>
-                <p>Gündemi hazırlayan kalemler ve haber masalarının son çalışmaları.</p>
-              </div>
-              <a href="/yazarlar">Tüm imzaları gör <i aria-hidden="true">→</i></a>
-            </header>
-            <div className="writers-showcase-grid">
-              {authors.map((author, index) => (
-                <a href={`/yazar/${author.slug}`} className={`writer-profile writer-tone-${(index % 4) + 1}`} key={author.slug}>
-                  <div className="writer-profile-top">
-                    <div className="writer-monogram" aria-hidden="true">{authorInitials(author.name)}</div>
-                    <div className="writer-profile-meta"><span>{authorKind(author.name)}</span><small>{author.articleCount} HABER</small></div>
-                  </div>
-                  <h3>{authorName(author.name)}</h3>
-                  <p>{displayTitle(author.latestTitle) || "Yeni içerik hazırlanıyor."}</p>
-                  <div className="writer-profile-foot"><span>{author.topCategory || "Koza TV"}</span><b>Arşivi gör <i aria-hidden="true">↗</i></b></div>
-                </a>
-              ))}
-            </div>
-          </section>
-        )}
       </div>
 
       <section className="video-section" id="video">

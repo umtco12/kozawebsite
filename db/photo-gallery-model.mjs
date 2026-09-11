@@ -25,3 +25,10 @@ export function selectPhotoGalleries(articles, limit = 24) {
     .filter((article) => article.galleryImages.length > 0)
     .slice(0, safeLimit);
 }
+
+export function selectHomepagePhotoGalleries(articles, limit = 8) {
+  return selectPhotoGalleries(
+    (Array.isArray(articles) ? articles : []).filter((article) => article?.isHomepageGallery === true || Number(article?.isHomepageGallery) === 1),
+    limit,
+  );
+}
