@@ -932,5 +932,5 @@ Her yeni işte aşağıdaki biçimi kullan:
 - İstek: Etiketin kırmızı zeminli değil, ilk hâlindeki gibi koyu zeminli ve kırmızı yazılı olması.
 - Yapılanlar: `.flow-rail-label` zemini `#0d141c`, yazısı `#ff4a52` yapıldı. Büyütülmüş ölçüler korundu: genişlik 34 piksel, punto 12, kalınlık 900, harf aralığı 2,4 piksel.
 - Değişen ana dosyalar: `app/globals.css`, `AGENTS.md`.
-- Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**.
-- Kalan karar veya risk: CI derlemesindeki font yükleme hatası (Inter/Merriweather 404) ayrı bir iş olarak beklemektedir.
+- Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**. GitHub Actions çalışması `34698558542` başarıyla tamamlandı; canlıda etiket `#0d141c` zemin ve `#ff4a52` yazı, 34 piksel genişlik, 12 punto olarak sunuluyor. **Yayındaki programın ilerleme çubuğu gerçek saatle doğrulandı:** 17:00–18:00 programında İstanbul saati 17:14 iken çubuk %23, 17:15 olduğunda sayfa yenilenmeden %25'e geçti (beklenen 14/60 ve 15/60). Canlı JavaScript paketinde dakika tiki (`visibilitychange`), `flow-card-progress` ve `YAYINDA` bulunuyor.
+- Kalan karar veya risk: Üretimde akış hafta içi tanımlı olduğu için ilerleme çubuğu ilk kez pazartesi 08:00'de görünecektir. CI derlemesindeki font yükleme hatası (Inter/Merriweather 404) ayrı bir iş olarak beklemektedir.
