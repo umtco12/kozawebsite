@@ -926,3 +926,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/globals.css`, `AGENTS.md`.
 - Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**. Tarayıcıda etiket zemini `rgb(220, 21, 29)`, yazı beyaz, genişlik 34 piksel; altı sunucu fotoğrafının tamamı `eager` olarak açılışta yüklendi.
 - Kalan karar veya risk: CI derlemesindeki font yükleme hatası (Inter/Merriweather 404) ayrı bir iş olarak beklemektedir.
+
+### 2026-09-12 — Yayın akışı etiketinin koyu zemin ve kırmızı yazıya alınması
+
+- İstek: Etiketin kırmızı zeminli değil, ilk hâlindeki gibi koyu zeminli ve kırmızı yazılı olması.
+- Yapılanlar: `.flow-rail-label` zemini `#0d141c`, yazısı `#ff4a52` yapıldı. Büyütülmüş ölçüler korundu: genişlik 34 piksel, punto 12, kalınlık 900, harf aralığı 2,4 piksel.
+- Değişen ana dosyalar: `app/globals.css`, `AGENTS.md`.
+- Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**.
+- Kalan karar veya risk: CI derlemesindeki font yükleme hatası (Inter/Merriweather 404) ayrı bir iş olarak beklemektedir.
