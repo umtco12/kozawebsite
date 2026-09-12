@@ -910,3 +910,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/broadcast-flow.tsx`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npx tsc --noEmit` temiz; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**.
 - Kalan karar veya risk: CI derlemesindeki font yükleme hatası (Inter/Merriweather 404) ayrı bir iş olarak beklemektedir.
+
+### 2026-09-12 — Yayın akışı etiketinin okunur hâle getirilmesi ve siyah alanın azaltılması
+
+- İstek: Dikey **Yayın Akışı** yazısının daha geniş ve daha belirgin olması; kartlardaki siyah gölgenin bir tık daha azalması. Etiket önce kırmızı zemine alındı, ardından kullanıcı isteğiyle eski koyu zemine döndürülüp yazısı beyaz yapıldı.
+- Yapılanlar: Etiket şeridi 29 pikselden 34 piksele genişledi, punto 11'den 12'ye çıktı, zemin `#0d141c` kaldı ve yazı beyaza alındı; kalınlık 900, harf aralığı 2,4 piksel. Kart alt bandı 57 pikselden 53 piksele, fotoğraf altındaki karartma 18 pikselden 12 piksele indi; boşalan yükseklik fotoğrafa gitti.
+- Değişen ana dosyalar: `app/globals.css`, `AGENTS.md`.
+- Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npx tsc --noEmit` temiz; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**. Gerçek tarayıcıda ölçüldü — 1440 px: etiket 34 × 188, kart 136 × 188, fotoğraf 133 px (kartın **%71'i**), siyah bant 53 px, altı kartın saat satırı tek hizada (235 px); 1024 px: kart 107 × 188, aynı oranlar; 768 px: etiket 34 × 177, kart 148 × 166; 390 px: etiket 34 × 167, kart 126 × 156, başlık 268 px. Dört kırılımda da etiket metni taşmıyor, program ve sunucu adlarında kırpılma yok, sayfa taşması yok; 1440 ve 1024 pikselde altı kart kaydırmasız sığıyor.
+- Kalan karar veya risk: CI derlemesindeki font yükleme hatası (Inter/Merriweather 404, site yedek Arial/Times ile görüntüleniyor) ayrı bir iş olarak beklemektedir.
