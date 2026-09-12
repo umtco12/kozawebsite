@@ -1251,7 +1251,7 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .masthead .live-button{width:100%;justify-content:center;border-radius:3px}
 .site-header{position:relative}
 .flow-rail{flex:1;min-width:0;display:flex;align-items:stretch;gap:7px}
-.flow-rail-label{flex:none;width:24px;display:grid;place-items:center;border-radius:3px;background:#0d141c;color:#ff6268;font-size:8.5px;font-weight:900;letter-spacing:2.4px;text-transform:uppercase;white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg)}
+.flow-rail-label{flex:none;width:29px;display:grid;place-items:center;border-radius:3px;background:#0d141c;color:#ff4a52;font-size:11px;font-weight:900;letter-spacing:2.2px;text-transform:uppercase;white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg)}
 .flow-rail-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .flow-rail-list{flex:1;min-width:0;margin:0;padding:0;list-style:none;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(100px,1fr);gap:6px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:thin;scrollbar-color:#c3c9d0 transparent}
 .flow-card{min-width:0;scroll-snap-align:start}
