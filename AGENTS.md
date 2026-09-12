@@ -918,3 +918,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/globals.css`, `AGENTS.md`.
 - Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npx tsc --noEmit` temiz; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**. Gerçek tarayıcıda ölçüldü — 1440 px: etiket 34 × 188, kart 136 × 188, fotoğraf 133 px (kartın **%71'i**), siyah bant 53 px, altı kartın saat satırı tek hizada (235 px); 1024 px: kart 107 × 188, aynı oranlar; 768 px: etiket 34 × 177, kart 148 × 166; 390 px: etiket 34 × 167, kart 126 × 156, başlık 268 px. Dört kırılımda da etiket metni taşmıyor, program ve sunucu adlarında kırpılma yok, sayfa taşması yok; 1440 ve 1024 pikselde altı kart kaydırmasız sığıyor.
 - Kalan karar veya risk: CI derlemesindeki font yükleme hatası (Inter/Merriweather 404, site yedek Arial/Times ile görüntüleniyor) ayrı bir iş olarak beklemektedir.
+
+### 2026-09-12 — Yayın akışı etiketinin kırmızı zemine alınması
+
+- İstek: Etiket bir önceki adımda koyu zemine döndürülmüştü; kullanıcı kırmızı zeminli hâlini tercih etti.
+- Yapılanlar: `.flow-rail-label` zemini `var(--red)` yapıldı, yazı beyaz kaldı. Genişlik 34 piksel, punto 12, kalınlık 900 değişmedi.
+- Değişen ana dosyalar: `app/globals.css`, `AGENTS.md`.
+- Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**. Tarayıcıda etiket zemini `rgb(220, 21, 29)`, yazı beyaz, genişlik 34 piksel; altı sunucu fotoğrafının tamamı `eager` olarak açılışta yüklendi.
+- Kalan karar veya risk: CI derlemesindeki font yükleme hatası (Inter/Merriweather 404) ayrı bir iş olarak beklemektedir.
