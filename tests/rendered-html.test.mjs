@@ -2082,6 +2082,7 @@ test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz
   assert.equal((rail.match(/aria-current="time"/g) || []).length, 1, "Aynı anda yalnız bir program yayında işaretlenmeli");
   assert.equal((rail.match(/>YAYINDA</g) || []).length, 1, "YAYINDA yazısı yalnız o an yayındaki programda görünmeli");
   assert.doesNotMatch(rail, /SIRADAKİ|ŞU ANDA|YAYINLANDI/, "Yayındaki program dışında hiçbir karta rozet konulmamalı");
+  assert.match(rail, /class="flow-rail-label"[^>]*>Yayın Akışı</, "Şeridin ne olduğunu söyleyen etiket bulunmalı");
   assert.match(rail, /href="\/canli"/);
 
   /* Şerit başlıkta olduğu için bütün sayfalarda görünür; manşetin altında ikinci kopyası kalmaz. */
@@ -2128,6 +2129,7 @@ test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz
   assert.ok(Number(railWrap[1]) <= 900, `Masaüstünde şerit alta düşmemeli, kural ${railWrap[1]}px'te tanımlanmış`);
   assert.equal((css.match(/\.flow-rail\{order:3/g) ?? []).length, 1, "Şeridi alta indiren tek bir kural olmalı");
   assert.match(css, /\.masthead-brand\{[^}]*flex-direction:column/, "Canlı yayın düğmesi logonun altında durmalı");
+  assert.match(css, /\.flow-rail-label\{[^}]*writing-mode:vertical-rl/, "Yayın akışı etiketi dikey durup kart genişliğinden yer almamalı");
   assert.match(css, /\.flow-rail-list\{[^}]*overflow-x:auto/, "Dar ekranda şerit kendi içinde kaymalı");
   assert.match(css, /\.flow-rail a:focus-visible/, "Program bağlantılarının klavye odağı görünür olmalı");
   assert.match(css, /@media\(max-width:600px\)\{[\s\S]*?\.flow-rail-list\{[^}]*grid-auto-columns:minmax\(1[2-9]\dpx/, "Mobilde kartlar okunur genişlikte kalmalı");

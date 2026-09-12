@@ -50,6 +50,8 @@ export function BroadcastFlow({ schedule, initialNow }: { schedule: ScheduleRow[
       <span className="flow-rail-status" aria-live="polite">
         {live ? `Yayın akışına göre şu anda: ${live.title}` : `Yayın akışı: ${dayLabel}`}
       </span>
+      {/* Şeridin ne olduğunu söyleyen ince dikey etiket; kart genişliğinden neredeyse hiç almaz. */}
+      <span className="flow-rail-label" aria-hidden="true">Yayın Akışı</span>
       <ol className="flow-rail-list" ref={listRef} aria-label="Günün programları; tamamı için yatay kaydırın">
         {items.map((item) => (
           <li className={`flow-card flow-card-${item.state}`} key={`${item.days}-${item.time}`}>

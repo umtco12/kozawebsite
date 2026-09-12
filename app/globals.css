@@ -1250,20 +1250,21 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .masthead .brand>img{width:100%;height:calc(var(--marka-en,240px)/2.39)}
 .masthead .live-button{width:100%;justify-content:center;border-radius:3px}
 .site-header{position:relative}
-.flow-rail{flex:1;min-width:0;display:flex;align-items:stretch}
+.flow-rail{flex:1;min-width:0;display:flex;align-items:stretch;gap:7px}
+.flow-rail-label{flex:none;width:24px;display:grid;place-items:center;border-radius:3px;background:#0d141c;color:#ff6268;font-size:8.5px;font-weight:900;letter-spacing:2.4px;text-transform:uppercase;white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg)}
 .flow-rail-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .flow-rail-list{flex:1;min-width:0;margin:0;padding:0;list-style:none;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(100px,1fr);gap:6px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:thin;scrollbar-color:#c3c9d0 transparent}
 .flow-card{min-width:0;scroll-snap-align:start}
-.flow-card>a{position:relative;display:flex;flex-direction:column;height:182px;min-width:0;overflow:hidden;border:1px solid #24303d;border-radius:3px;background:#0d141c;color:#fff}
+.flow-card>a{position:relative;display:flex;flex-direction:column;height:188px;min-width:0;overflow:hidden;border:1px solid #24303d;border-radius:3px;background:#0d141c;color:#fff}
 .flow-card-frame{position:relative;flex:1;min-height:0;overflow:hidden;background:linear-gradient(168deg,#22303f,#121a24 72%)}
 .flow-card-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 0}
-.flow-card-frame:after{content:"";position:absolute;inset:auto 0 0;height:30px;background:linear-gradient(0deg,#0d141c,rgba(13,20,28,0))}
+.flow-card-frame:after{content:"";position:absolute;inset:auto 0 0;height:18px;background:linear-gradient(0deg,#0d141c,rgba(13,20,28,0))}
 .flow-card-photo-empty{display:grid;place-items:center;width:100%;height:100%;font-size:9px;font-weight:900;letter-spacing:2px;color:#ffffff1f}
-.flow-card-foot{flex:none;height:70px;display:flex;flex-direction:column;justify-content:flex-end;gap:1px;padding:6px 7px 7px;background:#0d141c}
-.flow-card-foot>strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;font:700 10.5px/1.3 var(--font-serif),Georgia,serif;letter-spacing:-.1px}
-.flow-card-foot>small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:7px;font-weight:800;letter-spacing:.2px;text-transform:uppercase;color:#9aa6b4}
-.flow-card-clock{display:flex;flex-wrap:nowrap;align-items:baseline;gap:4px;margin-top:2px;min-width:0;font-variant-numeric:tabular-nums}
-.flow-card-clock time{flex:none;font-size:11px;font-weight:800;letter-spacing:-.2px}
+.flow-card-foot{flex:none;height:57px;display:flex;flex-direction:column;justify-content:flex-end;gap:1px;padding:4px 7px 5px;background:#0d141c}
+.flow-card-foot>strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;font:700 10px/1.2 var(--font-serif),Georgia,serif;letter-spacing:-.1px}
+.flow-card-foot>small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:6.5px;line-height:9px;font-weight:800;letter-spacing:.2px;text-transform:uppercase;color:#9aa6b4}
+.flow-card-clock{display:flex;flex-wrap:nowrap;align-items:center;gap:4px;margin-top:1px;min-width:0;height:13px;line-height:13px;font-variant-numeric:tabular-nums}
+.flow-card-clock time{flex:none;font-size:10.5px;font-weight:800;letter-spacing:-.2px}
 .flow-card-clock b{min-width:0;margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:6.5px;font-weight:900;letter-spacing:.8px;color:#75818f}
 .flow-card-live>a{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
 .flow-card-live>a:before{content:"";position:absolute;z-index:4;top:0;left:0;right:0;height:3px;background:var(--red)}
@@ -1287,7 +1288,7 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
   .masthead .menu-button{order:2;margin-left:auto}
   .flow-rail{order:3;flex-basis:100%;width:100%}
   .flow-rail-list{grid-auto-columns:minmax(148px,1fr)}
-  .flow-card>a{height:160px}
+  .flow-card>a{height:166px}
   .mobile-panel{top:100%}
 }
 @media(max-width:600px){
@@ -1295,7 +1296,7 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
   .masthead-brand{--marka-en:166px;gap:10px}
   .masthead .live-button{width:auto;min-width:0;height:40px;padding:0 12px;font-size:11px;letter-spacing:.2px}
   .flow-rail-list{gap:7px;grid-auto-columns:minmax(126px,1fr)}
-  .flow-card>a{height:150px}
+  .flow-card>a{height:156px}
 }
 @media(prefers-reduced-motion:reduce){.flow-card-progress>span,.flow-card-photo{transition:none}}
 .home .hero-side-news{min-width:0;display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:14px}
