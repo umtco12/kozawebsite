@@ -195,7 +195,8 @@ test("canlı yayın sayfası yayın bilgileri ve erişilebilir oynatma kontrolü
 
   assert.match(body, /Koza TV Canlı Yayın/);
   assert.match(body, /Yayın Akışı/);
-  assert.match(body, /Ana Haber Bülteni/);
+  assert.match(body, /Ana Haber/, "Kurulum akışındaki program canlı yayın sayfasında listelenmeli");
+  assert.match(body, /Seda Selek/, "Program listesinde sunucu adı da görünmeli");
   assert.match(body, /YAYIN KAYNAĞI TANIMLI DEĞİL/, "Kaynak tanımsızken sahte yayın gösterilmemeli");
   assert.match(body, /Türksat 3A/);
   assert.match(body, /Digitürk 614/);
@@ -1976,51 +1977,131 @@ test("gezinme bağlantıları çerçeveye bağlı olmayan gerçek bağlantılard
   }
 });
 
-test("yatay yayın akışı İstanbul saatinde program geçişini ve gece yarısını doğru seçer", async () => {
-  const { selectBroadcastWindow } = await import("../db/broadcast-schedule.mjs");
-  const rows = [{ time: "19:00", title: "Ana Haber", host: "Merkez" }, { time: "07:00", title: "Günaydın", host: "Sabah" }, { time: "12:30", title: "Öğle Bülteni", host: "Haber" }];
-  const at = (time) => selectBroadcastWindow(rows, Date.parse(`2026-09-11T${time}:00+03:00`));
-  assert.deepEqual(at("07:00").map((item) => item.title), ["Günaydın", "Öğle Bülteni", "Ana Haber"]);
-  assert.equal(at("07:00")[0].progress, 0);
-  assert.equal(at("12:29")[0].title, "Günaydın");
-  assert.equal(at("12:30")[0].title, "Öğle Bülteni");
-  assert.equal(at("12:30")[0].progress, 0);
-  assert.deepEqual(at("19:00").map((item) => item.dayOffset), [0, 1, 1]);
-  assert.deepEqual(at("00:00").map((item) => item.dayOffset), [-1, 0, 0]);
-  assert.equal(at("06:59")[0].title, "Ana Haber");
-  assert.equal(at("06:59")[1].title, "Günaydın");
-  assert.ok(at("06:59")[0].progress < 1);
-  assert.deepEqual(selectBroadcastWindow([], Date.now()), []);
-  assert.deepEqual(selectBroadcastWindow([{ time: "29:00", title: "Geçersiz" }], Date.now()), []);
-  assert.deepEqual(selectBroadcastWindow(rows, NaN), []);
-  const single = selectBroadcastWindow([rows[0], { ...rows[0], title: "Yeni program" }], Date.parse("2026-09-11T20:00:00+03:00"));
-  assert.equal(single.length, 1, "Aynı saat veya tek program üç kere tekrarlanmamalı");
-  assert.equal(single[0].title, "Yeni program");
-  assert.equal(single[0].progress, 1 / 24);
+test("yayın akışı gün kapsamını, yayındaki programı ve gece yarısını İstanbul saatiyle çözer", async () => {
+  const { selectDailySchedule } = await import("../db/broadcast-schedule.mjs");
+  const weekday = [
+    { time: "08:00", end: "10:00", title: "Sabah Mesaisi", host: "Sinem Gündem", image: "/yayin-akisi/sinem-gundem.webp", days: "hafta-ici" },
+    { time: "12:00", end: "15:00", title: "Günün Ortasında", host: "Buket Güler", image: "", days: "hafta-ici" },
+    { time: "18:00", end: "20:00", title: "Ana Haber", host: "Seda Selek", image: "", days: "hafta-ici" },
+  ];
+  /* 11 Eylül 2026 Cuma, 12 Eylül Cumartesi, 13 Eylül Pazar, 14 Eylül Pazartesi. */
+  const at = (iso) => selectDailySchedule(weekday, Date.parse(iso));
+
+  const live = at("2026-09-11T13:00:00+03:00");
+  assert.equal(live.dayLabel, "BUGÜN");
+  assert.equal(live.dayOffset, 0);
+  assert.deepEqual(live.items.map((item) => item.state), ["past", "live", "next"]);
+  assert.equal(Math.round(live.items[1].progress * 100), 33, "Yayındaki programın ilerlemesi geçen süreye eşit olmalı");
+  assert.equal(live.items[1].end, "15:00");
+  assert.equal(live.items[0].image, "/yayin-akisi/sinem-gundem.webp", "Sunucu fotoğrafı akışla birlikte taşınmalı");
+
+  assert.deepEqual(at("2026-09-11T08:00:00+03:00").items.map((item) => item.state), ["live", "next", "upcoming"]);
+  assert.equal(at("2026-09-11T08:00:00+03:00").items[0].progress, 0);
+  assert.deepEqual(at("2026-09-11T11:00:00+03:00").items.map((item) => item.state), ["past", "next", "upcoming"], "Programlar arasındaki boşlukta hiçbir program yayında görünmemeli");
+  assert.deepEqual(at("2026-09-11T23:30:00+03:00").items.map((item) => item.state), ["past", "past", "past"], "Akış bittikten sonra program yayında kalmamalı");
+  assert.deepEqual(at("2026-09-11T07:59:00+03:00").items.map((item) => item.state), ["next", "upcoming", "upcoming"]);
+
+  /* Hafta içi akışı hafta sonu gösterilmez; program bulunan ilk güne geçilir. */
+  const saturday = at("2026-09-12T13:00:00+03:00");
+  assert.equal(saturday.dayLabel, "PAZARTESİ");
+  assert.equal(saturday.dayOffset, 2);
+  assert.deepEqual(saturday.items.map((item) => item.state), ["next", "upcoming", "upcoming"]);
+  assert.equal(saturday.items.every((item) => item.progress === 0), true, "Başka günün akışında yayındaki program işaretlenmemeli");
+  assert.equal(at("2026-09-13T09:00:00+03:00").dayLabel, "YARIN", "Bir sonraki gün gün adı yerine YARIN olmalı");
+
+  const mixed = [
+    { time: "09:00", title: "Hafta Sonu Kahvaltısı", host: "Ekip", image: "", days: "hafta-sonu" },
+    { time: "14:00", title: "Her Gün Bülten", host: "Merkez", image: "", days: "her-gun" },
+    { time: "20:00", title: "Hafta İçi Ana Haber", host: "Merkez", image: "", days: "hafta-ici" },
+  ];
+  assert.deepEqual(selectDailySchedule(mixed, Date.parse("2026-09-12T10:00:00+03:00")).items.map((item) => item.title), ["Hafta Sonu Kahvaltısı", "Her Gün Bülten"], "Cumartesi yalnız hafta sonu ve her gün programları görünmeli");
+  assert.deepEqual(selectDailySchedule(mixed, Date.parse("2026-09-11T10:00:00+03:00")).items.map((item) => item.title), ["Her Gün Bülten", "Hafta İçi Ana Haber"], "Cuma yalnız hafta içi ve her gün programları görünmeli");
+
+  /* Bitiş verilmezse program sonraki başlangıca kadar sürer; son program gece yarısını aşabilir. */
+  const openEnded = [
+    { time: "07:00", title: "Günaydın", host: "Sabah", image: "", days: "her-gun" },
+    { time: "22:00", end: "01:00", title: "Gece Hattı", host: "Stüdyo", image: "", days: "her-gun" },
+  ];
+  const openNoon = selectDailySchedule(openEnded, Date.parse("2026-09-11T12:00:00+03:00"));
+  assert.equal(openNoon.items[0].end, "22:00", "Bitişi yazılmayan program sonraki başlangıca kadar sürmeli");
+  assert.equal(openNoon.items[0].state, "live");
+  assert.equal(selectDailySchedule(openEnded, Date.parse("2026-09-11T23:30:00+03:00")).items[1].state, "live", "Gece yarısını aşan program hâlâ yayında sayılmalı");
+  const afterMidnight = selectDailySchedule(openEnded, Date.parse("2026-09-12T00:30:00+03:00"));
+  assert.equal(afterMidnight.items[1].state, "live", "Gece yarısından sonra da aynı program yayında görünmeli");
+  assert.equal(Math.round(afterMidnight.items[1].progress * 100), 83, "Gece yarısını aşan programın ilerlemesi geriye sarmamalı");
+  assert.equal(selectDailySchedule(openEnded, Date.parse("2026-09-12T01:30:00+03:00")).items[1].state, "upcoming", "Gece hattı bittiğinde aynı günün yeni yayını sıradaki olmalı");
+
+  const duplicate = selectDailySchedule([weekday[0], { ...weekday[0], title: "Aynı saat" }], Date.parse("2026-09-11T09:00:00+03:00"));
+  assert.equal(duplicate.items.length, 1, "Aynı saate iki program yazılırsa tek kayıt gösterilmeli");
+
+  assert.deepEqual(selectDailySchedule([], Date.now()).items, []);
+  assert.deepEqual(selectDailySchedule([{ time: "29:00", title: "Geçersiz" }], Date.now()).items, []);
+  assert.deepEqual(selectDailySchedule(weekday, NaN).items, []);
 });
 
-test("ana sayfadaki yatay yayın akışı panel verisini gösterir ve yetkisiz değiştirilemez", async (t) => {
+test("yayın akışı satırı sunucu fotoğrafını, bitişi ve gün kapsamını doğrular", () => {
+  const [row] = normalizeSchedule([{ time: "08:00", end: "10:00", title: "Sabah Mesaisi", host: "Sinem Gündem", image: "/yayin-akisi/sinem-gundem.webp", days: "hafta-ici" }]);
+  assert.deepEqual(row, { time: "08:00", end: "10:00", title: "Sabah Mesaisi", host: "Sinem Gündem", image: "/yayin-akisi/sinem-gundem.webp", days: "hafta-ici" });
+
+  assert.equal(normalizeSchedule([{ time: "08:00", title: "Program" }])[0].days, "her-gun", "Gün seçilmezse program her gün yayınlanır");
+  assert.equal(normalizeSchedule([{ time: "08:00", title: "Program", days: "pazartesi" }])[0].days, "her-gun", "Tanınmayan gün kapsamı varsayılana düşmeli");
+  assert.equal(normalizeSchedule([{ time: "08:00", end: "08:00", title: "Program" }])[0].end, "", "Bitiş başlangıçla aynı olamaz");
+  assert.equal(normalizeSchedule([{ time: "08:00", end: "24:30", title: "Program" }])[0].end, "", "Geçersiz bitiş saati yok sayılmalı");
+
+  /* Fotoğraf yalnız bu sitenin kendi yolundan gelir. */
+  for (const image of ["https://baska-site.example/foto.jpg", "//baska-site.example/foto.jpg", "/media/../../etc/passwd", "javascript:alert(1)", "/media/foto .jpg", `/media/"onerror=alert(1)`, "medya/foto.jpg"]) {
+    assert.equal(normalizeSchedule([{ time: "08:00", title: "Program", image }])[0].image, "", `Güvensiz fotoğraf adresi kabul edilmemeli: ${image}`);
+  }
+  assert.equal(normalizeSchedule([{ time: "08:00", title: "Program", image: "/media/2026/09/sunucu.webp" }])[0].image, "/media/2026/09/sunucu.webp");
+  assert.equal(normalizeSchedule([{ time: "08:00", title: "Program", image: `/media/${"a".repeat(320)}.webp` }])[0].image, "", "Aşırı uzun adres kabul edilmemeli");
+});
+
+test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz değiştirilemez", async (t) => {
   const original = (await (await request("/api/settings")).json()).settings.broadcastSchedule;
   t.after(async () => {
     await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastSchedule: JSON.parse(original) }) });
   });
+  /* Bitişsiz ve boşluksuz akış: testin çalıştığı saat ne olursa olsun tam bir program yayında olur. */
   const broadcastSchedule = [
-    { time: "07:00", title: "Koza Sabah Akışı", host: "Sabah Ekibi" },
-    { time: "12:30", title: "Kent, kültür ve gündem üzerine çok uzun Türkçe program başlığı", host: "Yayın Merkezi" },
-    { time: "19:00", title: "Ana Haber <script>test</script>", host: "Akşam Ekibi" },
+    { time: "08:00", title: "Koza Sabah Akışı", host: "Sabah Ekibi", image: "/yayin-akisi/sinem-gundem.webp", days: "her-gun" },
+    { time: "12:00", title: "Kent, kültür ve gündem üzerine çok uzun Türkçe program başlığı", host: "Yayın Merkezi", image: "", days: "her-gun" },
+    { time: "18:00", title: "Ana Haber <script>test</script>", host: "Akşam <b>Ekibi</b>", image: "", days: "her-gun" },
   ];
   const payload = { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastSchedule }) };
   assert.equal((await request("/api/settings", payload)).status, 200);
+
   const home = await html("/");
-  const strip = home.match(/<section class="broadcast-strip"[\s\S]*?<\/section>/)?.[0];
-  assert.ok(strip, "Manşetin altında yatay Yayın Akışı bulunmalı");
-  assert.match(strip, /Koza Sabah Akışı/);
-  assert.match(strip, /çok uzun Türkçe program başlığı/);
-  assert.match(strip, /Yayın Merkezi/);
-  assert.doesNotMatch(strip, /<script>test<\/script>/, "Program metni HTML olarak çalıştırılmamalı");
-  assert.equal((strip.match(/aria-current="time"/g) || []).length, 1);
-  assert.match(strip, /href="\/canli#yayin-akisi"/);
-  assert.match(await html("/canli"), /id="yayin-akisi"/);
+  const rail = home.match(/<section class="flow-rail"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(rail, "Site başlığında yayın akışı şeridi bulunmalı");
+  assert.match(rail, /Koza Sabah Akışı/);
+  assert.match(rail, /çok uzun Türkçe program başlığı/);
+  assert.match(rail, /Yayın Merkezi/);
+  assert.match(rail, /\/yayin-akisi\/sinem-gundem\.webp/, "Sunucu fotoğrafı şeritte gösterilmeli");
+  assert.doesNotMatch(rail, /<script>test<\/script>/, "Program metni HTML olarak çalıştırılmamalı");
+  assert.doesNotMatch(rail, /<b>Ekibi<\/b>/, "Sunucu adı HTML olarak çalıştırılmamalı");
+  assert.equal((rail.match(/aria-current="time"/g) || []).length, 1, "Aynı anda yalnız bir program yayında işaretlenmeli");
+  assert.equal((rail.match(/>YAYINDA</g) || []).length, 1, "YAYINDA yazısı yalnız o an yayındaki programda görünmeli");
+  assert.doesNotMatch(rail, /SIRADAKİ|ŞU ANDA|YAYINLANDI/, "Yayındaki program dışında hiçbir karta rozet konulmamalı");
+  assert.match(rail, /href="\/canli"/);
+
+  /* Şerit başlıkta olduğu için bütün sayfalarda görünür; manşetin altında ikinci kopyası kalmaz. */
+  assert.match(await html("/canli"), /class="flow-rail"/, "Yayın akışı şeridi iç sayfalarda da görünmeli");
+  assert.doesNotMatch(home, /broadcast-strip/, "Manşet altındaki eski yayın akışı kaldırılmalı");
+  assert.equal((home.match(/class="flow-rail"/g) || []).length, 1, "Yayın akışı sayfada iki kez gösterilmemeli");
+  assert.match(home, /<div class="hero-main"><section class="lead /, "Manşet sütununda sliderdan başka öğe kalmamalı");
+
+  /* Logonun içinde motto zaten yazılı; başlıkta ne tanıtım cümlesi ne de ikinci motto kalır. */
+  assert.doesNotMatch(home, /HABER MERKEZİ<\/span>/, "Logo yanındaki tanıtım yazısı kaldırılmalı");
+  assert.doesNotMatch(home, /masthead-motto|masthead-claim/, "Logonun altında mottonun ikinci kopyası kalmamalı");
+  assert.match(home, /aria-label="Koza TV ana sayfa — Şimdi konuşma zamanı"/, "Marka bağlantısı mottoyu erişilebilir ad olarak taşımalı");
+
+  /* Canlı yayın sayfasındaki liste aynı veriyi saat aralığı ve fotoğrafla gösterir. */
+  const livePage = await html("/canli");
+  assert.match(livePage, /id="yayin-akisi"/);
+  assert.match(livePage, /08:00<em>–(?:<!-- -->)?12:00<\/em>/, "Bitişi yazılmayan program sonraki başlangıca kadar gösterilmeli");
+  assert.match(livePage, />YAYINDA</, "Canlı yayın sayfasında da yayındaki program işaretlenmeli");
+  assert.doesNotMatch(livePage, /SIRADAKİ/, "Canlı yayın listesinde sıradaki rozeti olmamalı");
+
   const unauthorized = await anonymousRequest("/api/settings", payload);
   assert.equal(unauthorized.status, 401);
   const viewer = await createRoleSession("viewer", "YayinAkisi");
@@ -2028,25 +2109,33 @@ test("ana sayfadaki yatay yayın akışı panel verisini gösterir ve yetkisiz d
   const invalid = await request("/api/settings", { ...payload, body: JSON.stringify({ broadcastSchedule: [{ time: "25:90", title: "Bozuk" }] }) });
   assert.equal(invalid.status, 400);
   assert.match(await html("/"), /Koza Sabah Akışı/, "Reddedilen kayıt yayındaki programları değiştirmemeli");
-  const source = await readFile(new URL("../app/broadcast-strip.tsx", import.meta.url), "utf8");
+
+  const source = await readFile(new URL("../app/broadcast-flow.tsx", import.meta.url), "utf8");
   assert.match(source, /60_000 - current % 60_000/, "Açık sayfada program her dakika başında güncellenmeli");
   assert.match(source, /visibilitychange/);
   assert.match(source, /removeEventListener/);
+
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(css, /\.home \.hero-main>\.broadcast-strip\{margin:0\}/, "Genel bölüm boşluğu manşet ile yayın şeridini birbirinden koparmamalı");
-  assert.match(css, /\.broadcast-programs\{[^}]*overflow-x:auto/, "Mobil akış kendi içinde kaymalı");
-  assert.match(css, /\.broadcast-strip a:focus-visible/, "Program bağlantılarının klavye odağı görünür olmalı");
-  const fixtureDb = new Database(process.env.KOZA_DB_PATH);
-  const sideIds = fixtureDb.prepare("SELECT id FROM articles WHERE homepage_placement='side'").all();
-  t.after(() => {
-    const restore = fixtureDb.prepare("UPDATE articles SET homepage_placement='side' WHERE id=?");
-    for (const row of sideIds) restore.run(row.id);
-    fixtureDb.close();
-  });
-  fixtureDb.prepare("UPDATE articles SET homepage_placement='latest' WHERE homepage_placement='side'").run();
-  const noSide = await html("/");
-  assert.match(noSide, /class="hero-grid hero-grid-no-side"/, "Yan haber yokken boş sağ sütun ayrılmamalı");
-  assert.match(noSide, /class="hero-main"[\s\S]*class="broadcast-strip"/, "Yayın akışı manşetle aynı sütunda kalmalı");
+  assert.match(css, /\.flow-card-frame\{[^}]*overflow:hidden/, "Fotoğraf kendi çerçevesinde kalmalı");
+  assert.match(css, /\.flow-card-foot\{[^}]*background:#0d141c/, "Program yazısı fotoğrafın üstünde değil kendi bandında durmalı");
+  assert.match(css, /\.flow-card-clock\{[^}]*flex-wrap:nowrap/, "Saat ve YAYINDA yazısı alt satıra düşmemeli");
+  assert.match(css, /\.flow-card-live>a\{[^}]*border-color:var\(--red\)/, "Yayındaki kart kırmızı çerçeveyle ayrılmalı");
+  assert.doesNotMatch(css, /\.flow-card-past/, "Biten programın üzerine gri perde çekilmemeli");
+  assert.match(css, /\.flow-card-foot\{[^}]*justify-content:flex-end/, "Program adı ile sunucu adı arasında boşluk kalmamalı");
+  /* Şerit yalnız menünün gizlendiği mobil düzende kendi satırına iner; masaüstünde marka sütununun yanında kalır. */
+  const railWrap = css.match(/@media\(max-width:(\d+)px\)\{[^@]*?\.flow-rail\{order:3/);
+  assert.ok(railWrap, "Şeridin alt satıra inme kuralı bir mobil kırılma noktasında tanımlı olmalı");
+  assert.ok(Number(railWrap[1]) <= 900, `Masaüstünde şerit alta düşmemeli, kural ${railWrap[1]}px'te tanımlanmış`);
+  assert.equal((css.match(/\.flow-rail\{order:3/g) ?? []).length, 1, "Şeridi alta indiren tek bir kural olmalı");
+  assert.match(css, /\.masthead-brand\{[^}]*flex-direction:column/, "Canlı yayın düğmesi logonun altında durmalı");
+  assert.match(css, /\.flow-rail-list\{[^}]*overflow-x:auto/, "Dar ekranda şerit kendi içinde kaymalı");
+  assert.match(css, /\.flow-rail a:focus-visible/, "Program bağlantılarının klavye odağı görünür olmalı");
+  assert.match(css, /@media\(max-width:600px\)\{[\s\S]*?\.flow-rail-list\{[^}]*grid-auto-columns:minmax\(1[2-9]\dpx/, "Mobilde kartlar okunur genişlikte kalmalı");
+
+  const settingsPanel = await readFile(new URL("../app/admin/site-settings.tsx", import.meta.url), "utf8");
+  assert.match(settingsPanel, /Fotoğraf seç/, "Panelde sunucu fotoğrafı seçilebilmeli");
+  assert.match(settingsPanel, /Yayın günü/, "Panelde programın hangi günler yayınlanacağı seçilebilmeli");
+  assert.match(settingsPanel, /satır bitiş saati/, "Panelde bitiş saati girilebilmeli");
 });
 
 test("site ayarları modeli adres, e-posta ve yayın akışı kurallarını uygular", () => {
@@ -2449,6 +2538,44 @@ test("büyük harfli arşiv başlıkları okunur biçimde gösterilir, kısaltma
   assert.equal(displaySpot(title, title), "");
   assert.equal(displaySpot("", title), "");
   assert.equal(displaySpot("Yangın iki gündür sürüyor.", title), "Yangın iki gündür sürüyor.");
+});
+
+test("ana sayfa düzeni beş manşet, iki manşet yanı ve dört manşet altı haberle sınırlıdır", async (t) => {
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const now = Date.now();
+  const slugs = Array.from({ length: 16 }, (_, index) => `duzen-testi-${process.pid}-${index + 1}`);
+  const insert = db.prepare("INSERT INTO articles (slug,title,spot,body,category,status,hero_image,image_alt,homepage_placement,homepage_order,published_at,created_at,updated_at) VALUES (@slug,@title,@spot,'<p>Düzen testi gövdesi.</p>','Gündem','published','/news/gorsel-yok.svg','Koza TV görseli',@placement,@order,@publishedAt,@publishedAt,@publishedAt)");
+  const previous = db.prepare("SELECT id, homepage_placement, homepage_order FROM articles WHERE status='published'").all();
+
+  t.after(() => {
+    db.prepare(`DELETE FROM articles WHERE slug IN (${slugs.map(() => "?").join(",")})`).run(...slugs);
+    const restore = db.prepare("UPDATE articles SET homepage_placement=?, homepage_order=? WHERE id=?");
+    for (const row of previous) restore.run(row.homepage_placement, row.homepage_order, row.id);
+    db.close();
+  });
+
+  /* Kapasitenin üzerinde haber seçilse bile ana sayfa yalnız tanımlı sayıda kart göstermeli. */
+  db.transaction(() => {
+    db.prepare("UPDATE articles SET homepage_placement='latest' WHERE status='published'").run();
+    slugs.forEach((slug, index) => {
+      const placement = index < 7 ? "slider" : index < 11 ? "side" : index < 16 ? "below" : "latest";
+      insert.run({ slug, title: `Düzen testi haberi ${index + 1}`, spot: `Düzen testi spotu ${index + 1}.`, placement, order: (index % 7) + 1, publishedAt: now - (index + 1) * 60_000 });
+    });
+  })();
+
+  const body = await html("/");
+  assert.match(body, /5\. manşeti göster/, "Manşet sliderı beş haber taşımalı");
+  assert.doesNotMatch(body, /6\. manşeti göster/, "Manşet sliderı beşten fazla haber taşımamalı");
+
+  const sideMarkup = body.match(/<aside class="hero-side-news"[\s\S]*?<\/aside>/)?.[0] ?? "";
+  assert.equal((sideMarkup.match(/class="hero-side-card/g) ?? []).length, 2, "Manşetin yanında tam iki haber olmalı");
+
+  const belowMarkup = body.match(/<section class="headline-below"[\s\S]*?<\/section>/)?.[0] ?? "";
+  assert.equal((belowMarkup.match(/class="headline-below-card/g) ?? []).length, 4, "Manşetin altında tam dört haber olmalı");
+
+  /* Manşet satırında yalnız slider durur; kaldırılan yayın akışı yerine boşluk bırakılmaz. */
+  assert.match(body, /<div class="hero-main"><section class="lead /, "Manşet sütununda sliderdan başka öğe kalmamalı");
+  assert.doesNotMatch(body, /broadcast-strip|broadcast-programs/, "Manşet altındaki eski yayın akışı şeridi kaldırılmış olmalı");
 });
 
 test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async () => {

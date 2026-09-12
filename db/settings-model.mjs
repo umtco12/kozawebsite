@@ -37,7 +37,25 @@ export const settingFields = [
   { key: "contactEmail", group: "kunye", type: "email", label: "Kurumsal iletişim e-postası", placeholder: "iletisim@kozatv.com.tr", default: "" },
 ];
 
+/* Yayın günü kapsamı: program hafta içi, hafta sonu veya her gün ekranda olabilir. */
+export const scheduleDayScopes = [
+  { value: "her-gun", label: "Her gün" },
+  { value: "hafta-ici", label: "Hafta içi" },
+  { value: "hafta-sonu", label: "Hafta sonu" },
+];
+
+/* Kurulum akışı. Panelden değiştirilene kadar site bu listeyi gösterir. */
 export const scheduleDefault = [
+  { time: "08:00", end: "10:00", title: "Sabah Mesaisi", host: "Sinem Gündem", image: "/yayin-akisi/sinem-gundem.webp", days: "hafta-ici" },
+  { time: "10:00", end: "12:00", title: "Odak Noktası", host: "Remziye Demirkol", image: "/yayin-akisi/remziye-demirkol.webp", days: "hafta-ici" },
+  { time: "12:00", end: "15:00", title: "Günün Ortasında", host: "Buket Güler", image: "/yayin-akisi/buket-guler.webp", days: "hafta-ici" },
+  { time: "15:00", end: "17:00", title: "Haber Masası", host: "Gamze Dondurmacı", image: "/yayin-akisi/gamze-dondurmaci.webp", days: "hafta-ici" },
+  { time: "17:00", end: "18:00", title: "Dünyanın İşi", host: "Enver Kaptanoğlu", image: "/yayin-akisi/enver-kaptanoglu.webp", days: "hafta-ici" },
+  { time: "18:00", end: "20:00", title: "Ana Haber", host: "Seda Selek", image: "/yayin-akisi/seda-selek.webp", days: "hafta-ici" },
+];
+
+/* Kurulumdaki ilk demo akış. Panelde hiç dokunulmamışsa gerçek akışla değiştirilir. */
+export const legacyScheduleDefault = [
   { time: "07:00", title: "Koza TV Günaydın", host: "Sabah Yayın Ekibi" },
   { time: "10:00", title: "Gündem Özel", host: "Haber Merkezi" },
   { time: "12:30", title: "Öğle Bülteni", host: "Koza TV Haber" },
@@ -62,16 +80,33 @@ function isSafeUrl(value) {
   }
 }
 
-/* Yayın akışı satırları: HH:MM saat, program adı ve sunucu/servis. */
+const clockPattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/* Sunucu fotoğrafı yalnız bu sitenin kendi yolundan gelir: medya kütüphanesi (/media/…)
+   veya statik klasör (/yayin-akisi/…). Dış adres, protokol ve üst dizin kabul edilmez. */
+export function normalizeScheduleImage(input) {
+  const value = String(input ?? "").trim();
+  if (!value || value.length > 300) return "";
+  if (!value.startsWith("/") || value.startsWith("//")) return "";
+  if (value.includes("..") || /[\s<>"'`\\]/.test(value)) return "";
+  return value;
+}
+
+/* Yayın akışı satırları: HH:MM başlangıç, isteğe bağlı bitiş, program adı, sunucu,
+   sunucu fotoğrafı ve yayın günü kapsamı. */
 export function normalizeSchedule(input) {
   const rows = Array.isArray(input) ? input : [];
   const cleaned = [];
   for (const row of rows.slice(0, 24)) {
     const time = String(row?.time ?? "").trim();
+    const end = String(row?.end ?? "").trim();
     const title = String(row?.title ?? "").trim().slice(0, 120);
     const host = String(row?.host ?? "").trim().slice(0, 120);
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || title.length < 2) continue;
-    cleaned.push({ time, title, host });
+    const image = normalizeScheduleImage(row?.image);
+    const scope = String(row?.days ?? "").trim();
+    const days = scheduleDayScopes.some((option) => option.value === scope) ? scope : "her-gun";
+    if (!clockPattern.test(time) || title.length < 2) continue;
+    cleaned.push({ time, end: clockPattern.test(end) && end !== time ? end : "", title, host, image, days });
   }
   cleaned.sort((left, right) => left.time.localeCompare(right.time));
   return cleaned;

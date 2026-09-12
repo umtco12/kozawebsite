@@ -3,6 +3,8 @@ import { getBroadcastSchedule, getSiteSettings, listPublishedArticles } from "..
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
 import { liveStream } from "../site-config";
 import { parseLiveSource } from "../../db/settings-model.mjs";
+import { selectDailySchedule } from "../../db/broadcast-schedule.mjs";
+import type { DailyFlow } from "../broadcast-flow";
 import { LivePlayer, type LiveSource } from "./live-player";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +20,9 @@ export default async function Live() {
   const categories = navCategories();
   const articles = listPublishedArticles(5);
   const broadcast = liveStream(getSiteSettings());
-  const schedule = getBroadcastSchedule();
+  /* Sayfa her istekte yeniden üretildiği için akış durumu açılış anına göre hesaplanır. */
+  // eslint-disable-next-line react-hooks/purity -- Dinamik sunucu isteğinin saat anlık görüntüsü; istemcide yeniden render edilmez.
+  const flow = selectDailySchedule(getBroadcastSchedule(), Date.now()) as DailyFlow;
 
   return (
     <main className="category-page live-view">
@@ -41,11 +45,16 @@ export default async function Live() {
           </div>
         </section>
         <aside className="live-flow" id="yayin-akisi">
-          <div className="live-flow-head"><span>BUGÜN</span><strong>Yayın Akışı</strong></div>
-          {schedule.map((item) => (
-            <div className="live-flow-row" key={item.time}>
-              <time>{item.time}</time>
-              <div><strong>{item.title}</strong><small>{item.host}</small></div>
+          <div className="live-flow-head"><span>{flow.dayLabel || "BUGÜN"}</span><strong>Yayın Akışı</strong></div>
+          {flow.items.map((item) => (
+            <div className={`live-flow-row live-flow-${item.state}`} key={`${item.days}-${item.time}`}>
+              <time dateTime={item.time}>{item.time}<em>–{item.end}</em></time>
+              {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" /> : null}
+              <div>
+                <strong>{item.title}</strong>
+                <small>{item.host || "Koza TV"}</small>
+              </div>
+              {item.state === "live" ? <b>YAYINDA</b> : null}
             </div>
           ))}
         </aside>

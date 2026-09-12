@@ -1,7 +1,8 @@
-import { getSiteSettings, listCategories } from "../db";
+import { getBroadcastSchedule, getSiteSettings, listCategories } from "../db";
 import { LiveData, MobileMenu, SearchBox } from "./site-client";
 import { corporateTitles, liveStream, socialLinks } from "./site-config";
 import { AdSlot } from "./ad-slot";
+import { BroadcastFlow } from "./broadcast-flow";
 
 /* Ziyaretçi sitesinin ortak başlık ve alt bölümü. Bütün sayfalar aynı çalışan menüyü kullanır. */
 
@@ -58,6 +59,8 @@ function DesktopAdRails() {
 
 export function SiteHeader({ categories, active = "" }: { categories: NavCategory[]; active?: string }) {
   const settings = getSiteSettings();
+  // eslint-disable-next-line react-hooks/purity -- Sunucu isteğinin saat anlık görüntüsü; istemcinin ilk renderı da aynı değerle başlar.
+  const broadcastNow = Date.now();
   return (
     <>
       <div className="topbar">
@@ -73,9 +76,13 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
 
       <header className="site-header">
         <div className="wrap masthead">
-          <a className="brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></a>
-          <div className="masthead-claim"><span>TÜRKİYE&apos;NİN HABER MERKEZİ</span><strong>{settings.siteMotto}</strong></div>
-          <a className="live-button" href="/canli"><i /> CANLI YAYIN</a>
+          {/* Logo görselinin içinde marka mottosu zaten yazılı; başlıkta ikinci kez tekrarlanmaz.
+              Canlı yayın düğmesi logonun altında durur; kalan genişliğin tamamı yayın akışına kalır. */}
+          <div className="masthead-brand">
+            <a className="brand" href="/" aria-label={`Koza TV ana sayfa — ${settings.siteMotto}`}><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></a>
+            <a className="live-button" href="/canli"><i /> CANLI YAYIN</a>
+          </div>
+          <BroadcastFlow schedule={getBroadcastSchedule()} initialNow={broadcastNow} />
           <MobileMenu categories={categories.map(({ name, slug }) => ({ name, slug }))} />
         </div>
         <nav className="nav" aria-label="Ana menü">

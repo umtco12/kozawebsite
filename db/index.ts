@@ -5,7 +5,7 @@ import Database from "better-sqlite3";
 import { plainBodyToBlocks, slugify } from "./article-model.mjs";
 import { hashPassword, verifyPassword } from "./auth-model.mjs";
 import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "./demo-content-model.mjs";
-import { defaultSettings, normalizePath, normalizeSchedule, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
+import { defaultSettings, legacyScheduleDefault, normalizePath, normalizeSchedule, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
 import { legacyPath } from "./import-model.mjs";
 import { agencyUpdateDecision } from "./agency-model.mjs";
 import { advertisementState, houseAdSeeds } from "./ad-model.mjs";
@@ -193,6 +193,28 @@ function ensureSchema(db: InstanceType<typeof Database>) {
       const move = db.prepare("UPDATE articles SET homepage_placement=?,homepage_order=?,updated_at=? WHERE id=?");
       candidates.forEach((article, index) => move.run(index === 0 ? "side" : "below", index + 1, now, article.id));
       db.prepare("INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES (?,?,?,'Sistem')").run(homepageLayoutSeedKey, "1", now);
+    })();
+  }
+
+  /* Yayın akışı sunucu fotoğrafı, bitiş saati ve gün kapsamı kazandı. Panelde hâlâ kurulumdan
+     gelen demo akış duruyorsa bir kez gerçek hafta içi akışıyla değiştirilir; yönetici kendi
+     listesini girdiyse dokunulmaz. */
+  const scheduleSeedKey = "_broadcast_schedule_v2";
+  if (!db.prepare("SELECT 1 FROM site_settings WHERE key=?").get(scheduleSeedKey)) {
+    const now = Date.now();
+    const stored = db.prepare("SELECT value FROM site_settings WHERE key='broadcastSchedule'").get() as { value: string } | undefined;
+    let untouched = true;
+    if (stored) {
+      try {
+        untouched = JSON.stringify(normalizeSchedule(JSON.parse(stored.value))) === JSON.stringify(normalizeSchedule(legacyScheduleDefault));
+      } catch { untouched = true; }
+    }
+    db.transaction(() => {
+      if (untouched) {
+        db.prepare("INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES ('broadcastSchedule',?,?,'Sistem') ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at, updated_by=excluded.updated_by")
+          .run(JSON.stringify(scheduleDefault), now);
+      }
+      db.prepare("INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES (?,?,?,'Sistem')").run(scheduleSeedKey, "1", now);
     })();
   }
   /* Önceki panel sürümünde Manşet seçilen haberlere varsayılan sıra 100 verildiği için
@@ -564,7 +586,7 @@ export function saveAdvertisement(input: AdvertisementInput, actor: Advertisemen
 
 /* Site ayarları: yönetim panelinden düzenlenir, ziyaretçi sitesi ve kurumsal sayfalar buradan okur. */
 export type SiteSettings = Record<string, string> & { broadcastSchedule: string };
-export type ScheduleRow = { time: string; title: string; host: string };
+export type ScheduleRow = { time: string; end: string; title: string; host: string; image: string; days: string };
 
 export function getSiteSettings(): SiteSettings {
   const stored = getDb().prepare("SELECT key, value FROM site_settings").all() as { key: string; value: string }[];
@@ -577,9 +599,9 @@ export function getBroadcastSchedule(): ScheduleRow[] {
   try {
     const parsed = JSON.parse(getSiteSettings().broadcastSchedule);
     const rows = normalizeSchedule(parsed);
-    return rows.length ? rows : scheduleDefault;
+    return rows.length ? rows : normalizeSchedule(scheduleDefault);
   } catch {
-    return scheduleDefault;
+    return normalizeSchedule(scheduleDefault);
   }
 }
 

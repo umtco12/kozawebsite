@@ -42,3 +42,6 @@ yarn-error.log*
 *.tsbuildinfo
 
 .test-onizleme/
+
+# yerel araç ayarları (bilgisayara özel yollar içerir)
+/.claude/
