@@ -2077,6 +2077,7 @@ test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz
   assert.match(rail, /çok uzun Türkçe program başlığı/);
   assert.match(rail, /Yayın Merkezi/);
   assert.match(rail, /\/yayin-akisi\/sinem-gundem\.webp/, "Sunucu fotoğrafı şeritte gösterilmeli");
+  assert.doesNotMatch(rail, /loading="lazy"/, "Sayfanın en üstündeki şerit fotoğrafları tembel yüklenmemeli");
   assert.doesNotMatch(rail, /<script>test<\/script>/, "Program metni HTML olarak çalıştırılmamalı");
   assert.doesNotMatch(rail, /<b>Ekibi<\/b>/, "Sunucu adı HTML olarak çalıştırılmamalı");
   assert.equal((rail.match(/aria-current="time"/g) || []).length, 1, "Aynı anda yalnız bir program yayında işaretlenmeli");

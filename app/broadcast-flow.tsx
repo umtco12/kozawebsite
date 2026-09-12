@@ -62,8 +62,10 @@ export function BroadcastFlow({ schedule, initialNow }: { schedule: ScheduleRow[
             >
               {/* Fotoğrafın üzerinde yazı durmaz; program bilgisi altındaki kendi bandındadır. */}
               <span className="flow-card-frame">
+                {/* Şerit her sayfanın en üstünde durur; fotoğraflar sonradan belirmesin diye
+                    tembel yüklenmez. Altı görsel toplam 180 KB'dir. */}
                 {item.image
-                  ? <img className="flow-card-photo" src={item.image} alt="" loading="lazy" decoding="async" width={480} height={640} />
+                  ? <img className="flow-card-photo" src={item.image} alt="" loading="eager" decoding="async" width={480} height={640} />
                   : <span className="flow-card-photo-empty" aria-hidden="true">KOZA TV</span>}
               </span>
               <span className="flow-card-foot">

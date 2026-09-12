@@ -902,3 +902,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/globals.css`, `AGENTS.md`.
 - Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**. `npx tsc --noEmit` temiz; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**. Gerçek tarayıcıda ölçüldü: 1440 pikselde etiket 29 × 188 piksel, punto 11 piksel, kalınlık 900, renk `rgb(255, 74, 82)`; 1024 pikselde 29 × 188; 390 pikselde 29 × 167. Üç kırılımda da etiket metni taşmıyor, program ve sunucu adlarında kırpılma yok, sayfa taşması yok. 1440 ve 1024 pikselde altı kart kaydırmasız sığıyor; 390 pikselde şerit beklendiği gibi kendi içinde kayıyor.
 - Kalan karar veya risk: Önceki kayıtta bildirilen CI derlemesindeki font yükleme hatası (Inter/Merriweather 404, site yedek Arial/Times ile görüntüleniyor) sürüyor ve ayrı bir iş olarak beklemektedir.
+
+### 2026-09-12 — Şerit fotoğraflarının açılışta hazır gelmesi
+
+- İstek: Yayında yapılan kontrolde şerit fotoğraflarının sayfa çizildikten sonra tek tek belirdiği görüldü.
+- Yapılanlar: Şerit her sayfanın en üstünde durduğu için sunucu fotoğraflarındaki `loading="lazy"` kaldırılıp `loading="eager"` yapıldı. Altı görselin toplamı 180 KB olduğundan ek yük ihmal edilebilir. Regresyon testi, şeritte tembel yükleme kalmadığını doğruluyor.
+- Değişen ana dosyalar: `app/broadcast-flow.tsx`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: `npm test` production build ile **91 test geçti; 0 başarısız, 0 atlandı**; `npx tsc --noEmit` temiz; `npm run lint` **0 hata / 47 bilinen ham `<img>` uyarısı**.
+- Kalan karar veya risk: CI derlemesindeki font yükleme hatası (Inter/Merriweather 404) ayrı bir iş olarak beklemektedir.
