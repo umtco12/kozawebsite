@@ -16,7 +16,7 @@ jobs:
   test-and-deploy:
     name: Test ve Hetzner staging dağıtımı
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     environment:
       name: staging
       url: http://${{ vars.KOZA_HOST || '46.225.169.52' }}/

@@ -29,7 +29,11 @@ chown -R kozatv:kozatv "$release_dir"
 
 runuser -u kozatv -- bash -lc "cd '$release_dir' && npm ci"
 runuser -u kozatv -- bash -lc "cd '$release_dir' && npm test"
-runuser -u kozatv -- bash -lc "cd '$release_dir' && npm run lint"
+
+# Kod kalitesi denetimi (lint) sürüm gönderilmeden önce CI üzerinde aynı commit için çalışır.
+# Sunucuda ikinci kez çalıştırmak üretim ortamıyla ilgili hiçbir şeyi doğrulamaz; buna karşılık
+# sınırlı belleğe sahip bu makinede dakikalarca sürüp dağıtımı zaman aşımına düşürebiliyor.
+# Sunucuda yalnız üretim ortamını gerçekten sınayan adımlar kalır: temiz kurulum, derleme ve testler.
 
 ln -sfn "$release_dir" "$current_link"
 
