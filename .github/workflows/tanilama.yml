@@ -54,6 +54,25 @@ jobs:
             echo "===== YARIM KALAN AKTARIMLAR ====="
             ls -1 /srv/kozatv/incoming 2>/dev/null || echo "yok"
             echo
-            echo "===== EN SON YEDEK ====="
-            ls -1t /srv/kozatv/backups/daily 2>/dev/null | head -3 || echo "okunamadi"
+            echo "===== YEDEK KLASORU ====="
+            ls -la /srv/kozatv/backups 2>&1 | head -10
+            echo "--- daily ---"
+            ls -1t /srv/kozatv/backups/daily 2>&1 | head -5
+            echo "--- weekly ---"
+            ls -1t /srv/kozatv/backups/weekly 2>&1 | head -3
+            echo
+            echo "===== ZAMANLAYICILAR ====="
+            systemctl list-timers --all 2>&1 | grep -i kozatv || echo "timer okunamadi"
+            echo
+            echo "===== SERVIS DURUMLARI ====="
+            for u in kozatv.service kozatv-backup.timer kozatv-backup.service kozatv-health.timer; do
+              printf "%-26s %s / %s\n" "$u" "$(systemctl is-enabled $u 2>&1)" "$(systemctl is-active $u 2>&1)"
+            done
+            echo
+            echo "===== SON YEDEK CALISMASI ====="
+            systemctl show kozatv-backup.service -p ExecMainStatus -p ExecMainExitTimestamp -p Result 2>&1 | head -5
+            echo
+            echo "===== BELLEK YETERSIZLIGI (OOM) IZI ====="
+            (journalctl -k --since "-3 days" 2>/dev/null | grep -ci "out of memory\|oom-kill" || echo "0") | tail -1
+            (dmesg 2>/dev/null | grep -ci "out of memory\|oom-kill" || echo "dmesg okunamadi") | tail -1
           '
