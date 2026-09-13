@@ -1,0 +1,59 @@
+name: Koza TV Sunucu Tanılama
+
+# Yalnız elle çalıştırılır. Sunucuda hiçbir şey değiştirmez; sadece disk, bellek ve
+# sürüm klasörlerinin durumunu okur. Dağıtım akışına dokunmaz.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  durum:
+    name: Disk ve bellek durumu
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v7
+
+      - name: SSH anahtarını hazırla
+        env:
+          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$HETZNER_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          cp deployment/hetzner/known_hosts ~/.ssh/known_hosts
+          chmod 0644 ~/.ssh/known_hosts
+
+      - name: Salt okunur durum raporu
+        run: |
+          ssh koza-deploy@${{ vars.KOZA_HOST || '46.225.169.52' }} '
+            echo "===== MAKINE ====="
+            nproc --all 2>/dev/null | sed "s/^/cekirdek: /"
+            grep -E "MemTotal|SwapTotal" /proc/meminfo
+            uptime
+            echo
+            echo "===== BELLEK (MB) ====="
+            free -m
+            echo
+            echo "===== DISK ====="
+            df -h / /srv/kozatv 2>/dev/null
+            echo
+            echo "===== /srv/kozatv DAGILIMI ====="
+            du -sh /srv/kozatv 2>/dev/null
+            du -sh /srv/kozatv/releases /srv/kozatv/data /srv/kozatv/backups /srv/kozatv/incoming 2>/dev/null
+            echo
+            echo "===== SURUM KLASORLERI ====="
+            du -sh /srv/kozatv/releases/* 2>/dev/null | sort -h
+            echo "aktif surum: $(readlink -f /srv/kozatv/current 2>/dev/null)"
+            echo
+            echo "===== YARIM KALAN AKTARIMLAR ====="
+            ls -1 /srv/kozatv/incoming 2>/dev/null || echo "yok"
+            echo
+            echo "===== EN SON YEDEK ====="
+            ls -1t /srv/kozatv/backups/daily 2>/dev/null | head -3 || echo "okunamadi"
+          '
