@@ -13,6 +13,13 @@ export function ArticleVideoPlayer({ src, title = "Haber videosu", preload = "me
   return <video className="article-video-player" src={src} controls playsInline preload={preload}><track kind="captions" src="/empty-captions.vtt" srcLang="tr" label="Türkçe" default /></video>;
 }
 
+/* Haber gövdesi. Zengin metin editöründen kaydedilmiş bir gövde varsa o gösterilir;
+   yoksa arşivdeki bütün haberler eskisi gibi blok blok render edilir. */
+export function ArticleBody({ article, lazyImages = false }: { article: { bodyHtml: string; blocks: ContentBlock[]; videoUrl: string }; lazyImages?: boolean }) {
+  if (article.bodyHtml.trim()) return <div className="rich-body" dangerouslySetInnerHTML={{ __html: article.bodyHtml }} />;
+  return <ArticleBlocks blocks={article.blocks} excludeVideoUrl={article.videoUrl} lazyImages={lazyImages} />;
+}
+
 export function ArticleBlocks({ blocks, excludeVideoUrl = "", lazyImages = false }: { blocks: ContentBlock[]; excludeVideoUrl?: string; lazyImages?: boolean }) {
   return <>{blocks.map((block) => {
     if (!block.content.trim()) return null;

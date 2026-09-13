@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
+import { articleTitle } from "../rich-title";
 import { listPublishedArticles, listVideoArticles } from "../../db";
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
-import { displayTitle } from "../../db/title-model.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -39,14 +39,14 @@ export default async function VideoCenter() {
           <a href={`/haber/${article.slug}`} className="video-card" key={article.id}>
             <div className="video-thumb"><img src={article.heroImage} alt={article.imageAlt} /><i aria-hidden="true">▶</i></div>
             <span>{article.category}</span>
-            <h2>{displayTitle(article.title)}</h2>
+            <h2>{articleTitle(article)}</h2>
             <time>{stamp(article.publishedAt)}</time>
           </a>
         )) : (
           <div className="category-empty video-empty">
             <h2>Henüz video eklenmiş haber yok.</h2>
             <p>Haber editöründen <strong>MP4/WebM video yükleyin</strong> veya YouTube, Vimeo ya da HLS bağlantısı ekleyin. Videolu haberler burada listelenir.</p>
-            <div className="search-suggestions">{fallback.map((article) => <a href={`/haber/${article.slug}`} key={article.id}>{displayTitle(article.title)}</a>)}</div>
+            <div className="search-suggestions">{fallback.map((article) => <a href={`/haber/${article.slug}`} key={article.id}>{articleTitle(article)}</a>)}</div>
             <a href="/canli">Canlı yayına git →</a>
           </div>
         )}

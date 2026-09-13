@@ -245,16 +245,28 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   assert.match(adminPanel, /Video, haberde kapak fotoğrafının altında ve haber metninden önce gösterilir/);
   assert.match(adminPanel, /form\.spot\.length\}\/500/,
     "Yeni Haber editörü spotu 500 karaktere kadar saymalı");
-  assert.match(adminPanel, /maxLength=\{500\}/, "Spot alanı 500 karakterle sınırlandırılmalı");
+  /* Spot artık zengin editörde yazılıyor; sınır sayaçla uyarılır ve API tarafından uygulanır. */
+  assert.match(adminPanel, /\{form\.spot\.length\}\/500/, "Spot alanı karakter sayacını göstermeli");
+  assert.match(adminPanel, /form\.spot\.length > 500 \? "limit-asildi"/, "Sınır aşıldığında sayaç uyarmalı");
+  const uzunSpot = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    slug: "", title: "Cok uzun spotlu test haberi", spot: "x".repeat(501), body: "Spot sınırının sunucu tarafında da uygulandığını doğrulayan yeterince uzun haber metni.",
+    category: "Teknoloji", status: "draft", heroImage: "/news/studio.jpg", imageAlt: "Test", videoUrl: "", author: "Test", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0, isHomepageGallery: 0, homepagePlacement: "latest", headlinePosition: "left-bottom",
+  }) });
+  assert.equal(uzunSpot.status, 400, "500 karakteri aşan spot sunucuda reddedilmeli");
   assert.match(adminPanel, /Hazır Son Dakika görselini kullan/);
   assert.match(adminPanel, /\/news\/son-dakika-1280x720\.png/);
-  assert.match(adminPanel, /Seçili metni ara başlık yap/, "Yeni Haber editörü seçili metni ara başlığa çevirebilmeli");
-  assert.match(workflowStudio, /Seçileni ara başlık yap/, "Yayın Stüdyosu paragraf içindeki seçimi ayrı ara başlık bloğuna çevirebilmeli");
-  assert.match(workflowStudio, /Bu bloğun altına video ekle/, "Video seçilen içerik bloğunun arasına eklenebilmeli");
+  /* Ara başlık, video ve görsel artık zengin metin editörünün araç çubuğundan ekleniyor. */
+  for (const kaynak of [adminPanel, workflowStudio]) assert.match(kaynak, /<RichEditor/, "İki haber ekranı da zengin metin editörünü kullanmalı");
+  const richEditor = await readFile(new URL("../app/admin/rich-editor.tsx", import.meta.url), "utf8");
+  assert.match(richEditor, /toggleHeading/, "Ara başlık zengin editörden yapılabilmeli");
+  assert.match(richEditor, /setYoutubeVideo|openMedia\("video"\)/, "Video metnin istenen yerine eklenebilmeli");
+  assert.match(richEditor, /setImage/, "Görsel metnin istenen yerine eklenebilmeli");
   assert.match(workflowStudio, /selected\.spot\.length\}\/500/, "Yayın Stüdyosu spot sınırını göstermeli");
   assert.doesNotMatch(workflowStudio, /Otomatik kaydedildi|setTimeout\(\(\) => void persist/, "Yayın Stüdyosu değişiklikleri kendiliğinden kaydetmemeli");
   assert.match(workflowStudio, /beforeunload/, "Kaydedilmemiş değişiklikler sayfadan çıkarken korunmalı");
-  assert.match(workflowStudio, /className="block-heading-action" disabled=\{!canEdit\}/, "Yetkisiz kullanıcı ara başlık dönüşümünü çalıştıramamalı");
+  /* Yetkisi olmayan kullanıcı gövdeyi değiştiremez: editör iki ekranda da kilitli açılır. */
+  for (const kaynak of [adminPanel, workflowStudio]) assert.match(kaynak, /<RichEditor value=\{[^}]*\} disabled=\{!canEdit\}/, "Zengin editör yetkisiz kullanıcıya kilitli açılmalı");
+  assert.match(richEditor, /editable: !disabled/, "Kilitli editörde yazı yazılamamalı");
   assert.match(globalStyles, /\.article-body h2,\.continuous-body h2\{[^}]*margin:42px 0 18px[^}]*color:#0b1117[^}]*font-weight:900/, "Ara başlıklar yayında üst-alt boşluklu, siyah ve kalın olmalı");
   assert.match(globalStyles, /\.article-primary-video\{[^}]*width:min\(100%,720px\)[^}]*margin:28px auto/, "Ana haber videosu masaüstünde gereksiz büyümemeli");
   assert.match(globalStyles, /\.article-body>\.article-video-player,\.continuous-body>\.article-video-player\{[^}]*width:min\(100%,640px\)/, "Metin arasındaki video daha kompakt olmalı");
@@ -1447,8 +1459,7 @@ test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve a
     readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(pageSource, /listPreviousCategoryArticles\(article, 5\)/);
-  assert.match(studioSource, /image: "Görsel"/);
-  assert.match(studioSource, /\+ \{blockLabels\[type\]\}/, "Yayın Stüdyosu sınırsız ek görsel bloğu ekleme yolunu korumalı");
+  assert.match(studioSource, /<RichEditor/, "Yayın Stüdyosu haber gövdesini zengin editörle düzenlemeli");
 });
 
 test("içerik modeli manşet ve yazar varsayılanlarını sağlar", () => {
@@ -2882,4 +2893,271 @@ test("reklam merkezi yönetim kılavuzu açılır, görselli ve gerçek panel di
 
   const entries = Object.keys(archive);
   assert.ok(entries.filter((entry) => /^word\/media\//.test(entry)).length >= 6, "Kılavuz logo dahil en az altı benzersiz gömülü medya içermeli");
+});
+
+test("zengin metin modeli düz metin projeksiyonunu, blok dönüşümünü ve sınırları uygular", async () => {
+  const { blocksToHtml, htmlToPlainText, normalizeArticleHtml, plainTextToHtml, MAX_BODY_HTML } = await import("../db/rich-text.mjs");
+
+  /* Arama ve en az 80 karakter kuralı `body` sütununu kullandığı için projeksiyon doğru olmalı. */
+  assert.equal(htmlToPlainText("<h2>Başlık</h2><p>Birinci <strong>cümle</strong>.</p><p>İkinci cümle.</p>"), "Başlık\n\nBirinci cümle.\n\nİkinci cümle.", "Blok sınırları boş satıra dönmeli ki bloklar yeniden üretilebilsin");
+  assert.equal(htmlToPlainText("<p>Satır bir<br>Satır iki</p>"), "Satır bir\nSatır iki");
+  assert.equal(htmlToPlainText("<p>Koza &amp; TV &quot;canlı&quot; &#39;yayın&#39;&nbsp;akışı</p>"), 'Koza & TV "canlı" \'yayın\' akışı');
+  assert.equal(htmlToPlainText("<p>Metin</p><script>alert(1)</script><style>p{color:red}</style>"), "Metin", "Betik ve stil içeriği düz metne karışmamalı");
+  assert.equal(htmlToPlainText("<ul><li><p>Bir</p></li><li><p>İki</p></li></ul>"), "Bir\n\nİki");
+  assert.equal(htmlToPlainText(""), "");
+  assert.equal(htmlToPlainText(null), "");
+
+  /* Arşivdeki blok dizisi editöre yüklenebilir HTML'e çevrilir. */
+  const html = blocksToHtml([
+    { id: "1", type: "heading", content: "Ara başlık" },
+    { id: "2", type: "paragraph", content: "Birinci paragraf" },
+    { id: "3", type: "list", content: "Bir\nİki" },
+    { id: "4", type: "quote", content: "Alıntı" },
+    { id: "5", type: "image", content: "/media/2026/09/a.jpg", caption: "Fotoğraf açıklaması" },
+    { id: "6", type: "paragraph", content: "   " },
+  ]);
+  assert.match(html, /<h2>Ara başlık<\/h2>/);
+  assert.match(html, /<p>Birinci paragraf<\/p>/);
+  assert.match(html, /<ul><li><p>Bir<\/p><\/li><li><p>İki<\/p><\/li><\/ul>/);
+  assert.match(html, /<blockquote><p>Alıntı<\/p><\/blockquote>/);
+  assert.match(html, /<img src="\/media\/2026\/09\/a\.jpg" alt="Fotoğraf açıklaması">/);
+  assert.equal((html.match(/<p>/g) ?? []).length, 4, "Boş blok HTML'e taşınmamalı");
+
+  /* Blok metni HTML olarak değil, metin olarak taşınır. */
+  const escaped = blocksToHtml([{ id: "1", type: "paragraph", content: '<script>alert("x")</script> & <b>kalın</b>' }]);
+  assert.doesNotMatch(escaped, /<script>/);
+  assert.doesNotMatch(escaped, /<b>/);
+  assert.match(escaped, /&lt;script&gt;/);
+  assert.match(escaped, /&amp;/);
+
+  assert.equal(plainTextToHtml("Birinci\n\nİkinci"), "<p>Birinci</p><p>İkinci</p>");
+  assert.equal(plainTextToHtml("Tek satır\nalt satır"), "<p>Tek satır<br>alt satır</p>");
+  assert.equal(plainTextToHtml(""), "");
+
+  assert.equal(normalizeArticleHtml("   "), "");
+  assert.equal(normalizeArticleHtml("<p></p>"), "", "İçeriği olmayan gövde boş sayılmalı");
+  assert.match(normalizeArticleHtml('<img src="/media/2026/09/a.jpg">'), /<img/, "Yalnız görsel taşıyan gövde korunmalı");
+  assert.equal(normalizeArticleHtml(`<p>${"a".repeat(MAX_BODY_HTML)}</p>`).length, MAX_BODY_HTML, "Aşırı uzun gövde sınırda kesilmeli");
+  assert.equal(normalizeArticleHtml(undefined), "");
+});
+
+test("zengin metin gövdesi yayında gösterilir; arşivdeki haberler eski düzenini korur", async (t) => {
+  const zenginHtml = '<h2>Kesintisiz yayın başlığı</h2><p>Bu paragrafta <strong>vurgulu</strong> ve <em>eğik</em> metin ile <a href="/kategori/gundem">iç bağlantı</a> bulunur.</p>'
+    + "<ol><li><p>Birinci madde</p></li><li><p>İkinci madde</p></li></ol>"
+    + "<table><tbody><tr><th><p>Şehir</p></th><th><p>Derece</p></th></tr><tr><td><p>İstanbul</p></td><td><p>27</p></td></tr></tbody></table>"
+    + "<blockquote><p>Zengin metin alıntısı.</p></blockquote>";
+  const ortak = { category: "Teknoloji", status: "published", heroImage: "/news/studio.jpg", imageAlt: "Koza TV test görseli", videoUrl: "", author: "Test Editörü", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0, isHomepageGallery: 0, homepagePlacement: "latest", headlinePosition: "left-bottom" };
+
+  const zengin = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    ...ortak, slug: "", title: "Zengin metin editoru yayin testi", spot: "Zengin metin gövdesinin yayında doğru gösterildiğini doğrulayan test spotu.",
+    body: "Bu paragrafta vurgulu ve eğik metin ile iç bağlantı bulunur. Birinci madde. İkinci madde. Zengin metin alıntısı burada yer alır.",
+    bodyHtml: zenginHtml,
+  }) });
+  assert.equal(zengin.status, 201);
+  const zenginKayit = (await zengin.json()).article;
+  assert.equal(zenginKayit.bodyHtml, zenginHtml, "Zengin gövde SQLite üzerinde olduğu gibi korunmalı");
+
+  const eski = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    ...ortak, slug: "", title: "Klasik blok duzeni yayin testi", spot: "Zengin gövdesi olmayan haberin eski düzenini koruduğunu doğrulayan test spotu.",
+    body: "Klasik blok düzeniyle kaydedilen haber metni burada başlar.\n\n## ARA BAŞLIK\n\nİkinci paragraf eski blok düzeniyle yayımlanır.",
+  }) });
+  assert.equal(eski.status, 201);
+  const eskiKayit = (await eski.json()).article;
+  assert.equal(eskiKayit.bodyHtml, "", "Zengin gövde gönderilmeyen haber eski düzeninde kalmalı");
+
+  t.after(async () => {
+    const db = new Database(process.env.KOZA_DB_PATH);
+    db.prepare("DELETE FROM articles WHERE id IN (?,?)").run(zenginKayit.id, eskiKayit.id);
+    db.close();
+  });
+
+  const zenginSayfa = primaryArticleHtml(await html(`/haber/${zenginKayit.slug}`));
+  const govde = zenginSayfa.match(/<div class="rich-body">[\s\S]*?<\/div>/)?.[0] ?? "";
+  assert.ok(govde, "Zengin gövdeli haberde rich-body alanı bulunmalı");
+  assert.match(govde, /<h2>Kesintisiz yayın başlığı<\/h2>/);
+  assert.match(govde, /<strong>vurgulu<\/strong>/);
+  assert.match(govde, /<em>eğik<\/em>/);
+  assert.match(govde, /<a href="\/kategori\/gundem">iç bağlantı<\/a>/, "Cümle içi bağlantı yayında çalışmalı");
+  assert.match(govde, /<ol>/, "Numaralı liste yayında görünmeli");
+  assert.match(govde, /<table>[\s\S]*<th>/, "Tablo yayında görünmeli");
+  assert.match(govde, /<blockquote>/);
+
+  /* Arşivdeki haber eskisi gibi blok blok gösterilir. */
+  /* Kesintisiz okuma bölümü sayfaya başka haberlerin gövdesini de getirdiği için
+     yalnız haberin kendi gövdesi incelenir. */
+  const eskiSayfa = primaryArticleHtml(await html(`/haber/${eskiKayit.slug}`));
+  assert.doesNotMatch(eskiSayfa, /class="rich-body"/, "Zengin gövdesi olmayan haberde rich-body açılmamalı");
+  assert.match(eskiSayfa, /<h2>ARA BAŞLIK<\/h2>/, "Eski ara başlık düzeni korunmalı");
+  assert.match(eskiSayfa, /Klasik blok düzeniyle kaydedilen haber metni/);
+
+  /* Zengin gövdenin düz metin projeksiyonu arama ve karakter kuralı için gerekli. */
+  const arama = await html("/arama?q=" + encodeURIComponent("iç bağlantı bulunur"));
+  assert.match(arama, /Zengin metin editoru yayin testi/, "Zengin gövdeli haber arama sonuçlarında çıkmalı");
+
+  /* Gövdesi kısa kalan zengin haber kabul edilmemeli. */
+  const kisa = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    ...ortak, slug: "", title: "Cok kisa govdeli zengin haber", spot: "Kısa gövdenin reddedildiğini doğrulayan yeterince uzun test spotu.",
+    body: "Kısa.", bodyHtml: "<p>Kısa.</p>",
+  }) });
+  assert.equal(kisa.status, 400, "En az 80 karakter kuralı zengin gövdede de uygulanmalı");
+});
+
+test("zengin metin editörü yalnız yönetim paketine girer ve gerekli araçları taşır", async () => {
+  const source = await readFile(new URL("../app/admin/rich-editor.tsx", import.meta.url), "utf8");
+  for (const [arac, iz] of [
+    ["kalın", "toggleBold"], ["italik", "toggleItalic"], ["altı çizili", "toggleUnderline"],
+    ["bağlantı", "setLink"], ["numaralı liste", "toggleOrderedList"], ["madde listesi", "toggleBulletList"],
+    ["hizalama", "setTextAlign"], ["tablo", "insertTable"], ["görsel", "setImage"],
+    ["başlık", "toggleHeading"], ["alıntı", "toggleBlockquote"], ["punto", "setFontSize"],
+    ["yazı rengi", "setColor"], ["vurgu", "setHighlight"], ["geri al", "undo"], ["kelime sayacı", "characterCount"],
+  ]) assert.match(source, new RegExp(iz), `Editörde ${arac} aracı bulunmalı`);
+  assert.match(source, /shouldRerenderOnTransaction: true/, "Araç çubuğu imleç konumuna göre güncellenmeli");
+  assert.match(source, /immediatelyRender: false/, "Editör sunucu tarafında render edilmemeli");
+
+  const panel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const studio = await readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8");
+  for (const [ekran, kaynak] of [["Yeni Haber", panel], ["Yayın Stüdyosu", studio]]) {
+    assert.match(kaynak, /<RichEditor/, `${ekran} ekranı zengin editörü kullanmalı`);
+    assert.match(kaynak, /htmlToPlainText/, `${ekran} ekranı düz metin projeksiyonunu üretmeli`);
+    assert.match(kaynak, /blocksToHtml/, `${ekran} ekranı arşivdeki haberi editöre yükleyebilmeli`);
+  }
+  assert.doesNotMatch(panel, /className="body-editor"/, "Düz metin yazı alanı kaldırılmış olmalı");
+
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  for (const kural of [/\.rich-body h3\{/, /\.rich-body ol\{/, /\.rich-body table\{/, /\.rich-body blockquote\{/, /\.rich-body img\{/]) {
+    assert.match(css, kural, "Zengin gövdenin yayın stilleri tanımlı olmalı");
+  }
+
+  /* Editör paketi ziyaretçi tarafına sızmamalı: ProseMirror yalnız yönetim parçasında bulunmalı. */
+  const chunkDir = new URL("../dist/client/_next/static/chunks/", import.meta.url);
+  const chunks = await readdir(chunkDir);
+  const contents = await Promise.all(chunks.filter((name) => name.endsWith(".js")).map(async (name) => [name, await readFile(new URL(name, chunkDir), "utf8")]));
+  const editorChunks = contents.filter(([, code]) => code.includes("prosemirror")).map(([name]) => name);
+  assert.ok(editorChunks.length > 0, "Editör paketi derlemede bulunmalı");
+  assert.ok(editorChunks.every((name) => name.startsWith("panel-")), `Editör yalnız yönetim paketinde olmalı, bulunan: ${editorChunks.join(", ")}`);
+  for (const [name, code] of contents) {
+    if (name.startsWith("index-") || name.startsWith("site-client-") || name.startsWith("framework-")) {
+      assert.doesNotMatch(code, /prosemirror/, `${name} ziyaretçi paketinde editör kodu bulunmamalı`);
+    }
+  }
+});
+
+test("zengin başlık modeli düz metin karşılığını üretir ve etiketleri bozmadan okunur hâle çevirir", async () => {
+  const { displayRichTitle, inlineHtmlToPlainText, normalizeInlineHtml, unwrapInlineHtml, wrapInlineHtml } = await import("../db/rich-text.mjs");
+
+  /* Adres, sekme başlığı, paylaşım kartı ve RSS bu düz metni kullanır. */
+  assert.equal(inlineHtmlToPlainText('<span style="color: #dc151d">SON DAKİKA</span> Benzine zam geldi'), "SON DAKİKA Benzine zam geldi");
+  assert.equal(inlineHtmlToPlainText("Birinci<br>ikinci"), "Birinci ikinci");
+  assert.equal(inlineHtmlToPlainText("<p>Bir</p><p>İki</p>"), "Bir İki");
+  assert.equal(inlineHtmlToPlainText("Koza &amp; TV &quot;canlı&quot;"), 'Koza & TV "canlı"');
+  assert.equal(inlineHtmlToPlainText("   "), "");
+
+  /* Başlık <p> sarmalıyla saklanmaz; editöre yüklenirken sarılır. */
+  assert.equal(unwrapInlineHtml("<p>Ali <strong>Veli</strong></p>"), "Ali <strong>Veli</strong>");
+  assert.equal(unwrapInlineHtml("<p>Bir</p><p>İki</p>"), "<p>Bir</p><p>İki</p>", "Birden fazla paragraf sarmalından çıkarılmamalı");
+  assert.equal(wrapInlineHtml("Ali <b>Veli</b>"), "<p>Ali <b>Veli</b></p>");
+  assert.equal(wrapInlineHtml("<p>Zaten sarılı</p>"), "<p>Zaten sarılı</p>");
+  assert.equal(wrapInlineHtml(""), "");
+
+  /* Tamamı büyük harf arşiv başlığı okunur hâle gelirken renk ve punto bilgisi korunur. */
+  const buyuk = '<span style="color: #dc151d">SON DAKİKA</span> BENZİNE ZAM GELDİ';
+  const okunur = displayRichTitle(buyuk);
+  assert.match(okunur, /<span style="color: #dc151d">Son Dakika<\/span> Benzine Zam Geldi/);
+  assert.match(okunur, /color: #dc151d/, "Renk bilgisi dönüşümde kaybolmamalı");
+  assert.equal(displayRichTitle('<b>Normal</b> Başlık'), '<b>Normal</b> Başlık', "Büyük harfli olmayan başlığa dokunulmamalı");
+  assert.match(displayRichTitle("<b>CHP</b>'NİN KARARI"), /<b>CHP<\/b>'nin Kararı/, "Kısaltma korunmalı");
+  assert.equal(displayRichTitle(""), "");
+
+  assert.equal(normalizeInlineHtml("<p>   </p>"), "", "İçeriği olmayan başlık boş sayılmalı");
+  assert.equal(normalizeInlineHtml("<p>Başlık</p>"), "Başlık");
+  assert.equal(normalizeInlineHtml(`<p>${"a".repeat(2500)}</p>`).length, 2000, "Aşırı uzun başlık sınırda kesilmeli");
+});
+
+test("zengin başlık ekranda gösterilir, adres ve paylaşım alanları düz metin kalır", async (t) => {
+  const titleHtml = '<span style="color: #dc151d">SON DAKİKA</span> Zengin baslik yayin testi haberi';
+  const spotHtml = "Pompaya yansıyan <strong>artışın</strong> ayrıntıları bu spotta anlatılıyor.";
+  const ortak = { category: "Teknoloji", status: "published", heroImage: "/news/studio.jpg", imageAlt: "Koza TV test görseli", videoUrl: "", author: "Test Editörü", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0, isHomepageGallery: 0, homepagePlacement: "latest", headlinePosition: "left-bottom",
+    body: "Zengin başlığın yayında doğru gösterildiğini doğrulayan yeterince uzun haber metni burada yer alır." };
+
+  const zengin = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    ...ortak, slug: "", title: "yok sayilacak", spot: "yok sayilacak spot metni buraya yazilmistir", titleHtml, spotHtml,
+  }) });
+  assert.equal(zengin.status, 201);
+  const kayit = (await zengin.json()).article;
+
+  const duz = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    ...ortak, slug: "", title: "Duz baslikli arsiv haberi testi", spot: "Zengin başlığı olmayan haberin eskisi gibi göründüğünü doğrulayan spot.",
+  }) });
+  assert.equal(duz.status, 201);
+  const duzKayit = (await duz.json()).article;
+
+  t.after(() => {
+    const db = new Database(process.env.KOZA_DB_PATH);
+    db.prepare("DELETE FROM articles WHERE id IN (?,?)").run(kayit.id, duzKayit.id);
+    db.close();
+  });
+
+  /* Düz metin karşılığı zengin başlıktan üretilir; adres de ondan çıkar. */
+  assert.equal(kayit.titleHtml, titleHtml, "Zengin başlık olduğu gibi korunmalı");
+  assert.equal(kayit.title, "SON DAKİKA Zengin baslik yayin testi haberi", "Düz başlık zengin başlıktan üretilmeli");
+  assert.equal(kayit.spot, "Pompaya yansıyan artışın ayrıntıları bu spotta anlatılıyor.", "Düz spot zengin spottan üretilmeli");
+  assert.equal(kayit.slug, "son-dakika-zengin-baslik-yayin-testi-haberi", "Adres düz metinden üretilmeli, etiket taşımamalı");
+  assert.equal(duzKayit.titleHtml, "", "Zengin başlık gönderilmeyen haber düz metin kalmalı");
+
+  const sayfa = primaryArticleHtml(await html(`/haber/${kayit.slug}`));
+  assert.match(sayfa, /<h1><span class="rich-title"><span style="color: #dc151d">SON DAKİKA<\/span>/, "Başlıktaki renk haber sayfasında görünmeli");
+  assert.match(sayfa, /class="rich-spot">Pompaya yansıyan <strong>artışın<\/strong>/, "Spottaki vurgu haber sayfasında görünmeli");
+
+  /* Arama motoru ve paylaşım alanları etiket taşımamalı. */
+  const tamSayfa = await html(`/haber/${kayit.slug}`);
+  const seoAlanlari = [
+    tamSayfa.match(/<title>([^<]*)<\/title>/)?.[1] ?? "",
+    tamSayfa.match(/property="og:title" content="([^"]*)"/)?.[1] ?? "",
+    tamSayfa.match(/property="og:description" content="([^"]*)"/)?.[1] ?? "",
+    tamSayfa.match(/"headline":"([^"]*)"/)?.[1] ?? "",
+  ];
+  for (const alan of seoAlanlari) {
+    assert.ok(alan, "SEO alanı boş kalmamalı");
+    assert.doesNotMatch(alan, /<span|<strong|style=/, `Etiket SEO alanına sızmamalı: ${alan}`);
+  }
+  assert.match(seoAlanlari[0], /SON DAKİKA Zengin baslik yayin testi haberi/);
+  assert.match(seoAlanlari[3], /SON DAKİKA Zengin baslik yayin testi haberi/, "JSON-LD başlığı düz metin olmalı");
+
+  const rss = await (await request("/rss.xml")).text();
+  const rssBaslik = rss.match(/<title>SON DAKİKA[^<]*<\/title>/)?.[0] ?? "";
+  assert.ok(rssBaslik, "Haber RSS akışında bulunmalı");
+  assert.doesNotMatch(rssBaslik, /&lt;span|style=/, "RSS başlığı etiket taşımamalı");
+
+  /* Arşivdeki haber eskisi gibi düz başlıkla görünür. */
+  const duzSayfa = primaryArticleHtml(await html(`/haber/${duzKayit.slug}`));
+  assert.doesNotMatch(duzSayfa, /class="rich-title"/, "Zengin başlığı olmayan haberde rich-title açılmamalı");
+  assert.match(duzSayfa, /<h1>Duz baslikli arsiv haberi testi<\/h1>/, "Düz başlık eskisi gibi basılmalı");
+});
+
+test("başlık ve spot editörü sadeleştirilmiş kipte açılır", async () => {
+  const richEditor = await readFile(new URL("../app/admin/rich-editor.tsx", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const studio = await readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8");
+
+  for (const [ekran, kaynak] of [["Yeni Haber", panel], ["Yayın Stüdyosu", studio]]) {
+    assert.equal((kaynak.match(/variant="inline"/g) ?? []).length, 2, `${ekran} ekranında başlık ve spot sadeleştirilmiş editörle açılmalı`);
+    assert.match(kaynak, /inlineHtmlToPlainText/, `${ekran} ekranı düz metin karşılığını üretmeli`);
+  }
+  assert.doesNotMatch(panel, /<input value=\{form\.title\}/, "Başlık artık düz metin kutusu olmamalı");
+  assert.doesNotMatch(panel, /<textarea value=\{form\.spot\}/, "Spot artık düz metin kutusu olmamalı");
+
+  /* Başlıkta bağlantı, liste, tablo ve medya bilerek kapalı. */
+  const inlineKip = richEditor.match(/extensions: inline\s*\?\s*\[([\s\S]*?)\]\s*:/)?.[1] ?? "";
+  assert.ok(inlineKip, "Sadeleştirilmiş kipin eklenti listesi bulunmalı");
+  assert.match(inlineKip, /heading: false/);
+  assert.match(inlineKip, /bulletList: false/);
+  assert.match(inlineKip, /orderedList: false/);
+  assert.match(inlineKip, /blockquote: false/);
+  assert.match(inlineKip, /link: false/, "Başlığın kendisi bağlantı olduğu için içine bağlantı konulamamalı");
+  for (const yasak of ["TableKit", "Image", "Youtube"]) {
+    assert.doesNotMatch(inlineKip, new RegExp(yasak), `Sadeleştirilmiş kipte ${yasak} bulunmamalı`);
+  }
+  /* Vurgu araçları açık olmalı. */
+  for (const arac of ["TextStyle", "Color", "FontSize", "Highlight"]) assert.match(inlineKip, new RegExp(arac), `Sadeleştirilmiş kipte ${arac} bulunmalı`);
+  assert.match(richEditor, /unwrapInlineHtml\(instance\.getHTML\(\)\)/, "Başlık <p> sarmalı olmadan kaydedilmeli");
 });

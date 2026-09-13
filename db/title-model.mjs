@@ -23,7 +23,7 @@ const upperFirst = (value) => {
   return text.slice(0, index) + text[index].toLocaleUpperCase("tr-TR") + text.slice(index + 1);
 };
 
-function isAllUpper(value) {
+export function isAllUpper(value) {
   const letters = value.replace(/[^\p{L}]/gu, "");
   return letters.length > 0 && letters === letters.toLocaleUpperCase("tr-TR");
 }
@@ -47,14 +47,17 @@ function convertToken(token) {
   return converted + parts.slice(1).map((part, index) => (index % 2 === 0 ? part : lower(part))).join("");
 }
 
+/* Kelime kelime okunur biçime çevirir. Boşlukları ve baştaki/sondaki boşluğu korur ki
+   zengin başlıkta etiketler arasına dağılmış metin parçaları birleştiğinde bozulmasın. */
+export function convertTitleCase(value) {
+  return String(value ?? "").split(/(\s+)/).map((chunk) => (/^\s+$/.test(chunk) ? chunk : convertToken(chunk))).join("");
+}
+
 /* Tamamı büyük harf olan başlığı okunur biçime çevirir; diğer başlıklara dokunmaz. */
 export function displayTitle(title) {
   const value = String(title ?? "").trim();
   if (!value || !isAllUpper(value)) return value;
-
-  const words = value.split(/(\s+)/).map((chunk) => (/^\s+$/.test(chunk) ? chunk : convertToken(chunk)));
-  const result = words.join("");
-  return result;
+  return convertTitleCase(value);
 }
 
 /* Eski sitede `og:description` çoğu haberde başlığın kopyası. Aynı metni spot olarak ikinci kez

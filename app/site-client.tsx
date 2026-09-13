@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { getSwipeDirection } from "./slider-gesture.mjs";
 
 type MarketData = {
@@ -75,7 +76,7 @@ export function LiveData() {
 
 type Lead = {
   category: string;
-  title: string;
+  title: ReactNode;
   image: string;
   imageAlt: string;
   href?: string;

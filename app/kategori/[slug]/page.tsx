@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
+import { articleSpot, articleTitle } from "../../rich-title";
 import { notFound } from "next/navigation";
 import { getCategoryBySlug, listCategories, listCategoryPage, listLatestArticles } from "../../../db";
 import { redirectIfMapped } from "../../legacy-redirect";
 import { SiteFooter, SiteHeader } from "../../site-chrome";
-import { displaySpot, displayTitle } from "../../../db/title-model.mjs";
 import { AdSlot } from "../../ad-slot";
 
 export const dynamic = "force-dynamic";
@@ -64,8 +64,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                 <div className="section-lead-thumb"><img src={lead.heroImage} alt={lead.imageAlt} />{lead.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                 <div>
                   <span style={{ background: category.color }}>{lead.category}</span>
-                  <h2>{displayTitle(lead.title)}</h2>
-                  {displaySpot(lead.spot, lead.title) && <p>{displaySpot(lead.spot, lead.title)}</p>}
+                  <h2>{articleTitle(lead)}</h2>
+                  {articleSpot(lead) && <p>{articleSpot(lead)}</p>}
                   <time>{stamp(lead.publishedAt)}</time>
                 </div>
               </a>
@@ -76,7 +76,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                 <a className="section-card" href={`/haber/${article.slug}`} key={article.id}>
                   <div className="section-card-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <span style={{ color: category.color }}>{article.category}</span>
-                  <h3>{displayTitle(article.title)}</h3>
+                  <h3>{articleTitle(article)}</h3>
                   <time>{stamp(article.publishedAt)}</time>
                 </a>
               ))}
@@ -89,7 +89,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                 <a className="section-card" href={`/haber/${article.slug}`} key={article.id}>
                   <div className="section-card-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <span style={{ color: category.color }}>{article.category}</span>
-                  <h3>{displayTitle(article.title)}</h3>
+                  <h3>{articleTitle(article)}</h3>
                   <time>{stamp(article.publishedAt)}</time>
                 </a>
               ))}
@@ -114,7 +114,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
               {sidebar.map((article) => (
                 <a className="aside-row" href={`/haber/${article.slug}`} key={article.id}>
                   <img src={article.heroImage} alt="" loading="lazy" />
-                  <span><b>{article.category}</b>{displayTitle(article.title)}</span>
+                  <span><b>{article.category}</b>{articleTitle(article)}</span>
                 </a>
               ))}
               <a className="aside-more" href="/son-dakika">Tüm son dakika →</a>

@@ -1,5 +1,5 @@
 import { listHomepageArticles, listHomepagePhotoGalleries, listLatestArticles, listVideoArticles } from "../db";
-import { displaySpot, displayTitle } from "../db/title-model.mjs";
+import { articleSpot, articleTitle } from "./rich-title";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
 import { AdSlot } from "./ad-slot";
@@ -26,7 +26,7 @@ export default async function Home() {
   const photoGalleries = listHomepagePhotoGalleries(8).filter((gallery) => gallery.id !== grid[0]?.id).slice(0, 3);
   const leads = leadPool.map((article) => ({
     category: article.category,
-    title: displayTitle(article.title),
+    title: articleTitle(article),
     image: article.heroImage,
     imageAlt: article.imageAlt,
     href: `/haber/${article.slug}`,
@@ -48,7 +48,7 @@ export default async function Home() {
           <div className="wrap breaking-inner">
             <strong><i /> SON DAKİKA</strong>
             <time>{clock(breaking.publishedAt)}</time>
-            <p>{displayTitle(breaking.title)}</p>
+            <p>{articleTitle(breaking)}</p>
             <a href={`/haber/${breaking.slug}`}>Habere git <span>→</span></a>
           </div>
         </section>
@@ -73,7 +73,7 @@ export default async function Home() {
                 <a href={`/haber/${article.slug}`} className={`hero-side-card hero-side-card-${index + 1}`} key={article.id}>
                   <img src={article.heroImage} alt={article.imageAlt} loading={index === 0 ? "eager" : "lazy"} />
                   <div>
-                    <h2>{displayTitle(article.title)}</h2>
+                    <h2>{articleTitle(article)}</h2>
                   </div>
                 </a>
               ))}
@@ -89,7 +89,7 @@ export default async function Home() {
                   <img src={article.heroImage} alt={article.imageAlt} loading="lazy" />
                   {article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}
                 </div>
-                <div><span>{article.category}</span><h2>{displayTitle(article.title)}</h2></div>
+                <div><span>{article.category}</span><h2>{articleTitle(article)}</h2></div>
               </a>
             ))}
           </section>
@@ -106,8 +106,8 @@ export default async function Home() {
                   <div className="news-thumb"><img src={grid[0].heroImage} alt={grid[0].imageAlt} loading="lazy" />{grid[0].isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <div className="card-body">
                     <span>{grid[0].category}</span>
-                    <h3>{displayTitle(grid[0].title)}</h3>
-                    <p>{displaySpot(grid[0].spot, grid[0].title)}</p>
+                    <h3>{articleTitle(grid[0])}</h3>
+                    <p>{articleSpot(grid[0])}</p>
                   </div>
                 </a>
               ) : null}
@@ -116,12 +116,12 @@ export default async function Home() {
                   <header><div><span>GÖRSEL HABER</span><h2>Foto Galeri</h2></div><a href="/foto-galeri">Tümünü gör <i aria-hidden="true">→</i></a></header>
                   <a className="home-photo-gallery-lead" href={`/foto-galeri/${photoGalleries[0].slug}`}>
                     <img src={photoGalleries[0].galleryImages[0].src} alt={photoGalleries[0].galleryImages[0].caption || photoGalleries[0].imageAlt} loading="lazy" />
-                    <div><small>{photoGalleries[0].category}</small><h3>{displayTitle(photoGalleries[0].title)}</h3><b>Galeriyi aç <i aria-hidden="true">↗</i></b></div>
+                    <div><small>{photoGalleries[0].category}</small><h3>{articleTitle(photoGalleries[0])}</h3><b>Galeriyi aç <i aria-hidden="true">↗</i></b></div>
                   </a>
                   {photoGalleries.length > 1 ? <div className="home-photo-gallery-list">{photoGalleries.slice(1).map((gallery) => (
                     <a href={`/foto-galeri/${gallery.slug}`} key={gallery.id}>
                       <img src={gallery.galleryImages[0].src} alt={gallery.galleryImages[0].caption || gallery.imageAlt} loading="lazy" />
-                      <div><small>{gallery.category}</small><h3>{displayTitle(gallery.title)}</h3></div>
+                      <div><small>{gallery.category}</small><h3>{articleTitle(gallery)}</h3></div>
                     </a>
                   ))}</div> : null}
                 </aside>
@@ -133,8 +133,8 @@ export default async function Home() {
                   <div className="news-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <div className="card-body">
                     <span>{article.category}</span>
-                    <h3>{displayTitle(article.title)}</h3>
-                    <p>{displaySpot(article.spot, article.title)}</p>
+                    <h3>{articleTitle(article)}</h3>
+                    <p>{articleSpot(article)}</p>
                   </div>
                 </a>
               ))}
@@ -152,7 +152,7 @@ export default async function Home() {
               <a className="video-main" href={`/haber/${videoLead.slug}`}>
                 <img src={videoLead.heroImage} alt={videoLead.imageAlt} loading="lazy" />
                 <i aria-hidden="true">▶</i>
-                <div><span>{videoLead.category.toLocaleUpperCase("tr-TR")}</span><h3>{displayTitle(videoLead.title)}</h3></div>
+                <div><span>{videoLead.category.toLocaleUpperCase("tr-TR")}</span><h3>{articleTitle(videoLead)}</h3></div>
               </a>
             ) : (
               <a className="video-main" href="/canli">
@@ -165,7 +165,7 @@ export default async function Home() {
               {(videos.length > 1 ? videos.slice(1, 4) : latest.slice(0, 3)).map((article) => (
                 <a href={`/haber/${article.slug}`} key={article.id}>
                   <div><img src={article.heroImage} alt={article.imageAlt} loading="lazy" /><i>▶</i></div>
-                  <p><span>{article.category}</span>{displayTitle(article.title)}</p>
+                  <p><span>{article.category}</span>{articleTitle(article)}</p>
                 </a>
               ))}
             </div>

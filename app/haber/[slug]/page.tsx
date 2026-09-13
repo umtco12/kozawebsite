@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
+import { articleSpot, articleTitle } from "../../rich-title";
 import { notFound } from "next/navigation";
 import { getArticleBySlug, listCategories, listPreviousCategoryArticles, type ArticleRecord } from "../../../db";
 import { slugify } from "../../../db/article-model.mjs";
 import { redirectIfMapped } from "../../legacy-redirect";
 import { SiteFooter, SiteHeader } from "../../site-chrome";
-import { ArticleBlocks, ArticleVideoPlayer } from "./article-blocks";
+import { ArticleBody, ArticleVideoPlayer } from "./article-blocks";
 import { ShareButtons } from "./share-buttons";
-import { displaySpot, displayTitle } from "../../../db/title-model.mjs";
+import { displayTitle } from "../../../db/title-model.mjs";
 import { renderAgencyDisclaimer } from "../../../db/agency-model.mjs";
 import { AdSlot } from "../../ad-slot";
 
@@ -29,13 +30,13 @@ function ContinuousArticle({ article, index, total }: { article: ArticleRecord; 
       <header>
         <div className="continuous-kicker"><span>SIRADAKİ HABER</span><small>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</small></div>
         <a className="continuous-category" href={categoryHref}>{article.category}</a>
-        <h2><a href={articleHref}>{displayTitle(article.title)}</a></h2>
-        {displaySpot(article.spot, article.title) ? <p>{displaySpot(article.spot, article.title)}</p> : null}
+        <h2><a href={articleHref}>{articleTitle(article)}</a></h2>
+        {articleSpot(article) ? <p>{articleSpot(article)}</p> : null}
         <div className="continuous-meta"><a href={`/yazar/${slugify(article.author)}`}>{article.author}</a><time>{publishedLabel(article.publishedAt)}</time></div>
       </header>
       <figure><div>{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}<img src={article.heroImage} alt={article.imageAlt} loading="lazy" /></div></figure>
       {article.videoUrl ? <section className="article-primary-video" aria-label="Haber videosu"><div><span>HABER VİDEOSU</span><small>Koza TV video</small></div><ArticleVideoPlayer src={article.videoUrl} title={`${displayTitle(article.title)} videosu`} preload="none" /></section> : null}
-      <div className="continuous-body"><ArticleBlocks blocks={article.blocks} excludeVideoUrl={article.videoUrl} lazyImages />{article.agencySourceId ? <aside className="agency-disclaimer"><div><b>AJANS HABERİ</b>{article.sourceName ? <strong>{article.sourceName}</strong> : null}</div>{agencyNotice ? <p>{agencyNotice}</p> : null}{article.agencyExternalId ? <small>Ajans kayıt no: {article.agencyExternalId}</small> : null}</aside> : null}{article.sourceName ? <div className="source-box"><span>KAYNAK</span><strong>{article.sourceName}</strong>{article.sourceUrl ? <a href={article.sourceUrl} target="_blank" rel="noreferrer nofollow">Orijinal kaynağı görüntüle →</a> : null}</div> : null}</div>
+      <div className="continuous-body"><ArticleBody article={article} lazyImages />{article.agencySourceId ? <aside className="agency-disclaimer"><div><b>AJANS HABERİ</b>{article.sourceName ? <strong>{article.sourceName}</strong> : null}</div>{agencyNotice ? <p>{agencyNotice}</p> : null}{article.agencyExternalId ? <small>Ajans kayıt no: {article.agencyExternalId}</small> : null}</aside> : null}{article.sourceName ? <div className="source-box"><span>KAYNAK</span><strong>{article.sourceName}</strong>{article.sourceUrl ? <a href={article.sourceUrl} target="_blank" rel="noreferrer nofollow">Orijinal kaynağı görüntüle →</a> : null}</div> : null}</div>
       <footer><a href={articleHref}>Haberi ayrı sayfada aç <span aria-hidden="true">→</span></a></footer>
     </article>
     <AdSlot placement="section_inline" className="ad-article-inline" />
@@ -69,11 +70,11 @@ export default async function ArticlePage({ params }: Props) {
     {article.isBreaking ? <div className="article-breaking"><div className="wrap"><b>SON DAKİKA</b><a href="/son-dakika">Koza TV Haber Merkezi gelişmeleri anlık olarak doğruluyor ve aktarıyor.</a></div></div> : null}
     <article className="article-container">
       <div className="article-breadcrumb"><a href="/">Koza TV</a><span>›</span><a href={categoryHref}>{article.category}</a></div>
-      <span className="article-category">{article.category}</span><h1>{displayTitle(article.title)}</h1>{displaySpot(article.spot, article.title) && <p className="article-spot">{displaySpot(article.spot, article.title)}</p>}
+      <span className="article-category">{article.category}</span><h1>{articleTitle(article)}</h1>{articleSpot(article) && <p className="article-spot">{articleSpot(article)}</p>}
       <div className="article-meta"><div className="author-badge">{article.author.split(" ").map((word) => word[0]).join("").slice(0, 2)}</div><div><a className="article-author" href={authorHref}>{article.author}</a><time>{published}</time></div><ShareButtons url={shareUrl} title={article.title} variant="inline" /></div>
       <figure className="article-figure"><div>{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}<img src={article.heroImage} alt={article.imageAlt} /></div></figure>
       {article.videoUrl ? <section className="article-primary-video" aria-label="Haber videosu"><div><span>HABER VİDEOSU</span><small>Koza TV video</small></div><ArticleVideoPlayer src={article.videoUrl} title={`${displayTitle(article.title)} videosu`} /></section> : null}
-      <div className="article-layout"><ShareButtons url={shareUrl} title={article.title} /><div className="article-body">{article.correctionNote && <div className="correction-note"><strong>DÜZELTME NOTU</strong><p>{article.correctionNote}</p></div>}<ArticleBlocks blocks={article.blocks} excludeVideoUrl={article.videoUrl} />{article.agencySourceId && <aside className="agency-disclaimer"><div><b>AJANS HABERİ</b>{article.sourceName ? <strong>{article.sourceName}</strong> : null}</div>{agencyNotice ? <p>{agencyNotice}</p> : null}{article.agencyExternalId || article.agencyReceivedAt ? <small>{article.agencyExternalId ? `Ajans kayıt no: ${article.agencyExternalId}` : ""}{article.agencyExternalId && article.agencyReceivedAt ? " · " : ""}{article.agencyReceivedAt ? `Sisteme alınma: ${new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Istanbul" }).format(article.agencyReceivedAt)}` : ""}</small> : null}</aside>}{article.sourceName && <div className="source-box"><span>KAYNAK</span><strong>{article.sourceName}</strong>{article.sourceUrl && <a href={article.sourceUrl} target="_blank" rel="noreferrer nofollow">Orijinal kaynağı görüntüle →</a>}</div>}<div className="article-tags"><a href={categoryHref}>#{article.category}</a><a href={authorHref}>#{article.author}</a>{article.isBreaking ? <a href="/son-dakika">#SonDakika</a> : null}</div></div><AdSlot placement="article_sidebar" className="ad-article-sidebar" /></div>
+      <div className="article-layout"><ShareButtons url={shareUrl} title={article.title} /><div className="article-body">{article.correctionNote && <div className="correction-note"><strong>DÜZELTME NOTU</strong><p>{article.correctionNote}</p></div>}<ArticleBody article={article} />{article.agencySourceId && <aside className="agency-disclaimer"><div><b>AJANS HABERİ</b>{article.sourceName ? <strong>{article.sourceName}</strong> : null}</div>{agencyNotice ? <p>{agencyNotice}</p> : null}{article.agencyExternalId || article.agencyReceivedAt ? <small>{article.agencyExternalId ? `Ajans kayıt no: ${article.agencyExternalId}` : ""}{article.agencyExternalId && article.agencyReceivedAt ? " · " : ""}{article.agencyReceivedAt ? `Sisteme alınma: ${new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Istanbul" }).format(article.agencyReceivedAt)}` : ""}</small> : null}</aside>}{article.sourceName && <div className="source-box"><span>KAYNAK</span><strong>{article.sourceName}</strong>{article.sourceUrl && <a href={article.sourceUrl} target="_blank" rel="noreferrer nofollow">Orijinal kaynağı görüntüle →</a>}</div>}<div className="article-tags"><a href={categoryHref}>#{article.category}</a><a href={authorHref}>#{article.author}</a>{article.isBreaking ? <a href="/son-dakika">#SonDakika</a> : null}</div></div><AdSlot placement="article_sidebar" className="ad-article-sidebar" /></div>
     </article>
     <section className="continuous-reading" id="kesintisiz-okuma" aria-label={`${article.category} kategorisinde kesintisiz okuma`}>
       <div className="continuous-wrap">
