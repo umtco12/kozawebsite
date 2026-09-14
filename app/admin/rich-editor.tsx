@@ -1,5 +1,6 @@
 "use client";
 
+import { Node, mergeAttributes } from "@tiptap/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -10,6 +11,48 @@ import Highlight from "@tiptap/extension-highlight";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Youtube from "@tiptap/extension-youtube";
+import { resizableMediaView } from "./resizable-media";
+import { mediaWidthAttributes } from "./media-size-model.mjs";
+
+/* Genişlik hem öznitelik hem satır içi stil olarak yazılır. Yayındaki genel `img{width:100%}`
+   kuralı yazar stili olduğu için öznitelik ipucunu ezer; ölçüyü ancak satır içi stil taşıyabilir. */
+type WidthAttribute = { default: unknown; renderHTML?: (attributes: Record<string, unknown>) => Record<string, string> };
+function widthAttribute(parent?: WidthAttribute): WidthAttribute {
+  return {
+    ...(parent ?? { default: null }),
+    renderHTML: (attributes): Record<string, string> => mediaWidthAttributes(attributes.width),
+  };
+}
+
+/* Eklentinin kendi özniteliklerini korur, yalnız genişliği zengin sürümüyle değiştirir. */
+function resizableAttributes(parent: unknown) {
+  const attributes = (parent ?? {}) as Record<string, WidthAttribute>;
+  return { ...attributes, width: widthAttribute(attributes.width) };
+}
+
+/* Kütüphaneden eklenen mp4/webm videosu. Yayında `<video controls>` olarak görünür ve
+   editörde görsellerle aynı tutamakla boyutlandırılır. */
+const LibraryVideo = Node.create({
+  name: "video",
+  group: "block",
+  atom: true,
+  draggable: true,
+  addAttributes: () => ({ src: { default: null }, width: widthAttribute(), height: { default: null } }),
+  parseHTML: () => [{ tag: "video[src]" }],
+  renderHTML: ({ HTMLAttributes }) => ["video", mergeAttributes({ controls: "controls", preload: "metadata", playsinline: "playsinline" }, HTMLAttributes)],
+  addNodeView: () => resizableMediaView("rt-media-video"),
+});
+
+/* Görsel ve YouTube gömmesi de aynı tutamağı kullanır. Görselde yükseklik yazılmaz;
+   oran `height:auto` ile korunur. */
+const ResizableImage = Image.extend({
+  addNodeView: () => resizableMediaView("rt-media-image"),
+  addAttributes() { return resizableAttributes(this.parent?.()); },
+});
+const ResizableYoutube = Youtube.extend({
+  addNodeView: () => resizableMediaView("rt-media-embed", 16 / 9),
+  addAttributes() { return resizableAttributes(this.parent?.()); },
+});
 
 type MediaAsset = { id: number; publicUrl: string; originalName: string; altText: string; mimeType: string };
 
@@ -74,8 +117,9 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Highlight.configure({ multicolor: true }),
       TableKit.configure({ table: { resizable: true } }),
-      Image.configure({ inline: false, allowBase64: false }),
-      Youtube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
+      ResizableImage.configure({ inline: false, allowBase64: false }),
+      ResizableYoutube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
+      LibraryVideo,
       CharacterCount,
       Placeholder.configure({ placeholder }),
     ],
@@ -214,7 +258,7 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
       </div>
 
       <EditorContent className="rt-surface" editor={editor} />
-      <div className="rt-status"><span>{words} KELİME</span></div>
+      <div className="rt-status"><span>{words} KELİME</span><span>Resim ve videoyu sağ alt köşesinden sürükleyerek boyutlandırın.</span></div>
 
       {(panel === "image" || panel === "video") && (
         <div className="rt-panel" aria-label={panel === "image" ? "Görsel kütüphanesi" : "Video kütüphanesi"}>
@@ -227,7 +271,7 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
             {visibleMedia.map((item) => (
               <button type="button" key={item.id} onClick={() => {
                 if (panel === "image") chain().setImage({ src: item.publicUrl, alt: item.altText || item.originalName }).run();
-                else chain().insertContent(`<video controls src="${item.publicUrl}"></video>`).run();
+                else chain().insertContent({ type: "video", attrs: { src: item.publicUrl } }).run();
                 setPanel(null);
               }}>
                 {panel === "image" ? <img src={item.publicUrl} alt={item.altText} /> : <span className="rt-video-thumb">▶</span>}

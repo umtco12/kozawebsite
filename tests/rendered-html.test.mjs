@@ -29,6 +29,9 @@ import { ensureAdvertisementSchema } from "../db/ad-schema.mjs";
 import { formSignature, istanbulInputTimestamp, istanbulInputValue, toggleConfirmation } from "../app/admin/ad-form-model.mjs";
 import { homepageLayoutSignature, moveHomepageLayoutCard } from "../app/admin/homepage-layout-model.mjs";
 import { extractGalleryImages, selectHomepagePhotoGalleries, selectPhotoGalleries } from "../db/photo-gallery-model.mjs";
+import { createBreakingRefresh, BREAKING_REFRESH_MS } from "../app/breaking-news-refresh.mjs";
+import { isBreakingItems, toBreakingItems } from "../db/breaking-feed-model.mjs";
+import { createYouTubeFeedLoader, KOZA_YOUTUBE_FEED_URL, parseYouTubeFeed, YOUTUBE_REFRESH_MS, YOUTUBE_STALE_MS } from "../db/youtube-feed.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -58,7 +61,7 @@ let testAgencyArticleSlug = "";
 before(async () => {
   productionServer = spawn(
     process.execPath,
-    [new URL("../dist/standalone/server.js", import.meta.url).pathname],
+    ["--import", new URL("./fixtures/youtube-fetch.mjs", import.meta.url).href, new URL("../dist/standalone/server.js", import.meta.url).pathname],
     {
       cwd: new URL("../dist/standalone/", import.meta.url),
       env: {
@@ -901,7 +904,7 @@ test("haber API taslak, inceleme ve yayın akışını SQLite üzerinde kalıcı
   assert.match(publicPage, /"@type":"NewsArticle"/);
   const selectedHome = await html("/");
   const selectedGallery = selectedHome.match(/<aside class="[^"]*home-photo-gallery[\s\S]*?<\/aside>/)?.[0] ?? "";
-  assert.match(selectedGallery, /Koza TV otomatik yayın akışı test haberi/, "İşaretlenen yayın ana sayfa Foto Galeri vitrinine girmeli");
+  assert.equal(selectedGallery, "", "Galeri seçimi korunsa da ana sayfada kaldırılan galeri vitrini dönmemeli");
   assert.match(await html(`/foto-galeri/${publishedBody.article.slug}`), /Koza TV otomatik yayın akışı test haberi/, "Haber bağımsız Foto Galeri ayrıntısında da açılabilmeli");
   assert.match(publicPage, /Test Editörü/);
 
@@ -2634,7 +2637,7 @@ test("ana sayfa gerçek arşiv içeriğiyle bütün bölümleri doldurur", async
   }
 });
 
-test("Son Haberler ilk kartı galeri varken başlığı görselde, yokken tam genişlikte gösterir", async (t) => {
+test("Son Haberler ilk kartı galeri seçiminden bağımsız son dakika kutusunun yanında başlığını korur", async (t) => {
   const fixtureDb = new Database(process.env.KOZA_DB_PATH);
   const flags = fixtureDb.prepare("SELECT id,is_homepage_gallery FROM articles").all();
   const lead = fixtureDb.prepare(`SELECT * FROM articles WHERE status='published' AND homepage_placement='latest' ORDER BY ${homepageLatestOrderSql} LIMIT 1`).get();
@@ -2648,20 +2651,19 @@ test("Son Haberler ilk kartı galeri varken başlığı görselde, yokken tam ge
   fixtureDb.prepare("UPDATE articles SET title=? WHERE id=?").run(title, lead.id);
   fixtureDb.prepare("UPDATE articles SET is_homepage_gallery=0").run();
   const withoutGallery = await html("/");
-  assert.match(withoutGallery, /class="latest-lead-layout no-gallery"/);
+  assert.match(withoutGallery, /class="latest-lead-layout latest-with-breaking"/);
   assert.doesNotMatch(withoutGallery, /<aside class="home-photo-gallery/);
   assert.ok(withoutGallery.includes(`<h3>${title}</h3>`));
   fixtureDb.prepare("UPDATE articles SET is_homepage_gallery=1 WHERE id IN (SELECT id FROM articles WHERE status='published' AND id<>? AND hero_image<>'' AND hero_image<>'/news/gorsel-yok.svg' LIMIT 3)").run(lead.id);
   const withGallery = await html("/");
-  assert.match(withGallery, /class="latest-lead-layout"/);
-  assert.match(withGallery, /<aside class="home-photo-gallery/);
-  assert.ok(withGallery.includes(`<h3>${title}</h3>`), "Uzun başlık galeri açılınca kaybolmamalı");
+  assert.match(withGallery, /class="latest-lead-layout latest-with-breaking"/);
+  assert.doesNotMatch(withGallery, /<aside class="home-photo-gallery/);
+  assert.match(withGallery, /<aside class="home-breaking-news/);
+  assert.ok(withGallery.includes(`<h3>${title}</h3>`), "Uzun başlık galeri seçimi değişince kaybolmamalı");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(styles, /\.latest-lead-layout\.no-gallery\{grid-template-columns:minmax\(0,1fr\)\}/, "Galeri yokken ilk haber bütün satıra yayılmalı; 820 px sınırında kalmamalı");
   assert.match(styles, /\.home \.latest-lead-layout \.news-card\.featured \.news-thumb\{[^}]*width:100%[^}]*aspect-ratio:auto/, "Görsel sabit yüksekliği nedeniyle metin alanına doğru genişleyememeli");
   assert.match(styles, /\.home \.latest-lead-layout \.news-card\.featured \.card-body\{[^}]*position:relative[^}]*z-index:1[^}]*min-width:0/, "Galeri varken metin görselin üstünde ve daralabilir bir alanda olmalı");
   assert.match(styles, /\.home \.latest-lead-layout \.news-card\.featured h3\{[^}]*overflow-wrap:anywhere/, "Uzun ve boşluksuz başlıklar karttan taşmamalı");
-  assert.match(styles, /\.home \.latest-lead-layout\.no-gallery \.news-card\.featured\{[^}]*grid-template-columns:minmax\(0,1\.2fr\) minmax\(0,1fr\)/, "Galeri yokken görsel ve haber yazısı yan yana yerleşmeli");
 });
 
 test("Son Haberler ana haberden sonra dörderli üç sırayı boş hücre bırakmadan doldurur", async () => {
@@ -2812,7 +2814,8 @@ test("resmî sosyal hesaplar, sade Son Haberler ve yönetilebilir haber şeridi 
   const latestItems = home.match(/class="latest-item"/g) ?? [];
   assert.equal(latestItems.length, 0, "Son Haberler yanında eski koyu canlı akış sütunu kalmamalı");
   assert.doesNotMatch(home, /aria-label="Son dakika haber akışı"/, "Kaldırılan koyu akış erişilebilirlik ağacında da kalmamalı");
-  assert.match(home, /class="home-photo-gallery"/, "Son Haberler ana kartının yanında Foto Galeri bulunmalı");
+  assert.doesNotMatch(home, /class="home-photo-gallery"/, "Foto Galeri ana sayfadan kaldırıldı");
+  assert.match(home, /class="home-breaking-news"/, "Yerinde son dakika akışı bulunmalı");
   assert.doesNotMatch(home, />\d+ FOTOĞRAF</, "Ana sayfa Foto Galeri kartlarında fotoğraf sayacı gösterilmemeli");
   assert.doesNotMatch(home, /class="home-flow-lower"/, "Günün Akışı ana sayfada render edilmemeli");
   assert.doesNotMatch(home, /class="writers-showcase"/, "Köşe Yazarları vitrini ana sayfada render edilmemeli");
@@ -2831,15 +2834,6 @@ test("resmî sosyal hesaplar, sade Son Haberler ve yönetilebilir haber şeridi 
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(client, /className="weather-chip"/);
   assert.match(client, /market-chip market-/, "Piyasa kartları yön durumunu sınıfında taşımalı");
-  assert.match(styles, /\.home-photo-gallery\{[^}]*border-top:3px solid var\(--red\)/, "Foto Galeri güçlü fakat kompakt bir vitrin olmalı");
-  assert.match(styles, /\.home-photo-gallery\{[^}]*position:relative[^}]*display:grid[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*align-self:center/, "Foto Galeri bir büyük ve iki küçük görselli mozaik olarak kendi sütununda ortalanmalı");
-  assert.match(styles, /@media\(min-width:1051px\)\{\.home-photo-gallery\{margin-block:clamp\(18px,2vw,30px\)\}\}/, "Masaüstü Foto Galeri vitrininin üst ve altında dengeli dış boşluk olmalı");
-  assert.match(styles, /\.home-photo-gallery>header\{[^}]*position:absolute[^}]*z-index:3[^}]*background:linear-gradient/, "Foto Galeri başlığı ayrı boşluk üretmeden görselin üzerinde durmalı");
-  assert.match(styles, /\.home-photo-gallery>header h2\{[^}]*font:700 20px/, "Foto Galeri başlığı görseli bastırmayacak kadar küçük olmalı");
-  assert.match(styles, /\.home-photo-gallery-lead\{[^}]*grid-column:1\/-1[^}]*grid-row:1[^}]*aspect-ratio:16\/9/, "Ana galeri görseli tam 16:9 çerçevede gösterilmeli");
-  assert.match(styles, /\.home-photo-gallery-lead>img\{[^}]*object-fit:contain/, "Ana galeri fotoğrafı kırpılmadan bütünüyle görünmeli");
-  assert.match(styles, /\.home-photo-gallery-list\{[^}]*grid-column:1\/-1[^}]*grid-row:2[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*margin-top:0/, "İki küçük galeri görseli ana karenin altında yan yana durmalı");
-  assert.match(styles, /\.home-photo-gallery-list>a\{[^}]*aspect-ratio:2\/1/, "Alt galeri görselleri okunaklı olacak kadar yüksek ve farklı boyutta olmalı");
   assert.match(styles, /@media\(max-width:500px\)[\s\S]*\.breaking-ribbon/, "Haber şeridinin mobil boyutu tanımlanmalı");
   assert.match(styles, /\.weather-chip>span\{display:block!important\}/, "Mobilde sıcaklık metni güneş simgesiyle birlikte görünmeli");
   assert.match(styles, /\.masthead \.live-button\{[^}]*font-size:8px/, "Mobil canlı yayın düğmesi anlaşılır metnini korumalı");
@@ -3155,4 +3149,287 @@ test("son dakika şeridinin ve manşet görselinin tamamı habere götürür", a
   assert.match(css, /\.home \.lead-copy\{pointer-events:none\}/, "Yazı bloğu görselin tıklamasını yutmamalı");
   assert.match(css, /\.home \.lead-copy h1 a\{pointer-events:auto\}/, "Başlık bağlantısı tıklanabilir kalmalı");
   assert.match(css, /\.breaking-inner\{cursor:pointer\}/, "Şerit tıklanabilir olduğunu imleçle göstermeli");
+});
+
+test("YouTube akışı yalnız Koza TV'nin en yeni dört benzersiz videosunu güvenli adreslerle seçer", async () => {
+  const xml = await readFile(new URL("./fixtures/youtube-feed.xml", import.meta.url), "utf8");
+  const videos = parseYouTubeFeed(xml);
+  assert.deepEqual(videos.map((v) => v.id), ["kaVj9bRu3-Y", "k3cUd8U8WtQ", "KMdA8u-Z8Jk", "l-fygDf30WQ"]);
+  assert.equal(videos[0].title, "Koza TV: Türkiye & dünya — en yeni video");
+  assert.match(videos[1].title, /<script>alert\(1\)<\/script> "özel" İ '/);
+  assert.equal(videos[2].title, "Üçüncü video: gündem & yorum");
+  for (const video of videos) {
+    assert.equal(video.href, `https://www.youtube.com/watch?v=${video.id}`);
+    assert.equal(video.image, `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`);
+  }
+  const empty = xml.replace(/<entry>[\s\S]*?<\/entry>/g, "");
+  assert.deepEqual(parseYouTubeFeed(empty), []);
+  assert.equal(parseYouTubeFeed(empty.replace("</feed>", `${xml.match(/<entry>[\s\S]*?<\/entry>/)[0]}</feed>`)).length, 1);
+  for (const bad of ["", "<html>hata</html>", xml.replace(/<\/feed>/, ""), xml.replace("4Ohyy56H4EZAy0Pagsv3iA", "foreign"), `<!DOCTYPE feed>${xml}`, `<!ENTITY file SYSTEM 'file:///etc/passwd'>${xml}`, xml + " ".repeat(256 * 1024)]) {
+    assert.throws(() => parseYouTubeFeed(bad));
+  }
+  assert.throws(() => parseYouTubeFeed(xml.replace(/<yt:videoId>[^<]+</g, "<yt:videoId>../bad<")));
+});
+
+test("YouTube yenilemesi tek istekle çalışır; süre sonunda yeniler, kesintide son listeyi korur ve eskimiş listeyi bırakır", async () => {
+  const xml = await readFile(new URL("./fixtures/youtube-feed.xml", import.meta.url), "utf8");
+  let time = 1000;
+  let calls = 0;
+  let mode = "ok";
+  const loader = createYouTubeFeedLoader({ now: () => time, fetcher: async (url, options) => {
+    calls++;
+    assert.equal(url, KOZA_YOUTUBE_FEED_URL);
+    assert.equal(options.redirect, "error");
+    assert.equal(options.cache, "no-store");
+    assert.ok(options.signal instanceof AbortSignal);
+    if (mode === "throw") throw new Error("YouTube erişilemiyor");
+    if (mode === "503") return new Response("Kesinti", { status: 503 });
+    if (mode === "invalid") return new Response("<html>hata</html>");
+    return new Response(mode === "updated" ? xml.replace("en yeni video", "yenilenmiş video") : xml);
+  }});
+  const result = await Promise.all([loader(), loader(), loader()]);
+  assert.equal(calls, 1);
+  assert.deepEqual(result[0], result[2]);
+  time += YOUTUBE_REFRESH_MS - 1;
+  await loader(); assert.equal(calls, 1);
+  time++; mode = "updated";
+  assert.match((await loader())[0].title, /yenilenmiş video/); assert.equal(calls, 2);
+  const refreshedAt = time;
+  for (const failure of ["throw", "503", "invalid"]) {
+    time += YOUTUBE_REFRESH_MS; mode = failure;
+    assert.match((await loader())[0].title, /yenilenmiş video/);
+    const count = calls;
+    await loader(); assert.equal(calls, count, "Kesintide her ziyaret yeni istek göndermemeli");
+  }
+  time = refreshedAt + YOUTUBE_STALE_MS;
+  assert.deepEqual(await loader(), [], "24 saati geçen kayıtlar kullanılmamalı");
+  time += 60_000; mode = "ok";
+  assert.equal((await loader()).length, 4, "Kaynak geri geldiğinde kendiliğinden düzelmeli");
+});
+
+test("YouTube başlangıç hatası, zaman aşımı ve büyük yanıt ana sayfayı düşürmez", async () => {
+  for (const fetcher of [async () => new Response("Yetkisiz", { status: 403 }), async () => new Response("x", { headers: { "content-length": String(300 * 1024) } }), async () => new Response("x".repeat(300 * 1024))]) {
+    assert.deepEqual(await createYouTubeFeedLoader({ fetcher })(), []);
+  }
+  let aborted = false;
+  const loader = createYouTubeFeedLoader({ timeoutMs: 20, fetcher: (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener("abort", () => { aborted = true; reject(signal.reason); }, { once: true });
+  }) });
+  assert.deepEqual(await loader(), []);
+  assert.equal(aborted, true);
+});
+
+test("ana sayfa YouTube vitrininde bir büyük ve üç küçük video gösterir, mevcut Video Merkezi korunur", async () => {
+  const body = await html("/");
+  const section = body.match(/<section[^>]*id="video"[^>]*>[\s\S]*?<\/section>/)?.[0] ?? "";
+  assert.match(section, /data-video-source="youtube"/);
+  assert.equal((section.match(/class="video-main"/g) ?? []).length, 1);
+  assert.equal((section.match(/https:\/\/www.youtube.com\/watch\?v=/g) ?? []).length, 4);
+  assert.match(section, /class="video-main" href="https:\/\/www.youtube.com\/watch\?v=kaVj9bRu3-Y"/);
+  assert.match(section, /href="https:\/\/www.youtube.com\/@KozaTv\/videos"/);
+  assert.equal((section.match(/target="_blank" rel="noopener noreferrer"/g) ?? []).length, 5);
+  assert.match(section, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(section, /<script>|javascript:|Eski beşinci video|Mükerrer|Başka kanal/);
+  assert.doesNotMatch(section, /YouTube’da izle/);
+  assert.match(body, /href="\/videolar"/, "Video Merkezi menüsü kaldırılmamalı");
+  assert.equal((await request("/videolar")).status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/settings`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ socialYoutube: "https://example.com" }) })).status, 401);
+  const db = new Database(process.env.KOZA_DB_PATH);
+  try { assert.equal(db.prepare("SELECT count(*) AS count FROM articles WHERE title LIKE '%en yeni video%'").get().count, 0, "YouTube videoları haber olarak kaydedilmemeli"); } finally { db.close(); }
+});
+
+test("YouTube kesintisinde gerçek videolu haberler kullanılır; boş listede sahte video kartı üretilmez", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "koza-youtube-fallback-"));
+  const dbPath = join(dir, "content.sqlite");
+  const fallbackPort = port + 1;
+  const server = spawn(process.execPath, ["--import", new URL("./fixtures/youtube-fetch.mjs", import.meta.url).href, new URL("../dist/standalone/server.js", import.meta.url).pathname], {
+    cwd: new URL("../dist/standalone/", import.meta.url), env: { ...process.env, KOZA_DB_PATH: dbPath, KOZA_TEST_YOUTUBE_FAILURE: "1", HOST: "127.0.0.1", PORT: String(fallbackPort) }, stdio: "ignore",
+  });
+  let db;
+  try {
+    let ready = false;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      try { if ((await fetch(`http://127.0.0.1:${fallbackPort}/`)).ok) { ready = true; break; } } catch { /* İzole sunucunun başlangıcını bekle. */ }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.ok(ready, "Kesintili YouTube ana sayfanın açılmasını engellememeli");
+    db = new Database(dbPath);
+    db.prepare("UPDATE articles SET video_url=''").run();
+    const article = db.prepare("SELECT id, slug FROM articles WHERE status='published' LIMIT 1").get();
+    db.prepare("UPDATE articles SET video_url='https://www.youtube.com/watch?v=kaVj9bRu3-Y' WHERE id=?").run(article.id);
+    const section = async () => (await (await fetch(`http://127.0.0.1:${fallbackPort}/`)).text()).match(/<section[^>]*id="video"[^>]*>[\s\S]*?<\/section>/)?.[0] ?? "";
+    const single = await section();
+    assert.match(single, /data-video-source="site"/);
+    assert.match(single, new RegExp(`class="video-main" href="/haber/${article.slug}"`));
+    assert.match(single, /video-grid-single/);
+    assert.doesNotMatch(single, /class="video-list"|YouTube’da izle/);
+    db.prepare("UPDATE articles SET video_url=''").run();
+    const empty = await section();
+    assert.match(empty, /class="video-main" href="\/canli"/);
+    assert.doesNotMatch(empty, /class="video-list"|href="\/haber\//);
+  } finally { db?.close(); server.kill("SIGTERM"); }
+});
+
+test("YouTube büyük kartı uzun yan listeye uzarken kendi sütun genişliğini aşmaz", async () => {
+  const css = await readFile(new URL("../app/home-videos.css", import.meta.url), "utf8");
+  const main = css.match(/\.home \.video-main\{([^}]+)\}/)?.[1] ?? "";
+  assert.match(main, /(?:^|;)width:100%[;}]/, "Aspect ratio ve stretch birlikteyken genişlik sütuna sabitlenmeli");
+  assert.match(main, /min-width:0/);
+  assert.match(css, /@media\(max-width:600px\)[\s\S]*\.home \.video-main>div\{position:relative/, "Mobil uzun başlık görselin altında doğal akışta kalmalı");
+  assert.match(css, /\.home \.video-main>div\{[^}]*right:25px/);
+  assert.match(css, /\.home \.video-section a:focus-visible\{[^}]*outline:3px solid #fff/);
+});
+
+test("ana sayfa son dakika kutusu yalnız yayındaki son beş işaretli haberi sıralar ve yeni haberde en eskiyi çıkarır", async (t) => {
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const old = db.prepare("SELECT id,is_breaking FROM articles").all();
+  const ids = [];
+  t.after(() => {
+    db.transaction(() => { for (const id of ids) db.prepare("DELETE FROM articles WHERE id=?").run(id); for (const row of old) db.prepare("UPDATE articles SET is_breaking=? WHERE id=?").run(row.is_breaking,row.id); })();
+    db.close();
+  });
+  db.prepare("UPDATE articles SET is_breaking=0").run();
+  const insert = (index, status = "published", flag = 1, publishedAt = Date.now() - (10 - index) * 60000) => {
+    const result = db.prepare("INSERT INTO articles(slug,title,spot,body,category,status,is_breaking,published_at,created_at,updated_at) VALUES (?,?, 'Test spotu','Test gövdesi','Gündem',?,?,?,?,?)").run(`son-dakika-kutusu-${index}`, `Son dakika ${index}: İstanbul’dan güncel gelişmeler`, status, flag, publishedAt, Date.now(), Date.now());
+    ids.push(Number(result.lastInsertRowid));
+    return Number(result.lastInsertRowid);
+  };
+  const read = async () => {
+    const response = await fetch(`${baseUrl}/api/breaking-news`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const { items } = await response.json();
+    assert.ok(isBreakingItems(items));
+    for (const item of items) assert.deepEqual(Object.keys(item).sort(), ["id", "publishedAt", "slug", "title"]);
+    return items;
+  };
+  assert.deepEqual(await read(), []);
+  assert.match(await html("/"), /Yeni son dakika haberleri burada yer alacak/);
+  insert(1); assert.equal((await read()).length, 1);
+  for (let n = 2; n <= 6; n++) insert(n);
+  insert(7, "draft"); insert(8, "review"); insert(9, "scheduled"); insert(10, "published", 0);
+  assert.deepEqual((await read()).map(item => item.slug), [6,5,4,3,2].map(n => `son-dakika-kutusu-${n}`));
+  const home = await html("/");
+  const aside = home.match(/<aside class="home-breaking-news"[\s\S]*?<\/aside>/)?.[0] || "";
+  assert.equal((aside.match(/<li>/g) || []).length, 5);
+  assert.doesNotMatch(home, /<aside class="home-photo-gallery/);
+  assert.match(aside, /<h2 id="home-breaking-heading">Son Dakika<\/h2>/);
+  assert.match(aside, /<time dateTime=|<time datetime=/);
+  assert.match(aside, /href="\/son-dakika"/);
+  for (const item of await read()) assert.match(aside, new RegExp(`/haber/${item.slug}`));
+  // Aynı tarihte id kararlı sıralama sağlar; gelecekteki taslaklar ve normal haberler asla doldurmaz.
+  const stamp = Date.now();
+  insert(11, "published", 1, stamp); const newest = insert(12, "published", 1, stamp);
+  assert.deepEqual((await read()).map(item => item.slug), [12,11,6,5,4].map(n => `son-dakika-kutusu-${n}`));
+  db.prepare("UPDATE articles SET is_breaking=0 WHERE id=?").run(newest);
+  assert.equal((await read())[0].slug, "son-dakika-kutusu-11");
+  db.prepare("UPDATE articles SET status='draft' WHERE slug='son-dakika-kutusu-11'").run();
+  assert.equal((await read())[0].slug, "son-dakika-kutusu-6");
+  const beforeCount = db.prepare("SELECT count(*) AS n FROM articles").get().n;
+  assert.equal((await fetch(`${baseUrl}/api/breaking-news`, { method: "POST", body: "{}" })).status, 405);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM articles").get().n, beforeCount);
+});
+
+test("son dakika canlı yenilemesi geçerli listeyi alır; hata ve bozuk yanıtta korur, durdurulunca güncellemez", async () => {
+  assert.equal(BREAKING_REFRESH_MS, 60000);
+  const item = {id:1,slug:"test-haber",title:"İstanbul’da son dakika",publishedAt:Date.now()};
+  assert.deepEqual(toBreakingItems([{...item,body:"gizli",assignedTo:2}]),[item]);
+  for (const invalid of [null,{},[null],[{...item,slug:"//evil.test"}],[{...item,publishedAt:Infinity}],[item,item],Array(6).fill(item)]) assert.equal(isBreakingItems(invalid),false);
+  let mode = "ok"; let calls = 0; const applied = [];
+  const refresher = createBreakingRefresh({onItems: items => applied.push(items), fetcher: async (url, options) => {
+    calls++; assert.equal(url,"/api/breaking-news"); assert.equal(options.cache,"no-store"); assert.ok(options.signal);
+    if (mode === "network") throw new Error("offline");
+    if (mode === "http") return new Response("unavailable", {status:503});
+    return Response.json({items:mode === "invalid" ? [{...item,slug:"javascript:alert(1)"}] : mode === "empty" ? [] : [item]});
+  }});
+  await Promise.all([refresher.refresh(),refresher.refresh()]); assert.equal(calls,1); assert.deepEqual(applied,[[item]]);
+  for (mode of ["network","http","invalid"]) await refresher.refresh();
+  assert.equal(applied.length,1);
+  mode="empty"; await refresher.refresh(); assert.deepEqual(applied.at(-1),[]);
+  mode="ok"; await refresher.refresh(); assert.deepEqual(applied.at(-1),[item]);
+  refresher.stop(); const stoppedCalls=calls; await refresher.refresh(); assert.equal(calls,stoppedCalls);
+  let finish; const late = createBreakingRefresh({onItems: () => assert.fail("Durdurulmuş bileşen güncellenmemeli"),fetcher: () => new Promise(resolve => { finish=resolve; })});
+  const pending=late.refresh(); late.stop(); finish(Response.json({items:[item]})); await pending;
+});
+
+test("medya boyutu sınırları ve kaydedilen duyarlı genişlik", async () => {
+  const { clampMediaWidth, mediaWidthAttributes } = await import("../app/admin/media-size-model.mjs");
+  assert.equal(clampMediaWidth(20, 600), 120);
+  assert.equal(clampMediaWidth(900, 600), 600);
+  assert.equal(clampMediaWidth(320.4, 600), 320);
+  assert.equal(clampMediaWidth(200, 90), 90);
+  for (const invalid of [null, "", -20, Infinity, "bozuk", 4097]) assert.deepEqual(mediaWidthAttributes(invalid), {});
+  assert.deepEqual(mediaWidthAttributes(320), { width: "320", style: "width:320px;max-width:100%;height:auto" });
+});
+
+test("haber sorumlusu geçişi yalnız kanıtlı ilk kayıt ve en son işlemi kullanır", async () => {
+  const { backfillArticleActors } = await import("../db/article-archive-model.mjs");
+  const db = new Database(":memory:");
+  try {
+    db.exec(`CREATE TABLE articles(id INTEGER,created_by TEXT,updated_by TEXT);
+      CREATE TABLE article_revisions(id INTEGER,article_id INTEGER,version INTEGER,reason TEXT,actor_name TEXT,created_at INTEGER);
+      CREATE TABLE workflow_events(id INTEGER,article_id INTEGER,action TEXT,actor_name TEXT,created_at INTEGER);
+      CREATE TABLE audit_logs(id INTEGER,entity_id INTEGER,entity_type TEXT,action TEXT,actor TEXT,created_at INTEGER);
+      INSERT INTO articles VALUES(1,'',''),(2,'',''),(3,'Mevcut kişi','Mevcut kişi');
+      INSERT INTO article_revisions VALUES(1,1,1,'save','İlk Editör',100),(2,1,2,'save','İkinci Editör',200),(3,2,5,'save','Arşivi Düzenleyen',200);
+      INSERT INTO workflow_events VALUES(1,1,'publish','Yayınlayan',300),(2,1,'comment','Yorum Yazan',400);`);
+    backfillArticleActors(db);
+    const rows = db.prepare("SELECT * FROM articles ORDER BY id").all();
+    assert.deepEqual(rows, [{id:1,created_by:"İlk Editör",updated_by:"Yayınlayan"},{id:2,created_by:"",updated_by:"Arşivi Düzenleyen"},{id:3,created_by:"Mevcut kişi",updated_by:"Mevcut kişi"}]);
+    backfillArticleActors(db);
+    assert.deepEqual(db.prepare("SELECT * FROM articles ORDER BY id").all(), rows);
+  } finally { db.close(); }
+});
+
+test("arşiv araması yüz kayıttan fazlasını sayfalar, Türkçe ve rol filtrelerini korur", async (t) => {
+  const reporter = await createRoleSession("reporter", "ArsivMuhabiri");
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const sample = db.prepare("SELECT * FROM articles LIMIT 1").get();
+  const columns = Object.keys(sample).filter(key => key !== "id");
+  const insert = db.prepare(`INSERT INTO articles (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})`);
+  const ids = [];
+  db.transaction(() => {
+    for (let index = 0; index < 123; index++) {
+      const row = { ...sample, slug: `archive-regression-${index}`, title: `ArşivDenetim İZMİR ${index}`, spot: "Yüzde %_ ifadesi", source_name: "KaynakDenetim", created_by: "İlkDenetim", updated_by: "SonDenetim", status: index === 122 ? "draft" : "published", assigned_to: index === 122 ? reporter.user.id : null, updated_at: Date.now() - index, published_at: Date.now() - index };
+      ids.push(Number(insert.run(...columns.map(key => row[key])).lastInsertRowid));
+    }
+  })();
+  t.after(() => { db.prepare(`DELETE FROM articles WHERE id IN (${ids.map(() => "?").join(",")})`).run(...ids); db.close(); });
+  const first = await (await request("/api/articles?q=arsivdenetim%20izmir&limit=50")).json();
+  assert.equal(first.pagination.total, 123); assert.equal(first.pagination.totalPages, 3); assert.equal(first.articles.length, 50);
+  const second = await (await request("/api/articles?q=arsivdenetim&limit=50&page=2")).json();
+  const third = await (await request("/api/articles?q=arsivdenetim&limit=50&page=3")).json();
+  assert.equal(new Set([...first.articles, ...second.articles, ...third.articles].map(a => a.id)).size, 123);
+  const draft = await (await request("/api/articles?q=arsivdenetim&status=draft")).json();
+  assert.equal(draft.articles.length, 1); assert.equal(draft.articles[0].id, ids[122]);
+  for (const term of ["ilkdenetim", "sondenetim", "kaynakdenetim", "%_"]) {
+    const found = await (await request(`/api/articles?q=${encodeURIComponent(term)}`)).json(); assert.equal(found.pagination.total, 123);
+  }
+  const empty = await (await request("/api/articles?q=olmayanArsivKaydi987")).json(); assert.equal(empty.pagination.total, 0);
+  assert.equal((await request("/api/articles?page=NaN")).status, 400);
+  assert.equal((await request("/api/articles?limit=101")).status, 400);
+  assert.equal((await anonymousRequest("/api/articles?q=arsivdenetim")).status, 401);
+  const own = await (await request("/api/articles?q=arsivdenetim", {headers:{cookie:reporter.cookie}})).json();
+  assert.equal(own.pagination.total, 1); assert.equal(own.articles[0].id, ids[122]);
+});
+
+test("medya ölçüleri kayıt ve yayında korunur; ilk ekleyen değişmez, güncelleyen oturumdan alınır", async (t) => {
+  const { mediaWidthAttributes } = await import("../app/admin/media-size-model.mjs");
+  const sized = width => Object.entries(mediaWidthAttributes(width)).map(([key,value]) => `${key}="${value}"`).join(" ");
+  const bodyHtml = '<p>Haber metni içindeki fotoğraf ve videoların kaydedilen ölçülerinin korunduğunu doğrulayan kapsamlı deneme metni.</p>' + `<img src="/news/studio.jpg" alt="Deneme" ${sized(320)}><video controls src="/media/deneme.mp4" ${sized(240)}></video><div data-youtube-video=""><iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" ${sized(400)}></iframe></div>`;
+  const input = {title:"Medya ölçüsü kayıt ve sorumlu testi",spot:"Medya boyutlarının ve kaydı yapan kişilerin korunmasını doğrulayan test haberi.",body:"Haber metni içindeki fotoğraf ve videoların kaydedilen ölçülerinin korunduğunu doğrulayan kapsamlı deneme metni.",bodyHtml,category:"Gündem",status:"published",heroImage:"/news/studio.jpg",imageAlt:"Test",author:"Haber İmzası",sourceName:"Koza TV",createdBy:"Sahte İlk Kişi",updatedBy:"Sahte Son Kişi"};
+  const createdResponse = await request("/api/articles",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});
+  assert.equal(createdResponse.status,201);
+  const created = (await createdResponse.json()).article;
+  t.after(() => { const db = new Database(process.env.KOZA_DB_PATH); db.prepare("DELETE FROM articles WHERE id=?").run(created.id); db.close(); });
+  assert.equal(created.createdBy,"Koza Test Yöneticisi"); assert.equal(created.updatedBy,created.createdBy);
+  const other = await createRoleSession("admin","MedyaYoneticisi");
+  const updatedResponse = await request("/api/articles",{method:"PATCH",headers:{"content-type":"application/json",cookie:other.cookie},body:JSON.stringify({...created,createdBy:"Sahte",updatedBy:"Sahte",spot:"Güncellenen medya ölçüleri ve işlem sahiplerini doğrulayan yeni haber spotu."})});
+  assert.equal(updatedResponse.status,200);
+  const updated = (await updatedResponse.json()).article;
+  assert.equal(updated.createdBy,created.createdBy); assert.equal(updated.updatedBy,other.user.fullName); assert.equal(updated.bodyHtml,bodyHtml);
+  const publicHtml = await html(`/haber/${created.slug}`);
+  for (const width of [320,240,400]) assert.ok(publicHtml.includes(`width:${width}px;max-width:100%;height:auto`));
+  const viewer = await createRoleSession("viewer","MedyaIzleyicisi");
+  assert.equal((await request("/api/articles",{method:"PATCH",headers:{"content-type":"application/json",cookie:viewer.cookie},body:JSON.stringify(updated)})).status,403);
 });

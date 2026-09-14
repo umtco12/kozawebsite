@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015">
+  <yt:channelId>4Ohyy56H4EZAy0Pagsv3iA</yt:channelId><title>Koza Tv</title>
+  <entry><yt:videoId>l-fygDf30WQ</yt:videoId><yt:channelId>UC4Ohyy56H4EZAy0Pagsv3iA</yt:channelId><title>Koza TV programı — dördüncü video</title><published>2026-09-14T08:00:00Z</published></entry>
+  <entry><yt:videoId>kaVj9bRu3-Y</yt:videoId><yt:channelId>UC4Ohyy56H4EZAy0Pagsv3iA</yt:channelId><title>Koza TV: Türkiye &amp; dünya — en yeni video</title><published>2026-09-14T11:00:00Z</published><link href="javascript:alert(1)"/></entry>
+  <entry><yt:videoId>k3cUd8U8WtQ</yt:videoId><yt:channelId>UC4Ohyy56H4EZAy0Pagsv3iA</yt:channelId><title>İkinci video: &lt;script&gt;alert(1)&lt;/script&gt; &quot;özel&quot; &#x130; &#39; &#99999999;</title><published>2026-09-14T10:00:00Z</published></entry>
+  <entry><yt:videoId>KMdA8u-Z8Jk</yt:videoId><yt:channelId>UC4Ohyy56H4EZAy0Pagsv3iA</yt:channelId><title><![CDATA[Üçüncü video: gündem & yorum]]></title><published>2026-09-14T09:00:00Z</published></entry>
+  <entry><yt:videoId>nUO2WMTopkQ</yt:videoId><yt:channelId>UC4Ohyy56H4EZAy0Pagsv3iA</yt:channelId><title>Eski beşinci video</title><published>2026-09-13T09:00:00Z</published></entry>
+  <entry><yt:videoId>kaVj9bRu3-Y</yt:videoId><yt:channelId>UC4Ohyy56H4EZAy0Pagsv3iA</yt:channelId><title>Mükerrer eski kayıt</title><published>2026-09-12T09:00:00Z</published></entry>
+  <entry><yt:videoId>invalid_url</yt:videoId><yt:channelId>UC4Ohyy56H4EZAy0Pagsv3iA</yt:channelId><title>Geçersiz tarih</title><published>bozuk</published></entry>
+  <entry><yt:videoId>otherVideo1</yt:videoId><yt:channelId>UCdifferentChannel</yt:channelId><title>Başka kanal</title><published>2026-09-15T09:00:00Z</published></entry>
+</feed>

@@ -1,4 +1,4 @@
-import { getAdminArticle, getArticleStats, listArticles, saveArticle, type ArticleInput, type ArticleStatus } from "../../../db";
+import { getAdminArticle, getArticleStats, listArticles, countArchiveArticles, saveArticle, type ArticleInput, type ArticleStatus } from "../../../db";
 import { validateArticleInput } from "../../../db/article-model.mjs";
 import { canAccessArticle, canEditArticle, canManageAgencyMetadata, canWriteStatus } from "../../../db/editorial-permissions.mjs";
 import { authorizeAdmin } from "../write-access";
@@ -11,14 +11,19 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const status = url.searchParams.get("status") as ArticleStatus | null;
   const category = url.searchParams.get("category") || undefined;
+  const search = url.searchParams.get("q") || undefined;
   const limit = Number(url.searchParams.get("limit") || 50);
+  const page = Number(url.searchParams.get("page") || 1);
+  if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 || page > 1000000) return Response.json({ error: "Geçersiz sayfa veya kayıt sınırı." }, { status: 400 });
   const allowed = ["draft", "review", "scheduled", "published"];
 
   if (status && !allowed.includes(status)) {
     return Response.json({ error: "Geçersiz yayın durumu" }, { status: 400 });
   }
 
-  return Response.json({ articles: listArticles({ status: status || undefined, category, assignedTo: auth.user!.role === "reporter" ? auth.user!.id : undefined, limit }), stats: getArticleStats() });
+  const options = { status: status || undefined, category, search, assignedTo: auth.user!.role === "reporter" ? auth.user!.id : undefined, limit, offset: (page - 1) * limit };
+  const total = countArchiveArticles(options);
+  return Response.json({ articles: listArticles(options), stats: getArticleStats(), pagination: { page, pageSize: limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) } });
 }
 
 async function persist(request: Request) {

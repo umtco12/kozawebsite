@@ -1,8 +1,12 @@
-import { listHomepageArticles, listHomepagePhotoGalleries, listLatestArticles, listVideoArticles } from "../db";
+import { listHomepageArticles, listBreakingArticles } from "../db";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
 import { AdSlot } from "./ad-slot";
+import { HomeVideos } from "./home-videos";
+import { HomeBreakingNews } from "./home-breaking-news";
+import { toBreakingItems } from "../db/breaking-feed-model.mjs";
+import "./home-breaking-news.css";
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +17,14 @@ function clock(value: number | null) {
 
 export default async function Home() {
   const categories = navCategories();
-  const latest = listLatestArticles(100);
-  const videos = listVideoArticles(6);
 
   /* Haber yalnız editörün yayın sırasında seçtiği ana sayfa bölgesine gider.
      Konum seçilmeyen kayıtlar slidera taşınmaz; Son Haberler havuzunda kalır. */
   const leadPool = listHomepageArticles("slider", 5);
   const sideNews = listHomepageArticles("side", 2);
   const belowNews = listHomepageArticles("below", 4);
-  /* İlk kart foto galeri vitriniyle yan yana durur; ardından 12 kart dörderli üç sıra oluşturur. */
+  /* İlk kart son dakika akışıyla yan yana durur; ardından 12 kart dörderli üç sıra oluşturur. */
   const grid = listHomepageArticles("latest", 13);
-  const photoGalleries = listHomepagePhotoGalleries(8).filter((gallery) => gallery.id !== grid[0]?.id).slice(0, 3);
   const leads = leadPool.map((article) => ({
     category: article.category,
     title: displayTitle(article.title),
@@ -34,10 +35,9 @@ export default async function Home() {
     headlinePosition: article.headlinePosition,
   }));
 
-  const breakingPool = latest.filter((article) => article.isBreaking);
+  const breakingPool = listBreakingArticles(5, true);
   const breaking = breakingPool[0];
   const gundemHref = categories.find((category) => category.slug === "gundem") ? "/kategori/gundem" : "/son-dakika";
-  const videoLead = videos[0];
 
   return (
     <main className="home">
@@ -101,7 +101,7 @@ export default async function Home() {
         <section className="main-columns latest-news-section" id="gundem">
           <div>
             <div className="section-head"><div><span>GÜNCEL</span><h2>Son Haberler</h2></div><a href={gundemHref}>Tümünü Gör →</a></div>
-            <div className={`latest-lead-layout${photoGalleries.length ? "" : " no-gallery"}`}>
+            <div className={`latest-lead-layout latest-with-breaking${grid[0] ? "" : " latest-no-lead"}`}>
               {grid[0] ? (
                 <a href={`/haber/${grid[0].slug}`} className="news-card featured" key={grid[0].id}>
                   <div className="news-thumb"><img src={grid[0].heroImage} alt={grid[0].imageAlt} loading="lazy" />{grid[0].isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
@@ -112,21 +112,7 @@ export default async function Home() {
                   </div>
                 </a>
               ) : null}
-              {photoGalleries.length ? (
-                <aside className={`home-photo-gallery${photoGalleries.length === 1 ? " home-photo-gallery-single" : photoGalleries.length === 2 ? " home-photo-gallery-duo" : ""}`} aria-label="Foto Galeri">
-                  <header><div><span>GÖRSEL HABER</span><h2>Foto Galeri</h2></div><a href="/foto-galeri">Tümünü gör <i aria-hidden="true">→</i></a></header>
-                  <a className="home-photo-gallery-lead" href={`/foto-galeri/${photoGalleries[0].slug}`}>
-                    <img src={photoGalleries[0].galleryImages[0].src} alt={photoGalleries[0].galleryImages[0].caption || photoGalleries[0].imageAlt} loading="lazy" />
-                    <div><small>{photoGalleries[0].category}</small><h3>{displayTitle(photoGalleries[0].title)}</h3><b>Galeriyi aç <i aria-hidden="true">↗</i></b></div>
-                  </a>
-                  {photoGalleries.length > 1 ? <div className="home-photo-gallery-list">{photoGalleries.slice(1).map((gallery) => (
-                    <a href={`/foto-galeri/${gallery.slug}`} key={gallery.id}>
-                      <img src={gallery.galleryImages[0].src} alt={gallery.galleryImages[0].caption || gallery.imageAlt} loading="lazy" />
-                      <div><small>{gallery.category}</small><h3>{displayTitle(gallery.title)}</h3></div>
-                    </a>
-                  ))}</div> : null}
-                </aside>
-              ) : null}
+              <HomeBreakingNews initialItems={toBreakingItems(breakingPool)} />
             </div>
             <div className="news-grid latest-news-grid">
               {grid.slice(1).map((article) => (
@@ -145,34 +131,7 @@ export default async function Home() {
 
       </div>
 
-      <section className="video-section" id="video">
-        <div className="wrap">
-          <div className="section-head light"><div><span>KOZA TV</span><h2>İzle</h2></div><a href="/videolar">Tüm Videolar →</a></div>
-          <div className="video-grid">
-            {videoLead ? (
-              <a className="video-main" href={`/haber/${videoLead.slug}`}>
-                <img src={videoLead.heroImage} alt={videoLead.imageAlt} loading="lazy" />
-                <i aria-hidden="true">▶</i>
-                <div><span>{videoLead.category.toLocaleUpperCase("tr-TR")}</span><h3>{displayTitle(videoLead.title)}</h3></div>
-              </a>
-            ) : (
-              <a className="video-main" href="/canli">
-                <img src="/news/studio.jpg" alt="Koza TV stüdyosu" loading="lazy" />
-                <i aria-hidden="true">▶</i>
-                <div><span>CANLI</span><h3>Koza TV canlı yayınını izleyin</h3></div>
-              </a>
-            )}
-            <div className="video-list">
-              {(videos.length > 1 ? videos.slice(1, 4) : latest.slice(0, 3)).map((article) => (
-                <a href={`/haber/${article.slug}`} key={article.id}>
-                  <div><img src={article.heroImage} alt={article.imageAlt} loading="lazy" /><i>▶</i></div>
-                  <p><span>{article.category}</span>{displayTitle(article.title)}</p>
-                </a>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      <HomeVideos />
 
       <SiteFooter categories={categories} />
     </main>
