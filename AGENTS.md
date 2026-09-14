@@ -1062,3 +1062,19 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/site-chrome.tsx`, `app/site-client.tsx`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: `npm test` üretim derlemesiyle **109 geçti, 0 başarısız, 0 atlandı**; bağımsız `npm run build` başarılı. `npm run lint` 0 hata ve mevcut 44 uyarıyla tamamlandı. Gerçek tarayıcıda 1440, 900 ve 390 px görünümler incelendi; mobil menü açıldı, iki bağlantının bulunmadığı ve yatay taşma olmadığı doğrulandı. Galeri/video rota testleri geçmeye devam ediyor.
 - Kalan karar veya risk: Yayın sonucu aşağıda kaydedilecektir.
+
+### 2026-09-14 — Menü sadeleştirmesinin staging dağıtımı
+
+- İstek: Foto Galeri ve Video Merkezi menü bağlantılarının kaldırılması.
+- Yapılanlar: `ae23682` commit'i `main` branch'ine gönderildi; GitHub Actions `34845157366` başarıyla tamamlandı.
+- Değişen ana dosyalar: Dağıtılan sürüm `ae23682`; yayın kaydı için `AGENTS.md`.
+- Doğrulama: Aktif sunucu sürümü commit ile eşleşti; kozatv ve Caddy servisleri aktif. Ana sayfa, `/videolar` ve `/foto-galeri` HTTP 200; yayındaki ana menüde iki bağlantı bulunmuyor. Yerel 109 test ve CI/sunucu test kapıları başarılı.
+- Kalan karar veya risk: Yayın Hetzner staging ortamındadır; DNS değişikliği yapılmadı.
+
+### 2026-09-14 — Ana menünün ortalanması
+
+- İstek: Menü bağlantıları kaldırıldıktan sonra solda kalan kategori grubunun ortalanması.
+- Yapılanlar: Bağlantılar ayrı kaydırılabilir gruba alındı; eşit 42 px yan sütunlarla ortalandı. Arama sağda kaldı, açılan alan menüyü kaydırmadan altında görünür. Etkileşim stilleri yeni gruba taşındı.
+- Değişen ana dosyalar: `app/site-chrome.tsx`, `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: `npm test` üretim derlemesiyle **110 geçti, 0 başarısız, 0 atlandı**. Gerçek tarayıcıda 1440 px merkez farkı -0,0039 px ölçüldü; 1024 ve 390 px görsel kontrolde taşma yok. Arama açılıp odak ve 240 px alan doğrulandı. Bağımsız `npm run build` başarılı; `npm run lint` 0 hata ve mevcut 44 uyarıyla tamamlandı.
+- Kalan karar veya risk: Yayın doğrulaması aşağıda kaydedilecektir.

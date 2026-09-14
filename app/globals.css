@@ -648,11 +648,11 @@ footer .social a:hover{color:var(--red)}
 .top-links>a{position:relative;padding:6px 0;color:#505966;transition:color .18s ease,transform .18s ease}
 .top-links>a:active{transform:translateY(1px)}
 
-.nav-inner>a{position:relative;align-self:stretch;display:flex;align-items:center;padding:0 3px;color:#20262d;transition:color .18s ease,transform .18s ease}
-.nav-inner>a:after{content:"";position:absolute;left:50%;right:50%;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--red);transition:left .2s ease,right .2s ease}
-.nav-inner>a[aria-current="page"]{color:var(--red);text-decoration:none}
-.nav-inner>a[aria-current="page"]:after{left:0;right:0}
-.nav-inner>a:active{transform:translateY(1px) scale(.97)}
+.nav-links>a{position:relative;align-self:stretch;display:flex;align-items:center;padding:0 3px;color:#20262d;transition:color .18s ease,transform .18s ease}
+.nav-links>a:after{content:"";position:absolute;left:50%;right:50%;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--red);transition:left .2s ease,right .2s ease}
+.nav-links>a[aria-current="page"]{color:var(--red);text-decoration:none}
+.nav-links>a[aria-current="page"]:after{left:0;right:0}
+.nav-links>a:active{transform:translateY(1px) scale(.97)}
 .nav-search button{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;transition:background-color .18s ease,color .18s ease,transform .18s ease}
 .nav-search button:active{transform:scale(.9)}
 
@@ -675,8 +675,8 @@ footer .social a:hover{color:var(--red)}
 @media(hover:hover){
   .social-link:hover{color:#fff;background:var(--red);border-color:var(--red);transform:translateY(-2px);box-shadow:0 7px 16px rgba(220,21,29,.22)}
   .top-links>a:hover{color:var(--red)}
-  .nav-inner>a:hover{color:var(--red);transform:translateY(-1px)}
-  .nav-inner>a:hover:after{left:0;right:0}
+  .nav-links>a:hover{color:var(--red);transform:translateY(-1px)}
+  .nav-links>a:hover:after{left:0;right:0}
   .nav-search button:hover{background:#f4f1ed;color:var(--red)}
   .mobile-panel a:hover{color:var(--red);background:#fff7f7;border-color:#f1c8ca}
   .aside-chips a:hover,.search-suggestions a:hover,.error-links a:hover,.pager a:hover{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 6px 14px rgba(220,21,29,.16)}
@@ -701,7 +701,7 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 }
 
 @media(prefers-reduced-motion:reduce){
-  .social-link,.top-links>a,.nav-inner>a,.nav-inner>a:after,.nav-search button,.mobile-panel a,.aside-chips a,.search-suggestions a,.article-tags a,.error-links a,.pager a,.section-card,.section-lead,.aside-row,.feed-row,.timeline-row,.spotlight-card,.news-card,.writer,.video-card,.live-news-list a,.related a{transition:none!important}
+  .social-link,.top-links>a,.nav-links>a,.nav-links>a:after,.nav-search button,.mobile-panel a,.aside-chips a,.search-suggestions a,.article-tags a,.error-links a,.pager a,.section-card,.section-lead,.aside-row,.feed-row,.timeline-row,.spotlight-card,.news-card,.writer,.video-card,.live-news-list a,.related a{transition:none!important}
 }
 
 
@@ -1789,3 +1789,11 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .editor-form{min-width:0;grid-template-columns:minmax(0,1fr)}
 .editor-section,.body-editor-field,.rt-surface{min-width:0}
 @media(max-width:1050px){.editor-layout{grid-template-columns:minmax(0,1fr)}}
+
+/* Equal side columns center navigation independently of the search button. */
+.nav-inner{display:grid;grid-template-columns:42px minmax(0,1fr) 42px;gap:16px;overflow:visible}
+.nav-links{grid-column:2;display:flex;align-self:stretch;align-items:center;justify-content:safe center;gap:25px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links>a{flex-shrink:0}
+.nav-inner>.nav-search{grid-column:3;position:relative;width:42px;margin-left:0;justify-content:flex-end}
+.nav-inner>.nav-search.open input{position:absolute;right:0;top:calc(100% + 10px);z-index:10;width:240px;padding:12px;background:#fff;border:1px solid var(--line);box-shadow:0 6px 18px #0002}

@@ -1547,7 +1547,7 @@ test("ana sayfa tarih, mobil ve hareket azaltma kurallarını kaynakta korur", a
   assert.match(css, /@media\(max-width:600px\)/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion:reduce/);
-  assert.match(css, /\.nav-inner>a:active/, "Ana menü tıklama anında görsel geri bildirim vermeli");
+  assert.match(css, /\.nav-links>a:active/, "Ana menü tıklama anında görsel geri bildirim vermeli");
   assert.match(css, /\.section-card:active/, "Haber kartları tıklama anında görsel geri bildirim vermeli");
   assert.match(css, /@media\(hover:hover\)/, "Hover efektleri yalnız destekleyen cihazlarda uygulanmalı");
   assert.match(chrome, /socialLinks\(settings\)\.filter\(\(item\) => item\.href\)/, "Tanımsız sosyal hesap simgeleri basılmamalı");
@@ -3431,4 +3431,12 @@ test("medya ölçüleri kayıt ve yayında korunur; ilk ekleyen değişmez, gün
   for (const width of [320,240,400]) assert.ok(publicHtml.includes(`width:${width}px;max-width:100%;height:auto`));
   const viewer = await createRoleSession("viewer","MedyaIzleyicisi");
   assert.equal((await request("/api/articles",{method:"PATCH",headers:{"content-type":"application/json",cookie:viewer.cookie},body:JSON.stringify(updated)})).status,403);
+});
+
+test("ana menü bağlantıları eşit yan sütunlarla ortalanır ve dar alanda kaydırılır", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /grid-template-columns:42px minmax\(0,1fr\) 42px/);
+  assert.match(css, /\.nav-links\{[^}]*justify-content:safe center[^}]*overflow-x:auto/);
+  assert.match(css, /\.nav-inner>\.nav-search.open input\{position:absolute/);
+  assert.match(await html("/"), /class="nav-links"/);
 });

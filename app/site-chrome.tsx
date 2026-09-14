@@ -87,11 +87,13 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
         </div>
         <nav className="nav" aria-label="Ana menü">
           <div className="wrap nav-inner">
+            <div className="nav-links">
             <a href="/" aria-current={active === "home" ? "page" : undefined}>Ana Sayfa</a>
             <a href="/son-dakika" aria-current={active === "son-dakika" ? "page" : undefined}>Son Dakika</a>
             {categories.map((category) => (
               <a href={`/kategori/${category.slug}`} key={category.id} aria-current={active === `kategori/${category.slug}` ? "page" : undefined}>{category.name}</a>
             ))}
+            </div>
             <SearchBox />
           </div>
         </nav>
