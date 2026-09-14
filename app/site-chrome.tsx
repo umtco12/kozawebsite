@@ -92,8 +92,6 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
             {categories.map((category) => (
               <a href={`/kategori/${category.slug}`} key={category.id} aria-current={active === `kategori/${category.slug}` ? "page" : undefined}>{category.name}</a>
             ))}
-            <a href="/foto-galeri" aria-current={active === "foto-galeri" ? "page" : undefined}>Foto Galeri</a>
-            <a href="/videolar" aria-current={active === "videolar" ? "page" : undefined}>Video Merkezi</a>
             <SearchBox />
           </div>
         </nav>

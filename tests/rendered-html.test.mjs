@@ -158,12 +158,11 @@ test("ana sayfa Koza TV haber deneyimini sunar", async () => {
   assert.match(body, /href="\/canli"/);
   assert.match(body, /href="\/kategori\/ekonomi"/);
   assert.match(body, /href="\/son-dakika"/, "Son Dakika menüsü gerçek sayfaya gitmeli");
-  assert.match(body, /href="\/foto-galeri"/, "Foto Galeri menüde olmalı");
-  assert.match(body, /href="\/videolar"/, "Video Merkezi menüde olmalı");
   const mainNav = body.match(/<nav class="nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
   const upperBar = body.match(/<div class="topbar">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? "";
-  assert.match(mainNav, />Foto Galeri<\/a>/);
-  assert.match(mainNav, />Video Merkezi<\/a>/);
+  assert.doesNotMatch(mainNav, /href="\/(?:foto-galeri|videolar)"/, "Foto Galeri ve Video Merkezi ana menüde gösterilmemeli");
+  const mobileSource = await readFile(new URL("../app/site-client.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(mobileSource.match(/const mobileLinks = .*;/)?.[0] ?? "", /foto-galeri|videolar/, "Mobil menüde de bu bağlantılar gösterilmemeli");
   assert.doesNotMatch(mainNav, />Video<\/a>|>Videolar<\/a>|>Yazarlar<\/a>/, "Üst menüde eski Video, Videolar ve Yazarlar bağlantıları kalmamalı");
   assert.doesNotMatch(upperBar, /href="\/yazarlar"/, "İnce üst bantta Yazarlar bağlantısı kalmamalı");
   assert.match(body, /href="\/kurumsal\/iletisim"/, "İletişim alt bölümde bağlantı olmalı");
@@ -1986,7 +1985,7 @@ test("gezinme bağlantıları çerçeveye bağlı olmayan gerçek bağlantılard
 
   const body = await html("/");
   const navLinks = [...body.matchAll(/<a[^>]+href="(\/[^"]*)"/g)].map((match) => match[1]);
-  for (const path of ["/son-dakika", "/kategori/gundem", "/kategori/ekonomi", "/foto-galeri", "/videolar", "/canli"]) {
+  for (const path of ["/son-dakika", "/kategori/gundem", "/kategori/ekonomi", "/canli"]) {
     assert.ok(navLinks.includes(path), `${path} ana sayfada <a href> olarak yer almalı`);
   }
 });
@@ -3231,7 +3230,7 @@ test("ana sayfa YouTube vitrininde bir büyük ve üç küçük video gösterir,
   assert.match(section, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(section, /<script>|javascript:|Eski beşinci video|Mükerrer|Başka kanal/);
   assert.doesNotMatch(section, /YouTube’da izle/);
-  assert.match(body, /href="\/videolar"/, "Video Merkezi menüsü kaldırılmamalı");
+  assert.doesNotMatch(body.match(/<nav class="nav"[\s\S]*?<\/nav>/)?.[0] ?? "", /href="\/videolar"/, "Video Merkezi ana menüde gösterilmemeli");
   assert.equal((await request("/videolar")).status, 200);
   assert.equal((await fetch(`${baseUrl}/api/settings`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ socialYoutube: "https://example.com" }) })).status, 401);
   const db = new Database(process.env.KOZA_DB_PATH);
