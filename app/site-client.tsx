@@ -221,6 +221,11 @@ export function LeadSlider({ items }: { items: Lead[] }) {
         ))}
       </div>
       <div className="lead-shade" />
+      {/* Görselin tamamı habere gider. Başlıktaki bağlantı okuyucu yazılımlar ve klavye için
+          tek erişilebilir bağlantı olarak kalır; bu katman yalnız fareyle tıklama içindir. */}
+      <a className="lead-hit" href={item.href ?? "/son-dakika"} tabIndex={-1} aria-hidden="true">
+        <span>{item.title}</span>
+      </a>
       <div className={`lead-copy lead-copy-${position}`} key={item.href} aria-live={pausedByUser ? "polite" : "off"}>
         <h1><a href={item.href ?? "/son-dakika"}>{item.title}</a></h1>
       </div>

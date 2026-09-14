@@ -43,14 +43,15 @@ export default async function Home() {
     <main className="home">
       <SiteHeader categories={categories} active="home" />
 
+      {/* Şeridin tamamı bağlantıdır: okur habere gitmek için "Habere git" yazısını aramaz. */}
       {breaking && (
         <section className="breaking" id="sondakika" aria-label="Son dakika">
-          <div className="wrap breaking-inner">
+          <a className="wrap breaking-inner" href={`/haber/${breaking.slug}`}>
             <strong><i /> SON DAKİKA</strong>
             <time>{clock(breaking.publishedAt)}</time>
             <p>{displayTitle(breaking.title)}</p>
-            <a href={`/haber/${breaking.slug}`}>Habere git <span>→</span></a>
-          </div>
+            <b className="breaking-go">Habere git <span aria-hidden="true">→</span></b>
+          </a>
         </section>
       )}
 

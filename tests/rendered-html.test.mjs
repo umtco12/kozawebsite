@@ -3124,3 +3124,35 @@ test("yönetimde başlık ve spot düz metin kutusu, zengin editör yalnız habe
     assert.doesNotMatch(kaynak, /articleTitle\(|articleSpot\(/, `${sayfa} zengin başlık yardımcısını kullanmamalı`);
   }
 });
+
+test("son dakika şeridinin ve manşet görselinin tamamı habere götürür", async () => {
+  const home = await html("/");
+
+  /* Şeridin tamamı tek bir bağlantıdır; "Habere git" yalnız görsel bir işarettir. */
+  const serit = home.match(/<section class="breaking"[\s\S]*?<\/section>/)?.[0] ?? "";
+  assert.ok(serit, "Son dakika şeridi ana sayfada bulunmalı");
+  const seritHedefi = serit.match(/<a class="wrap breaking-inner" href="(\/haber\/[^"]+)"/)?.[1] ?? "";
+  assert.ok(seritHedefi, "Şeridin tamamı habere giden tek bir bağlantı olmalı");
+  assert.match(serit, /<p>[^<]+<\/p>/, "Şerit başlığı bağlantının içinde kalmalı");
+  assert.equal((serit.match(/<a\b/g) ?? []).length, 1, "Şeritte tek bağlantı bulunmalı");
+  assert.match(serit, /<b class="breaking-go">Habere git/, "Habere git yazısı artık ayrı bir bağlantı olmamalı");
+
+  /* Manşette görselin üstündeki katman başlıkla aynı habere gider. */
+  const katmanHedefi = home.match(/<a class="lead-hit" href="([^"]+)"/)?.[1] ?? "";
+  const baslikHedefi = home.match(/<div class="lead-copy[^"]*"[^>]*><h1><a href="([^"]+)"/)?.[1] ?? "";
+  assert.ok(katmanHedefi, "Manşet görselinde tıklama katmanı bulunmalı");
+  assert.equal(katmanHedefi, baslikHedefi, "Görsele ve başlığa tıklamak aynı habere gitmeli");
+  assert.match(home, /<a class="lead-hit"[^>]*tabindex="-1"[^>]*aria-hidden="true"/,
+    "Katman klavye ve ekran okuyucu için yinelenen bir bağlantı üretmemeli");
+
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const katmanZ = Number(css.match(/\.home \.lead-hit\{[^}]*z-index:(\d+)/)?.[1] ?? 0);
+  const yaziZ = Number(css.match(/\.home \.lead-copy\{z-index:(\d+)/)?.[1] ?? 0);
+  const kumandaZ = Number(css.match(/\.slider-dock\{[^}]*z-index:(\d+)/)?.[1] ?? 0);
+  assert.ok(katmanZ >= 2, "Tıklama katmanı görselin ve gölgenin üstünde olmalı");
+  assert.ok(kumandaZ > katmanZ, "Slider okları ve noktaları katmanın üstünde tıklanabilir kalmalı");
+  assert.ok(yaziZ > katmanZ, "Manşet yazısı katmanın üstünde kalmalı");
+  assert.match(css, /\.home \.lead-copy\{pointer-events:none\}/, "Yazı bloğu görselin tıklamasını yutmamalı");
+  assert.match(css, /\.home \.lead-copy h1 a\{pointer-events:auto\}/, "Başlık bağlantısı tıklanabilir kalmalı");
+  assert.match(css, /\.breaking-inner\{cursor:pointer\}/, "Şerit tıklanabilir olduğunu imleçle göstermeli");
+});
