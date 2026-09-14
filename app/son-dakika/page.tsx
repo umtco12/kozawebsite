@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { articleSpot, articleTitle } from "../rich-title";
 import { listBreakingArticles, listCategories } from "../../db";
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
+import { displaySpot, displayTitle } from "../../db/title-model.mjs";
 import { AdSlot } from "../ad-slot";
 
 export const dynamic = "force-dynamic";
@@ -73,8 +73,8 @@ export default async function BreakingPage() {
                 </div>
                 <div>
                   <span style={{ background: "var(--red)" }}>{lead.isBreaking ? "SON DAKİKA" : lead.category}</span>
-                  <h2>{articleTitle(lead)}</h2>
-                  {articleSpot(lead) && <p>{articleSpot(lead)}</p>}
+                  <h2>{displayTitle(lead.title)}</h2>
+                  {displaySpot(lead.spot, lead.title) && <p>{displaySpot(lead.spot, lead.title)}</p>}
                   <time>{stamp(lead.publishedAt)}</time>
                 </div>
               </a>
@@ -89,7 +89,7 @@ export default async function BreakingPage() {
                       {article.isBreaking && <b className="breaking-ribbon">SON DAKİKA</b>}
                     </div>
                     <span>{article.category}</span>
-                    <h3>{articleTitle(article)}</h3>
+                    <h3>{displayTitle(article.title)}</h3>
                     <time>{stamp(article.publishedAt)}</time>
                   </a>
                 ))}
@@ -109,7 +109,7 @@ export default async function BreakingPage() {
                         <time>{clock(article.publishedAt)}</time>
                         <div>
                           <span>{article.isBreaking ? "SON DAKİKA" : article.category}</span>
-                          <h3>{articleTitle(article)}</h3>
+                          <h3>{displayTitle(article.title)}</h3>
                         </div>
                         <img src={article.heroImage} alt="" loading="lazy" />
                       </a>
@@ -130,7 +130,7 @@ export default async function BreakingPage() {
               {flagged.length ? flagged.slice(0, 6).map((article) => (
                 <a className="aside-row" href={`/haber/${article.slug}`} key={article.id}>
                   <img src={article.heroImage} alt="" loading="lazy" />
-                  <span><b>{clock(article.publishedAt)}</b>{articleTitle(article)}</span>
+                  <span><b>{clock(article.publishedAt)}</b>{displayTitle(article.title)}</span>
                 </a>
               )) : <p className="aside-empty">Şu anda son dakika olarak işaretlenmiş haber yok. Editör, haber düzenleme ekranındaki <b>Son dakika</b> kutusuyla bu listeyi yönetir.</p>}
             </div>

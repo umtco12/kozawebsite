@@ -10,7 +10,6 @@ import Highlight from "@tiptap/extension-highlight";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Youtube from "@tiptap/extension-youtube";
-import { unwrapInlineHtml, wrapInlineHtml } from "../../db/rich-text.mjs";
 
 type MediaAsset = { id: number; publicUrl: string; originalName: string; altText: string; mimeType: string };
 
@@ -52,12 +51,9 @@ const highlightColors = [
 
 /* Koza TV haber gövdesi için zengin metin editörü.
    Değer HTML olarak dışarı verilir; kaydetme ve düz metin projeksiyonu çağıran ekranda yapılır. */
-/* `variant="inline"` başlık ve spot için sadeleştirilmiş kip: blok yok, bağlantı yok, medya yok.
-   Yalnız vurgu araçları açıktır ve değer <p> sarmalı olmadan dışarı verilir. */
-export function RichEditor({ value, onChange, disabled = false, placeholder = "Haber metnini yazın…", variant = "full" }: {
-  value: string; onChange: (html: string) => void; disabled?: boolean; placeholder?: string; variant?: "full" | "inline";
+export function RichEditor({ value, onChange, disabled = false, placeholder = "Haber metnini yazın…" }: {
+  value: string; onChange: (html: string) => void; disabled?: boolean; placeholder?: string;
 }) {
-  const inline = variant === "inline";
   const [panel, setPanel] = useState<PanelKind>(null);
   const [library, setLibrary] = useState<MediaAsset[]>([]);
   const [mediaQuery, setMediaQuery] = useState("");
@@ -71,38 +67,30 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
     editable: !disabled,
-    content: inline ? wrapInlineHtml(value) : value,
-    extensions: inline
-      ? [
-          StarterKit.configure({ heading: false, bulletList: false, orderedList: false, listItem: false, blockquote: false, codeBlock: false, code: false, horizontalRule: false, link: false }),
-          TextStyle, Color, FontSize, BackgroundColor,
-          Highlight.configure({ multicolor: true }),
-          CharacterCount,
-          Placeholder.configure({ placeholder }),
-        ]
-      : [
-          StarterKit.configure({ heading: { levels: [2, 3, 4, 5, 6] }, link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: "noreferrer nofollow", target: "_blank" } } }),
-          TextStyle, Color, FontSize, BackgroundColor,
-          TextAlign.configure({ types: ["heading", "paragraph"] }),
-          Highlight.configure({ multicolor: true }),
-          TableKit.configure({ table: { resizable: true } }),
-          Image.configure({ inline: false, allowBase64: false }),
-          Youtube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
-          CharacterCount,
-          Placeholder.configure({ placeholder }),
-        ],
+    content: value,
+    extensions: [
+      StarterKit.configure({ heading: { levels: [2, 3, 4, 5, 6] }, link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: "noreferrer nofollow", target: "_blank" } } }),
+      TextStyle, Color, FontSize, BackgroundColor,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+      Highlight.configure({ multicolor: true }),
+      TableKit.configure({ table: { resizable: true } }),
+      Image.configure({ inline: false, allowBase64: false }),
+      Youtube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
+      CharacterCount,
+      Placeholder.configure({ placeholder }),
+    ],
     onUpdate: ({ editor: instance }) => {
-      const html = inline ? unwrapInlineHtml(instance.getHTML()) : instance.getHTML();
+      const html = instance.getHTML();
       emitted.current = html; onChange(html);
     },
-  }, [disabled, inline]);
+  }, [disabled]);
 
   /* Başka bir habere geçildiğinde içerik tazelenir; yazarken imleç kaybolmaz. */
   useEffect(() => {
     if (!editor || value === emitted.current) return;
     emitted.current = value;
-    editor.commands.setContent(inline ? wrapInlineHtml(value) : value || "", { emitUpdate: false });
-  }, [editor, value, inline]);
+    editor.commands.setContent(value || "", { emitUpdate: false });
+  }, [editor, value]);
 
   const openMedia = useCallback(async (kind: "image" | "video") => {
     setPanel(kind); setMediaQuery(""); setLoadingMedia(true);
@@ -138,43 +126,6 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
     const next = mode === "upper" ? text.toLocaleUpperCase("tr-TR") : text.toLocaleLowerCase("tr-TR");
     active.chain().focus().insertContentAt({ from, to }, next).run();
   }
-
-  /* Başlık ve spot: yalnız vurgu araçları. Bağlantı, liste, tablo ve medya bilerek kapalıdır. */
-  if (inline) return (
-    <div className={`rt-editor rt-editor-inline${disabled ? " rt-editor-disabled" : ""}`}>
-      <div className="rt-toolbar">
-        <button type="button" title="Kalın" className={can("bold") ? "on" : ""} onClick={() => chain().toggleBold().run()}><b>B</b></button>
-        <button type="button" title="İtalik" className={can("italic") ? "on" : ""} onClick={() => chain().toggleItalic().run()}><i>I</i></button>
-        <button type="button" title="Altı çizili" className={can("underline") ? "on" : ""} onClick={() => chain().toggleUnderline().run()}><u>U</u></button>
-        <button type="button" title="Üstü çizili" className={can("strike") ? "on" : ""} onClick={() => chain().toggleStrike().run()}><s>S</s></button>
-        <span className="rt-sep" />
-        <label className="rt-select" title="Punto">
-          <select value={editor.getAttributes("textStyle").fontSize ?? ""} onChange={(event) => { const size = event.target.value; if (size) chain().setFontSize(size).run(); else chain().unsetFontSize().run(); }}>
-            <option value="">Punto</option>
-            {fontSizes.map((size) => <option value={size} key={size}>{size}</option>)}
-          </select>
-        </label>
-        <label className="rt-select" title="Yazı rengi">
-          <select value={editor.getAttributes("textStyle").color ?? ""} onChange={(event) => { const color = event.target.value; if (color) chain().setColor(color).run(); else chain().unsetColor().run(); }}>
-            <option value="">Yazı rengi</option>
-            {textColors.map((color) => <option value={color.value} key={color.value}>{color.label}</option>)}
-          </select>
-        </label>
-        <label className="rt-select" title="Vurgu rengi">
-          <select value={editor.getAttributes("highlight").color ?? ""} onChange={(event) => { const color = event.target.value; if (color) chain().setHighlight({ color }).run(); else chain().unsetHighlight().run(); }}>
-            <option value="">Vurgu</option>
-            {highlightColors.map((color) => <option value={color.value} key={color.value}>{color.label}</option>)}
-          </select>
-        </label>
-        <span className="rt-sep" />
-        <button type="button" title="BÜYÜK HARF" onClick={() => transformSelection("upper")}>äA</button>
-        <button type="button" title="küçük harf" onClick={() => transformSelection("lower")}>Aà</button>
-        <button type="button" title="Alt satıra geç" onClick={() => chain().setHardBreak().run()}>↵</button>
-        <button type="button" title="Biçimi temizle" onClick={() => chain().unsetAllMarks().run()}>✕</button>
-      </div>
-      <EditorContent className="rt-surface rt-surface-inline" editor={editor} />
-    </div>
-  );
 
   return (
     <div className={`rt-editor${disabled ? " rt-editor-disabled" : ""}`}>

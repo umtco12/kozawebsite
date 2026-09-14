@@ -1,4 +1,3 @@
-import { convertTitleCase, isAllUpper } from "./title-model.mjs";
 /* Zengin metin gövdesinin tek kaynağı.
 
    Haber gövdesi iki biçimde saklanabilir:
@@ -75,55 +74,4 @@ export function normalizeArticleHtml(html) {
   if (!value) return "";
   if (!htmlToPlainText(value) && !/<(img|iframe|video|hr|table)\b/i.test(value)) return "";
   return value.length > MAX_BODY_HTML ? value.slice(0, MAX_BODY_HTML) : value;
-}
-
-/* Yayında hangi gövdenin gösterileceğine karar verir. */
-export function hasRichBody(article) {
-  return Boolean(String(article?.bodyHtml ?? "").trim());
-}
-
-/* ===== Zengin başlık ve spot =====
-
-   Başlık iki biçimde saklanır: `titleHtml` ekranda görünen zengin hâl, `title` ise ondan
-   üretilen düz metindir. `<title>`, `og:title`, RSS, JSON-LD ve adres düz metni kullanır. */
-
-/* Satır içi alan: blok etiketleri satır sonu üretmez, yalnız <br> kırar. */
-export function inlineHtmlToPlainText(html) {
-  let value = String(html ?? "");
-  value = value.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ");
-  value = value.replace(/<br\s*\/?>/gi, " ");
-  value = value.replace(/<\/p>\s*<p[^>]*>/gi, " ");
-  value = value.replace(/<[^>]*>/g, "");
-  return decodeEntities(value).replace(/\s+/g, " ").trim();
-}
-
-/* Editörün ürettiği tek paragrafı sarmalından çıkarır: başlık <p> içinde durmaz. */
-export function unwrapInlineHtml(html) {
-  const value = String(html ?? "").trim();
-  const single = /^<p(?:\s[^>]*)?>([\s\S]*)<\/p>$/i.exec(value);
-  if (!single || /<p[\s>]/i.test(single[1])) return value;
-  return single[1].trim();
-}
-
-/* Satır içi alanı editöre yüklerken paragrafa sarar. */
-export function wrapInlineHtml(html) {
-  const value = String(html ?? "").trim();
-  if (!value) return "";
-  return /^<p[\s>]/i.test(value) ? value : `<p>${value}</p>`;
-}
-
-/* Zengin başlığı okunur biçime çevirir. Dönüşüm yalnız metin parçalarına uygulanır;
-   etiketler, renkler ve punto bilgisi olduğu gibi kalır. */
-export function displayRichTitle(html) {
-  const parts = String(html ?? "").split(/(<[^>]*>)/);
-  const text = decodeEntities(parts.filter((_, index) => index % 2 === 0).join(""));
-  if (!text.trim() || !isAllUpper(text)) return String(html ?? "");
-  return parts.map((part, index) => (index % 2 === 0 ? escapeHtml(convertTitleCase(decodeEntities(part))) : part)).join("");
-}
-
-/* Kaydedilen satır içi gövdeyi sınırlar içinde tutar ve boş hâli sadeleştirir. */
-export function normalizeInlineHtml(html, limit = 2000) {
-  const value = unwrapInlineHtml(html);
-  if (!value || !inlineHtmlToPlainText(value)) return "";
-  return value.length > limit ? value.slice(0, limit) : value;
 }

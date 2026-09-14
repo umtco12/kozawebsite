@@ -1706,16 +1706,3 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .rt-panel-source textarea{width:100%;border:1px solid var(--line);border-radius:3px;padding:10px;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
 @media(max-width:820px){.rt-surface{padding:14px}.rt-toolbar{gap:1px}.rt-toolbar>button{min-width:28px;height:28px;padding:0 5px}}
 
-/* Başlık ve spot için sadeleştirilmiş editör kipi */
-.rt-editor-inline .rt-toolbar{border-bottom:1px solid var(--line)}
-.rt-surface-inline{min-height:0;max-height:none;padding:10px 12px}
-.rt-surface-inline .tiptap{font:700 20px/1.35 var(--font-serif),Georgia,serif}
-.rt-surface-inline .tiptap p{margin:0}
-.rich-field{display:grid;gap:6px;min-width:0}
-.rich-field>em{color:var(--red);font-size:11px;font-style:normal}
-.body-editor-label .limit-asildi{color:var(--red);font-weight:800}
-.rt-spot-field .rt-surface-inline .tiptap{font:15px/1.6 var(--font-inter),Arial,sans-serif;font-weight:400}
-/* Yayındaki zengin başlık ve spot: yazı tipi ve punto bulunduğu yerden miras alınır. */
-.rich-title,.rich-spot{display:inline}
-.rich-title mark,.rich-spot mark{padding:0 3px;border-radius:2px}
-.rich-title u,.rich-spot u{text-underline-offset:3px}
