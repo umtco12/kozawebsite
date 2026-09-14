@@ -1078,3 +1078,31 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/site-chrome.tsx`, `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: `npm test` üretim derlemesiyle **110 geçti, 0 başarısız, 0 atlandı**. Gerçek tarayıcıda 1440 px merkez farkı -0,0039 px ölçüldü; 1024 ve 390 px görsel kontrolde taşma yok. Arama açılıp odak ve 240 px alan doğrulandı. Bağımsız `npm run build` başarılı; `npm run lint` 0 hata ve mevcut 44 uyarıyla tamamlandı.
 - Kalan karar veya risk: Yayın doğrulaması aşağıda kaydedilecektir.
+
+### 2026-09-14 — Menü yayını öncesi geçici test alanının temizlenmesi
+
+- İstek: Ortalanmış menünün yayınlanması.
+- Yapılanlar: İlk dağıtımda menü testi geçti, ancak medya yükleme testi HTTP 400 verdi. `/tmp` tmpfs alanında yalnız 1006 MB boş kaldığı için 1 GB medya koruması devreye girdi. Tam adı test dosyası kalıbıyla eşleşen ve bir saatten eski 138 geçici SQLite test dosyası temizlendi; 206.613.840 bayt alan açıldı. Kalıcı uygulama verisine dokunulmadı. Aynı commit ve test kapsamıyla dağıtım yeniden başlatıldı.
+- Değişen ana dosyalar: Uygulama değişmedi; yalnız `/tmp/koza-content-test-*` eski test dosyaları.
+- Doğrulama: İlk sunucu paketi 109 geçti / 1 başarısız; menü testi başarılı. Aktif önceki sürüm korunmuştu.
+- Kalan karar veya risk: Test paketi geçici veritabanlarını otomatik temizlemiyor; kalıcı test temizliği ayrıca ele alınmalıdır.
+
+### 2026-09-14 — Ortalanmış menünün başarılı staging yayını
+
+- İstek: Ana menünün ortalanması.
+- Yapılanlar: `775c5c4` sürümü yayınlandı. İkinci denemedeki mevcut hazırlık dizini engeli, aktif sürüm olmadığı doğrulanarak başarısız dizinin `failed-releases` altına taşınmasıyla çözüldü.
+- Değişen ana dosyalar: Yayın kaydı için `AGENTS.md`.
+- Doğrulama: GitHub Actions `34845748656` üçüncü denemesi tüm test ve yayın kapılarıyla başarılı. Yayındaki gerçek tarayıcıda 1440 px menü grubu merkez farkı **0 px**, yatay taşma yok. Yerelde 110 test, build ve lint başarılı.
+- Kalan karar veya risk: Yayın staging IP adresindedir; DNS değiştirilmedi. Başarısız hazırlık kopyası geri dönüş incelemesi için korunuyor.
+
+### 2026-09-14 — Ana sayfa akış kutusu son dakikadan son eklenen habere çevrildi
+
+- İstek: Sağdaki "HABER AKIŞI · Son Dakika" kutusu yalnız son dakika işaretli haberleri gösterdiği için günde bir iki haberle besleniyor ve 11 Eylül gibi eski tarihler ekranda kalıyordu. Kutu kalsın ama **en son eklenen haberleri** göstersin; başlık ne "Son Dakika" ne de "Son Haber" olsun; sınır beş haber olarak kalsın; alttaki "Tüm son dakika haberleri" bağlantısı da yeniden adlandırılsın.
+- Yapılanlar:
+  - Veri kaynağı `listBreakingArticles(5, true)` yerine `listLatestArticles(5)` oldu. Bu sorgu `status='published'` haberleri `published_at DESC, id DESC` ile sıralar: yeni haber yayına alındığında en üste girer, beşinci haber listeden düşer. Son dakika işareti artık sıralamayı etkilemez. Ana sayfada ve `/api/breaking-news` uçnoktasında aynı kaynak kullanılır, böylece sunucu render'ı ile dakikalık canlı yenileme aynı listeyi verir.
+  - Üstteki kırmızı şerit **değişmedi**: o hâlâ `listBreakingArticles(5, true)` ile yalnız son dakika işaretli haberi gösteriyor. İki havuz artık ayrı.
+  - Adlandırma: üst etiket "HABER AKIŞI" korundu, başlık **"Son Eklenenler"** oldu. Kullanıcının önerdiği "Güncel Son Haberler" kullanılmadı; hemen solundaki bölüm zaten "GÜNCEL · Son Haberler" başlığını taşıdığı için aynı ad iki kez geçecekti. Alt bağlantı "Tüm son dakika haberleri" yerine **"Tüm haberleri gör"** oldu; hedef `/son-dakika` sayfası, son dakika işaretlileri öne alarak yayındaki bütün haberleri listelediği için değişmedi.
+  - Boş liste metni ve ekran okuyucu duyurusu da akışın yeni anlamına göre güncellendi.
+- Değişen ana dosyalar: `app/page.tsx`, `app/api/breaking-news/route.ts`, `app/home-breaking-news.tsx`, `tests/rendered-html.test.mjs`.
+- Doğrulama: `npm test` **110 test geçti; 0 başarısız**. Kutunun testi yeniden yazıldı: işaretsiz haberlerin de akışa girdiğini, taslak/inceleme/planlı haberlerin hiç girmediğini, yeni haberin en üste geçip beşinciyi düşürdüğünü, eşit yayın saatinde id ile kararlı sıralandığını, son dakika işareti eklemenin sırayı öne çekmediğini ve kutuda "Son Dakika"/"Son Haberler" adlandırmasının kalmadığını doğruluyor. Fikstür yayın saatleri arşivdeki en yeni kaydın ilerisine kurulur, böylece diğer testlerin eklediği haberlerden etkilenmez. `npm run lint` 0 hata, `npx tsc --noEmit` temiz. Tarayıcıda kutu "HABER AKIŞI / Son Eklenenler", beş haber (en üstte 14 Eylül 13:13) ve "Tüm haberleri gör →" ile doğrulandı.
+- Kalan karar veya risk: Dosya ve sınıf adları (`home-breaking-news.tsx`, `breaking-feed-model.mjs`, `/api/breaking-news`, `.home-breaking-news`) ilk sürümden kalma "breaking" adını taşıyor; davranış artık son dakikaya bağlı değil. Yanıltmaması için bileşenin başına açıklama eklendi. İstenirse ayrı bir adımda yeniden adlandırılabilir.

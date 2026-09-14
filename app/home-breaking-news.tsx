@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { displayTitle } from "../db/title-model.mjs";
 import { BREAKING_REFRESH_MS, createBreakingRefresh } from "./breaking-news-refresh.mjs";
 
+/* Ana sayfadaki "HABER AKIŞI · Son Eklenenler" kutusu.
+   Son dakika işaretine bakmaz: en son yayına alınan beş haberi yeniden eskiye sıralar.
+   Yeni haber yayınlandığında en üste girer ve beşinci haber listeden düşer.
+   Dosya ve sınıf adlarındaki "breaking" ilk sürümden kalmadır. */
 type BreakingItem = { id: number; slug: string; title: string; publishedAt: number | null };
 const timeOptions = { timeZone: "Europe/Istanbul" };
 function newsTime(value: number | null) {
@@ -31,7 +35,7 @@ export function HomeBreakingNews({ initialItems }: { initialItems: BreakingItem[
     const refresher = createBreakingRefresh({ onItems(next: BreakingItem[]) {
       // Okur bir bağlantıda klavye odağı tutarken listeyi yerinden oynatma.
       if (region.current?.contains(document.activeElement)) queued.current = next;
-      else { apply(next); setAnnouncement("Son dakika listesi güncellendi."); }
+      else { apply(next); setAnnouncement("Haber akışı güncellendi."); }
     } });
     const refresh = () => { if (!document.hidden) void refresher.refresh(); };
     const timer = setInterval(refresh, BREAKING_REFRESH_MS);
@@ -41,9 +45,9 @@ export function HomeBreakingNews({ initialItems }: { initialItems: BreakingItem[
   }, []);
   return (
     <aside className="home-breaking-news" aria-labelledby="home-breaking-heading" ref={region} onBlur={(event) => {
-      if (!event.currentTarget.contains(event.relatedTarget) && queued.current) { apply(queued.current); queued.current = null; setAnnouncement("Son dakika listesi güncellendi."); }
+      if (!event.currentTarget.contains(event.relatedTarget) && queued.current) { apply(queued.current); queued.current = null; setAnnouncement("Haber akışı güncellendi."); }
     }}>
-      <header><span className="home-breaking-kicker"><i aria-hidden="true" /> HABER AKIŞI</span><h2 id="home-breaking-heading">Son Dakika</h2></header>
+      <header><span className="home-breaking-kicker"><i aria-hidden="true" /> HABER AKIŞI</span><h2 id="home-breaking-heading">Son Eklenenler</h2></header>
       <ol>
         {items.map((article) => {
           const stamp = newsTime(article.publishedAt);
@@ -56,8 +60,8 @@ export function HomeBreakingNews({ initialItems }: { initialItems: BreakingItem[
           </li>;
         })}
       </ol>
-      {!items.length && <p className="home-breaking-empty">Yeni son dakika haberleri burada yer alacak.</p>}
-      <a className="home-breaking-all" href="/son-dakika">Tüm son dakika haberleri <span aria-hidden="true">→</span></a>
+      {!items.length && <p className="home-breaking-empty">Yeni eklenen haberler burada görünecek.</p>}
+      <a className="home-breaking-all" href="/son-dakika">Tüm haberleri gör <span aria-hidden="true">→</span></a>
       <span className="visually-hidden" role="status">{announcement}</span>
     </aside>
   );

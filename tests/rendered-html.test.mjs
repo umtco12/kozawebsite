@@ -3279,17 +3279,18 @@ test("YouTube büyük kartı uzun yan listeye uzarken kendi sütun genişliğini
   assert.match(css, /\.home \.video-section a:focus-visible\{[^}]*outline:3px solid #fff/);
 });
 
-test("ana sayfa son dakika kutusu yalnız yayındaki son beş işaretli haberi sıralar ve yeni haberde en eskiyi çıkarır", async (t) => {
+test("ana sayfa haber akışı kutusu son eklenen beş yayındaki haberi sıralar ve yeni haberde en eskiyi çıkarır", async (t) => {
   const db = new Database(process.env.KOZA_DB_PATH);
-  const old = db.prepare("SELECT id,is_breaking FROM articles").all();
   const ids = [];
   t.after(() => {
-    db.transaction(() => { for (const id of ids) db.prepare("DELETE FROM articles WHERE id=?").run(id); for (const row of old) db.prepare("UPDATE articles SET is_breaking=? WHERE id=?").run(row.is_breaking,row.id); })();
+    db.transaction(() => { for (const id of ids) db.prepare("DELETE FROM articles WHERE id=?").run(id); })();
     db.close();
   });
-  db.prepare("UPDATE articles SET is_breaking=0").run();
-  const insert = (index, status = "published", flag = 1, publishedAt = Date.now() - (10 - index) * 60000) => {
-    const result = db.prepare("INSERT INTO articles(slug,title,spot,body,category,status,is_breaking,published_at,created_at,updated_at) VALUES (?,?, 'Test spotu','Test gövdesi','Gündem',?,?,?,?,?)").run(`son-dakika-kutusu-${index}`, `Son dakika ${index}: İstanbul’dan güncel gelişmeler`, status, flag, publishedAt, Date.now(), Date.now());
+  /* Yayın saatleri arşivdeki en yeni kayıttan da ileriye konur ki sıra deterministik olsun. */
+  const latestPublished = Number(db.prepare("SELECT COALESCE(MAX(published_at),0) AS newest FROM articles").get().newest);
+  const base = Math.max(Date.now(), latestPublished) + 3_600_000;
+  const insert = (index, status = "published", flag = 0, publishedAt = base + index * 60_000) => {
+    const result = db.prepare("INSERT INTO articles(slug,title,spot,body,category,status,is_breaking,published_at,created_at,updated_at) VALUES (?,?, 'Test spotu','Test gövdesi','Gündem',?,?,?,?,?)").run(`akis-kutusu-${index}`, `Akış ${index}: İstanbul’dan güncel gelişmeler`, status, flag, publishedAt, Date.now(), Date.now());
     ids.push(Number(result.lastInsertRowid));
     return Number(result.lastInsertRowid);
   };
@@ -3302,31 +3303,50 @@ test("ana sayfa son dakika kutusu yalnız yayındaki son beş işaretli haberi s
     for (const item of items) assert.deepEqual(Object.keys(item).sort(), ["id", "publishedAt", "slug", "title"]);
     return items;
   };
-  assert.deepEqual(await read(), []);
-  assert.match(await html("/"), /Yeni son dakika haberleri burada yer alacak/);
-  insert(1); assert.equal((await read()).length, 1);
-  for (let n = 2; n <= 6; n++) insert(n);
-  insert(7, "draft"); insert(8, "review"); insert(9, "scheduled"); insert(10, "published", 0);
-  assert.deepEqual((await read()).map(item => item.slug), [6,5,4,3,2].map(n => `son-dakika-kutusu-${n}`));
+
+  /* Kutu son dakika işaretine bakmaz: işaretsiz haberler de akışa girer. */
+  for (let n = 1; n <= 6; n++) insert(n);
+  assert.deepEqual((await read()).map((item) => item.slug), [6, 5, 4, 3, 2].map((n) => `akis-kutusu-${n}`));
+
+  /* Yayında olmayanlar akışa hiç girmez. */
+  insert(7, "draft"); insert(8, "review"); insert(9, "scheduled");
+  assert.deepEqual((await read()).map((item) => item.slug), [6, 5, 4, 3, 2].map((n) => `akis-kutusu-${n}`));
+
+  /* Yeni haber en üste girer, beşinci haber listeden düşer. */
+  insert(10);
+  const afterNewest = (await read()).map((item) => item.slug);
+  assert.deepEqual(afterNewest, [10, 6, 5, 4, 3].map((n) => `akis-kutusu-${n}`));
+  assert.ok(!afterNewest.includes("akis-kutusu-2"), "Kutu beş haberi aşmamalı, en eski düşmeli");
+
   const home = await html("/");
   const aside = home.match(/<aside class="home-breaking-news"[\s\S]*?<\/aside>/)?.[0] || "";
   assert.equal((aside.match(/<li>/g) || []).length, 5);
   assert.doesNotMatch(home, /<aside class="home-photo-gallery/);
-  assert.match(aside, /<h2 id="home-breaking-heading">Son Dakika<\/h2>/);
+  assert.match(aside, /<h2 id="home-breaking-heading">Son Eklenenler<\/h2>/, "Kutu başlığı son eklenenleri anlatmalı");
+  assert.doesNotMatch(aside, /Son Dakika|Son Haberler/, "Kutuda son dakika veya Son Haberler adlandırması kalmamalı");
+  assert.match(aside, /HABER AKIŞI/);
   assert.match(aside, /<time dateTime=|<time datetime=/);
+  assert.match(aside, /Tüm haberleri gör/);
   assert.match(aside, /href="\/son-dakika"/);
   for (const item of await read()) assert.match(aside, new RegExp(`/haber/${item.slug}`));
-  // Aynı tarihte id kararlı sıralama sağlar; gelecekteki taslaklar ve normal haberler asla doldurmaz.
-  const stamp = Date.now();
-  insert(11, "published", 1, stamp); const newest = insert(12, "published", 1, stamp);
-  assert.deepEqual((await read()).map(item => item.slug), [12,11,6,5,4].map(n => `son-dakika-kutusu-${n}`));
-  db.prepare("UPDATE articles SET is_breaking=0 WHERE id=?").run(newest);
-  assert.equal((await read())[0].slug, "son-dakika-kutusu-11");
-  db.prepare("UPDATE articles SET status='draft' WHERE slug='son-dakika-kutusu-11'").run();
-  assert.equal((await read())[0].slug, "son-dakika-kutusu-6");
+
+  /* Aynı yayın saatinde id kararlı sıralama sağlar. */
+  const stamp = base + 10_000_000;
+  insert(11, "published", 0, stamp); insert(12, "published", 0, stamp);
+  assert.deepEqual((await read()).map((item) => item.slug).slice(0, 2), ["akis-kutusu-12", "akis-kutusu-11"]);
+  db.prepare("UPDATE articles SET status='draft' WHERE slug='akis-kutusu-12'").run();
+  assert.equal((await read())[0].slug, "akis-kutusu-11");
+
+  /* Son dakika işaretini kaldırmak akışı değiştirmez; kutu artık işarete bağlı değil. */
+  db.prepare("UPDATE articles SET is_breaking=1 WHERE slug='akis-kutusu-3'").run();
+  assert.equal((await read())[0].slug, "akis-kutusu-11", "Son dakika işareti sıralamayı öne çekmemeli");
+
   const beforeCount = db.prepare("SELECT count(*) AS n FROM articles").get().n;
   assert.equal((await fetch(`${baseUrl}/api/breaking-news`, { method: "POST", body: "{}" })).status, 405);
   assert.equal(db.prepare("SELECT count(*) AS n FROM articles").get().n, beforeCount);
+
+  const component = await readFile(new URL("../app/home-breaking-news.tsx", import.meta.url), "utf8");
+  assert.match(component, /Yeni eklenen haberler burada görünecek/, "Boş akışın metni tanımlı olmalı");
 });
 
 test("son dakika canlı yenilemesi geçerli listeyi alır; hata ve bozuk yanıtta korur, durdurulunca güncellemez", async () => {

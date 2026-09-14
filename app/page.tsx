@@ -1,4 +1,4 @@
-import { listHomepageArticles, listBreakingArticles } from "../db";
+import { listHomepageArticles, listBreakingArticles, listLatestArticles } from "../db";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
@@ -23,7 +23,7 @@ export default async function Home() {
   const leadPool = listHomepageArticles("slider", 5);
   const sideNews = listHomepageArticles("side", 2);
   const belowNews = listHomepageArticles("below", 4);
-  /* İlk kart son dakika akışıyla yan yana durur; ardından 12 kart dörderli üç sıra oluşturur. */
+  /* İlk kart haber akışı kutusuyla yan yana durur; ardından 12 kart dörderli üç sıra oluşturur. */
   const grid = listHomepageArticles("latest", 13);
   const leads = leadPool.map((article) => ({
     category: article.category,
@@ -35,8 +35,12 @@ export default async function Home() {
     headlinePosition: article.headlinePosition,
   }));
 
+  /* Üstteki kırmızı şerit yalnız son dakika işaretli habere aittir. */
   const breakingPool = listBreakingArticles(5, true);
   const breaking = breakingPool[0];
+  /* Yan kutu ise işaretten bağımsız olarak en son eklenen beş haberi gösterir:
+     yeni haber en üste girer, beşinciyi listeden düşürür. */
+  const feedPool = listLatestArticles(5);
   const gundemHref = categories.find((category) => category.slug === "gundem") ? "/kategori/gundem" : "/son-dakika";
 
   return (
@@ -112,7 +116,7 @@ export default async function Home() {
                   </div>
                 </a>
               ) : null}
-              <HomeBreakingNews initialItems={toBreakingItems(breakingPool)} />
+              <HomeBreakingNews initialItems={toBreakingItems(feedPool)} />
             </div>
             <div className="news-grid latest-news-grid">
               {grid.slice(1).map((article) => (
