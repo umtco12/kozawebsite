@@ -26,6 +26,12 @@ type Tab = "dashboard" | "studio" | "homepage" | "articles" | "editor" | "catego
 
 const statusLabels: Record<Status, string> = { draft: "Taslak", review: "Editör incelemesi", scheduled: "Planlandı", published: "Yayında" };
 const roleLabels: Record<Role, string> = { admin: "Yönetici", publisher: "Yayın Yönetmeni", editor: "Editör", reporter: "Muhabir", viewer: "Görüntüleyici" };
+const adminScaleOptions = [
+  { id: "small", percent: 90 },
+  { id: "normal", percent: 100 },
+  { id: "large", percent: 115 },
+  { id: "xlarge", percent: 130 },
+] as const;
 const emptyArticle: Article = { slug: "", title: "", spot: "", body: "", bodyHtml: "", category: "Gündem", status: "draft", heroImage: "", imageAlt: "", videoUrl: "", author: "Koza TV Haber Merkezi", sourceName: "Koza TV", sourceUrl: "", seoTitle: "", seoDescription: "", isBreaking: 0, isFeatured: 0, isHomepageGallery: 0, homepagePlacement: "latest", headlinePosition: "left-bottom", scheduledAt: null, agencySourceId: null, agencyExternalId: "", agencyCredit: "", agencyEditorialLock: 0 };
 
 /* Arşivdeki haber zengin editörde ilk kez açıldığında içerik kaybolmaz: kayıtlı zengin gövde
@@ -44,6 +50,7 @@ function filenameTitle(value: string) { return value.replace(/\.[^.]+$/, "").rep
 
 export function AdminPanel({ currentUser }: { currentUser: AdminUser }) {
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [adminScaleIndex, setAdminScaleIndex] = useState(1);
   const [articles, setArticles] = useState<Article[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -76,6 +83,20 @@ export function AdminPanel({ currentUser }: { currentUser: AdminUser }) {
   const [homepageDirty, setHomepageDirty] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [userForm, setUserForm] = useState({ fullName: "", email: "", role: "editor" as Role, password: "" });
+  const adminScale = adminScaleOptions[adminScaleIndex];
+  const adminScaleStorageKey = `koza-admin-scale:${currentUser.id}`;
+
+  useEffect(() => {
+    let timer: number | undefined;
+    try {
+      const savedScale = window.localStorage.getItem(adminScaleStorageKey);
+      const savedIndex = adminScaleOptions.findIndex((option) => option.id === savedScale);
+      if (savedIndex >= 0) timer = window.setTimeout(() => setAdminScaleIndex(savedIndex), 0);
+    } catch {
+      // Depolama kapalıysa görünüm normal ölçekte çalışmaya devam eder.
+    }
+    return () => { if (timer !== undefined) window.clearTimeout(timer); };
+  }, [adminScaleStorageKey]);
 
   const refresh = useCallback(async () => {
     const [articleResponse, sourceResponse, categoryResponse, mediaResponse, userResponse] = await Promise.all([fetch("/api/articles"), fetch("/api/sources"), fetch("/api/categories"), fetch("/api/media"), currentUser.role === "admin" ? fetch("/api/users") : Promise.resolve(null)]);
@@ -194,6 +215,14 @@ export function AdminPanel({ currentUser }: { currentUser: AdminUser }) {
 
   async function logout() { await fetch("/api/auth/logout", { method: "POST" }); window.location.assign("/admin/giris"); }
 
+  function changeAdminScale(step: -1 | 1) {
+    setAdminScaleIndex((current) => {
+      const next = Math.max(0, Math.min(adminScaleOptions.length - 1, current + step));
+      try { window.localStorage.setItem(adminScaleStorageKey, adminScaleOptions[next].id); } catch { /* Tercih saklanamasa da bu oturumda uygulanır. */ }
+      return next;
+    });
+  }
+
   const canEdit = currentUser.role !== "viewer";
   const canManageOperations = currentUser.role === "admin" || currentUser.role === "publisher";
   const canPublish = currentUser.role === "admin";
@@ -209,9 +238,9 @@ export function AdminPanel({ currentUser }: { currentUser: AdminUser }) {
   ];
   const title = tab === "import" ? "Eski Site İçerik Aktarımı" : tab === "settings" ? "Site Ayarları" : tab === "redirects" ? "Adres ve Yönlendirme Yönetimi" : tab === "ads" ? "Reklam Merkezi" : tab === "homepage" ? "Ana Sayfa Düzeni" : tab === "dashboard" ? `Günaydın, ${currentUser.fullName.split(" ")[0]}` : tab === "studio" ? "Profesyonel Yayın Stüdyosu" : tab === "articles" ? "Haber Arşivi" : tab === "editor" ? (form.id ? "Haberi Düzenle" : "Yeni Haber Oluştur") : tab === "categories" ? "Kategori Yönetimi" : tab === "media" ? "Medya Kütüphanesi" : tab === "users" ? "Kullanıcı ve Rol Yönetimi" : "Kaynak Merkezi";
 
-  return <main className="newsroom-shell">
+  return <main className="newsroom-shell" data-admin-scale={adminScale.id}>
     <aside className="newsroom-side"><a className="admin-logo" href="/"><img src="/koza-logo.png" alt="Koza TV" /></a><span className="workspace-label">YAYIN OPERASYONU</span><nav aria-label="Yönetim bölümleri">{tabs.map((item) => <button className={tab === item.id ? "active" : ""} onClick={() => item.id === "editor" ? newArticle() : changeTab(item.id)} type="button" key={item.id}><i>{item.icon}</i>{item.label}{item.count !== undefined && <small>{item.count}</small>}</button>)}</nav><div className="newsroom-ai"><span>AI HABER MASASI</span><strong>Editör kontrolü açık</strong><p>AI taslakları onay olmadan yayınlanamaz.</p></div><a className="back-site" href="/">← Siteye dön</a></aside>
-    <section className="newsroom-main"><header className="newsroom-top"><div><span>KOZA TV / İÇERİK MERKEZİ</span><h1>{title}</h1><p>{tab === "import" ? "kozatv.com.tr arşivini yeni siteye taşıyın; eski adresler otomatik yönlendirilir." : tab === "settings" ? "Canlı yayın kaynağı, sosyal hesaplar, künye ve yayın akışını buradan yönetin." : tab === "redirects" ? "Eski site adreslerini yeni adreslere eşleyerek arama motoru değerini koruyun." : tab === "ads" ? "Reklam konumlarını, kampanyaları, kreatifleri ve yayın tarihlerini yönetin." : tab === "homepage" ? "Manşet, manşet yanı ve manşet altı haberlerini sürükleyip sıralayın." : tab === "studio" ? "Görevlendirme, blok içerik, revizyon ve yayın onayını tek ekrandan yönetin." : tab === "categories" ? "Menü yapısını, kategori sırasını ve SEO bilgilerini yönetin." : tab === "media" ? "Kalıcı fotoğraf ve videoları, açıklamaları ve kullanım alanlarını yönetin." : tab === "users" ? "Ekip hesaplarını ve yayın yetkilerini güvenle yönetin." : tab === "editor" ? "İçerik, fotoğraf, video, kaynak ve SEO alanlarını birlikte hazırlayın." : "Koza TV yayın operasyonu"}</p></div><div className="newsroom-user"><b>{currentUser.fullName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</b><span>{currentUser.fullName}<small>{roleLabels[currentUser.role]}</small></span><button type="button" onClick={logout}>Çıkış</button></div></header>
+    <section className="newsroom-main"><header className="newsroom-top"><div><span>KOZA TV / İÇERİK MERKEZİ</span><h1>{title}</h1><p>{tab === "import" ? "kozatv.com.tr arşivini yeni siteye taşıyın; eski adresler otomatik yönlendirilir." : tab === "settings" ? "Canlı yayın kaynağı, sosyal hesaplar, künye ve yayın akışını buradan yönetin." : tab === "redirects" ? "Eski site adreslerini yeni adreslere eşleyerek arama motoru değerini koruyun." : tab === "ads" ? "Reklam konumlarını, kampanyaları, kreatifleri ve yayın tarihlerini yönetin." : tab === "homepage" ? "Manşet, manşet yanı ve manşet altı haberlerini sürükleyip sıralayın." : tab === "studio" ? "Görevlendirme, blok içerik, revizyon ve yayın onayını tek ekranda yönetin." : tab === "categories" ? "Menü yapısını, kategori sırasını ve SEO bilgilerini yönetin." : tab === "media" ? "Kalıcı fotoğraf ve videoları, açıklamaları ve kullanım alanlarını yönetin." : tab === "users" ? "Ekip hesaplarını ve yayın yetkilerini güvenle yönetin." : tab === "editor" ? "İçerik, fotoğraf, video, kaynak ve SEO alanlarını birlikte hazırlayın." : "Koza TV yayın operasyonu"}</p></div><div className="newsroom-account-tools"><div className="admin-accessibility" role="group" aria-label="Admin görünüm boyutu"><span>Görünüm</span><button type="button" aria-label="Admin görünümünü küçült" title="Yönetim panelini küçült" disabled={adminScaleIndex === 0} onClick={() => changeAdminScale(-1)}>A−</button><output aria-live="polite">{adminScale.percent}%</output><button type="button" aria-label="Admin görünümünü büyüt" title="Yönetim panelini büyüt" disabled={adminScaleIndex === adminScaleOptions.length - 1} onClick={() => changeAdminScale(1)}>A+</button></div><div className="newsroom-user"><b>{currentUser.fullName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</b><span>{currentUser.fullName}<small>{roleLabels[currentUser.role]}</small></span><button type="button" onClick={logout}>Çıkış</button></div></div></header>
       {message && <div className={message.includes("alınamadı") || message.includes("edilemedi") || message.includes("yüklenemedi") ? "newsroom-message error" : "newsroom-message"}>{message}<button onClick={() => setMessage("")} aria-label="Mesajı kapat">×</button></div>}
 
       {tab === "studio" && <WorkflowStudio role={currentUser.role} userId={currentUser.id} sources={sources} onDirtyChange={setStudioDirty} />}

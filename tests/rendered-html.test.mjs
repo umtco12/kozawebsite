@@ -3511,11 +3511,39 @@ test("admin haber editörü ve arşivi büyük, yalnız yönetime özel yazı ö
   const scale = css.match(/\/\* Admin editör okuma ölçeği başlangıcı\. \*\/[\s\S]*?\/\* Admin editör okuma ölçeği sonu\. \*\//)?.[0] || "";
   assert.ok(scale, "Yalnız admin paneline ait okuma ölçeği bloğu bulunmalı");
   assert.match(scale, /\.newsroom-shell \.editor-title-field input\{[^}]*font-size:22px[^}]*line-height:1\.45/);
-  assert.match(scale, /\.newsroom-shell \.editor-spot-field textarea\{[^}]*font-size:18px[^}]*line-height:1\.65/);
-  assert.match(scale, /\.newsroom-shell \.rt-surface \.tiptap\{[^}]*font-size:18px[^}]*line-height:1\.8/);
+  assert.match(scale, /--admin-editor-copy-size:18px/);
+  assert.match(scale, /\.newsroom-shell \.editor-spot-field textarea\{[^}]*font:var\(--admin-editor-copy-size\)\/1\.65 var\(--font-inter\),Arial,sans-serif/);
+  assert.match(scale, /\.newsroom-shell \.rt-surface \.tiptap\{[^}]*font:var\(--admin-editor-copy-size\)\/1\.65 var\(--font-inter\),Arial,sans-serif/);
+  assert.match(scale, /@media\(max-width:600px\)\{\.newsroom-shell\{--admin-editor-copy-size:17px\}/);
   assert.match(scale, /\.newsroom-shell \.article-table \.article-cell strong\{[^}]*font-size:15px[^}]*line-height:1\.45/);
   assert.match(scale, /\.newsroom-shell \.article-table \.table-source small\{[^}]*font-size:12px/);
   assert.match(scale, /\.newsroom-shell \.table-actions>a,[^}]*font-size:11px/);
   assert.doesNotMatch(scale, /\.home\b|\.article-body\b|\.site-|\.lead-|\.news-card/,
     "Büyük yazı kuralları ziyaretçi yüzeylerine sızmamalı");
+});
+
+test("admin görünüm ölçeği kullanıcıya özel, erişilebilir ve yalnız yönetim yüzeyine uygulanır", async () => {
+  const panel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(panel, /const adminScaleOptions = \[[\s\S]*percent: 90[\s\S]*percent: 100[\s\S]*percent: 115[\s\S]*percent: 130[\s\S]*\] as const/);
+  assert.match(panel, /`koza-admin-scale:\$\{currentUser\.id\}`/,
+    "Tercih anahtarı oturum açan kullanıcının kimliğini içermeli");
+  assert.match(panel, /data-admin-scale=\{adminScale\.id\}/);
+  assert.match(panel, /role="group" aria-label="Admin görünüm boyutu"/);
+  assert.match(panel, /aria-label="Admin görünümünü küçült"/);
+  assert.match(panel, /aria-label="Admin görünümünü büyüt"/);
+  assert.match(panel, /<output aria-live="polite">\{adminScale\.percent\}%<\/output>/);
+
+  const accessibility = css.match(/\/\* Admin kullanıcı görünüm ölçeği başlangıcı\. \*\/[\s\S]*?\/\* Admin kullanıcı görünüm ölçeği sonu\. \*\//)?.[0] || "";
+  assert.ok(accessibility, "Admin kullanıcı görünüm ölçeği CSS bloğu bulunmalı");
+  assert.match(accessibility, /\.newsroom-shell\[data-admin-scale="small"\]\{--admin-ui-scale:\.9\}/);
+  assert.match(accessibility, /\.newsroom-shell\[data-admin-scale="large"\]\{--admin-ui-scale:1\.15\}/);
+  assert.match(accessibility, /\.newsroom-shell\[data-admin-scale="xlarge"\]\{--admin-ui-scale:1\.3\}/);
+  assert.match(accessibility, /zoom:var\(--admin-ui-scale\)/);
+  assert.doesNotMatch(accessibility, /width:calc\(/,
+    "Tarayıcının zoom yeniden akışı ikinci kez daraltılmamalı");
+  assert.match(accessibility, /\.admin-accessibility button:focus-visible/);
+  assert.doesNotMatch(accessibility, /\.home\b|\.article-body\b|\.site-|\.lead-|\.news-card/,
+    "Kullanıcı görünüm ölçeği ziyaretçi yüzeylerine sızmamalı");
 });
