@@ -1,3 +1,4 @@
+import { TwitterWidgets } from "../../twitter-widgets";
 import type { ContentBlock } from "../../../db";
 
 function youtubeUrl(value: string) { try { const url = new URL(value); const isYoutube = url.hostname === "youtube.com" || url.hostname.endsWith(".youtube.com"); const id = url.hostname === "youtu.be" ? url.pathname.slice(1) : isYoutube ? url.searchParams.get("v") ?? url.pathname.split("/").pop() : ""; return id && /^[\w-]{6,20}$/.test(id) ? `https://www.youtube-nocookie.com/embed/${id}` : ""; } catch { return ""; } }
@@ -16,7 +17,7 @@ export function ArticleVideoPlayer({ src, title = "Haber videosu", preload = "me
 /* Haber gövdesi. Zengin metin editöründen kaydedilmiş bir gövde varsa o gösterilir;
    yoksa arşivdeki bütün haberler eskisi gibi blok blok render edilir. */
 export function ArticleBody({ article, lazyImages = false }: { article: { bodyHtml: string; blocks: ContentBlock[]; videoUrl: string }; lazyImages?: boolean }) {
-  if (article.bodyHtml.trim()) return <div className="rich-body" dangerouslySetInnerHTML={{ __html: article.bodyHtml }} />;
+  if (article.bodyHtml.trim()) return <><div className="rich-body" dangerouslySetInnerHTML={{ __html: article.bodyHtml }} /><TwitterWidgets html={article.bodyHtml} /></>;
   return <ArticleBlocks blocks={article.blocks} excludeVideoUrl={article.videoUrl} lazyImages={lazyImages} />;
 }
 

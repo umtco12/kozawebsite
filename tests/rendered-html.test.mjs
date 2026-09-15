@@ -262,7 +262,7 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
   const richEditor = await readFile(new URL("../app/admin/rich-editor.tsx", import.meta.url), "utf8");
   assert.match(richEditor, /toggleHeading/, "Ara başlık zengin editörden yapılabilmeli");
   assert.match(richEditor, /setYoutubeVideo|openMedia\("video"\)/, "Video metnin istenen yerine eklenebilmeli");
-  assert.match(richEditor, /setImage/, "Görsel metnin istenen yerine eklenebilmeli");
+  assert.match(richEditor, /insertMedia\("image"/, "Görsel metnin istenen yerine eklenebilmeli");
   assert.match(workflowStudio, /selected\.spot\.length\}\/500/, "Yayın Stüdyosu spot sınırını göstermeli");
   assert.doesNotMatch(workflowStudio, /Otomatik kaydedildi|setTimeout\(\(\) => void persist/, "Yayın Stüdyosu değişiklikleri kendiliğinden kaydetmemeli");
   assert.match(workflowStudio, /beforeunload/, "Kaydedilmemiş değişiklikler sayfadan çıkarken korunmalı");
@@ -3000,7 +3000,7 @@ test("zengin metin editörü yalnız yönetim paketine girer ve gerekli araçlar
   for (const [arac, iz] of [
     ["kalın", "toggleBold"], ["italik", "toggleItalic"], ["altı çizili", "toggleUnderline"],
     ["bağlantı", "setLink"], ["numaralı liste", "toggleOrderedList"], ["madde listesi", "toggleBulletList"],
-    ["hizalama", "setTextAlign"], ["tablo", "insertTable"], ["görsel", "setImage"],
+    ["hizalama", "setTextAlign"], ["tablo", "insertTable"], ["görsel", "insertMedia"],
     ["başlık", "toggleHeading"], ["alıntı", "toggleBlockquote"], ["punto", "setFontSize"],
     ["yazı rengi", "setColor"], ["vurgu", "setHighlight"], ["geri al", "undo"], ["kelime sayacı", "characterCount"],
   ]) assert.match(source, new RegExp(iz), `Editörde ${arac} aracı bulunmalı`);
@@ -3459,4 +3459,41 @@ test("ana menü bağlantıları eşit yan sütunlarla ortalanır ve dar alanda k
   assert.match(css, /\.nav-links\{[^}]*justify-content:safe center[^}]*overflow-x:auto/);
   assert.match(css, /\.nav-inner>\.nav-search.open input\{position:absolute/);
   assert.match(await html("/"), /class="nav-links"/);
+});
+
+test("sosyal gömme bağlantı ve kodlarını güvenli sağlayıcı adreslerine dönüştürür", async () => {
+  const { parseSocialEmbed: parse } = await import('../db/social-embed.mjs');
+  for (const link of ['https://x.com/KozaTv/status/1234567890?s=20','https://twitter.com/KozaTv/status/1234567890']) {
+    assert.deepEqual(parse(link), {type:'twitter',id:'1234567890',url:'https://x.com/KozaTv/status/1234567890'});
+  }
+  assert.equal(parse('<blockquote class="twitter-tweet"><a href="https://x.com/KozaTv/status/1234567890">Gönderi</a></blockquote><script src="https://evil.example/code.js"></script>').url,'https://x.com/KozaTv/status/1234567890');
+  assert.equal(parse('<blockquote class="twitter-tweet"><a href="https://x.com/Interior">@Interior</a><a href="https://twitter.com/Interior/status/463440424141459456">Date</a></blockquote>').id, '463440424141459456');
+  for (const link of ['https://youtu.be/dQw4w9WgXcQ','https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10','https://www.youtube.com/shorts/dQw4w9WgXcQ','https://www.youtube.com/live/dQw4w9WgXcQ','<iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" onload="alert(1)"></iframe>']) {
+    assert.deepEqual(parse(link),{type:'youtube',id:'dQw4w9WgXcQ',url:'https://www.youtube.com/watch?v=dQw4w9WgXcQ'});
+  }
+  for (const input of ['', 'https://x.com/KozaTv', 'https://x.com.evil.example/KozaTv/status/1','javascript:alert(1)','https://evil.example/embed/dQw4w9WgXcQ','https://user:password@youtube.com/watch?v=dQw4w9WgXcQ','https://youtube.com/watch?v=invalid','a'.repeat(20001)]) assert.equal(parse(input),null,input);
+  const editor = await readFile(new URL('../app/admin/rich-editor.tsx',import.meta.url),'utf8');
+  assert.match(editor,/Bilgisayardan fotoğraf yükle/);
+  assert.match(editor,/fetch\("\/api\/media", \{ method: "POST", body: form \}\)/);
+  assert.match(editor,/insertMedia\("image", \{ src: data.media.publicUrl/);
+  assert.match(editor,/insertContentAt\(active.state.selection.to/);
+  assert.match(editor,/role="alert"/);
+  assert.match(editor,/onClick=\{applyEmbed\}>Habere ekle/);
+});
+
+test("sosyal gömmeler kaydedilir, son dakika bandı yalnız işaretli manşette görünür", async t => {
+  const input = {title:'Sosyal gömme ve manşet bandı denetimi',spot:'Haber içi sosyal gönderi ve manşet son dakika işaretini doğrulayan deneme.',body:'Haber içi sosyal gönderinin kayıttan sonra görünmesini ve son dakika bandının yalnız işaretli haberde çıkmasını doğrulayan deneme metni.',bodyHtml:'<p>Haber içi sosyal gönderinin kayıttan sonra görünmesini ve son dakika bandının yalnız işaretli haberde çıkmasını doğrulayan deneme metni.</p><blockquote class="twitter-tweet" data-dnt="true"><a href="https://twitter.com/KozaTv/status/1234567890">X / Twitter gönderisini görüntüle</a></blockquote><div data-youtube-video=""><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" width="400"></iframe></div>',category:'Gündem',status:'published',heroImage:'/news/studio.jpg',imageAlt:'Test',author:'Koza TV',sourceName:'Koza TV',homepagePlacement:'slider',isBreaking:true};
+  const response = await request('/api/articles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});
+  assert.equal(response.status,201);
+  const created = (await response.json()).article;
+  t.after(()=>{const db=new Database(process.env.KOZA_DB_PATH);db.prepare('DELETE FROM articles WHERE id=?').run(created.id);db.close();});
+  assert.match(await html(`/haber/${created.slug}`),/class="twitter-tweet"/);
+  assert.match(await html('/'),/class="lead-breaking"/);
+  const changed = await request('/api/articles',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({...created,isBreaking:false})});
+  assert.equal(changed.status,200);
+  assert.doesNotMatch(await html('/'),/class="lead-breaking"/);
+  const css=await readFile(new URL('../app/globals.css',import.meta.url),'utf8');
+  assert.match(css,/\.home \.lead-breaking\{[^}]*top:18px;right:18px/);
+  assert.match(css,/\.home \.lead-breaking\{[^}]*white-space:nowrap;writing-mode:horizontal-tb/);
+  assert.match(css,/@media\(max-width:680px\)\{\.home \.lead-breaking\{top:10px;right:10px/);
 });

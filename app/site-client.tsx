@@ -221,6 +221,7 @@ export function LeadSlider({ items }: { items: Lead[] }) {
         ))}
       </div>
       <div className="lead-shade" />
+      {item.isBreaking && <div className="lead-breaking"><i aria-hidden="true" />SON DAKİKA</div>}
       {/* Görselin tamamı habere gider. Başlıktaki bağlantı okuyucu yazılımlar ve klavye için
           tek erişilebilir bağlantı olarak kalır; bu katman yalnız fareyle tıklama içindir. */}
       <a className="lead-hit" href={item.href ?? "/son-dakika"} tabIndex={-1} aria-hidden="true">

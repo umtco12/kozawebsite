@@ -12,6 +12,7 @@ import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Youtube from "@tiptap/extension-youtube";
 import { resizableMediaView } from "./resizable-media";
+import { parseSocialEmbed } from "../../db/social-embed.mjs";
 import { mediaWidthAttributes } from "./media-size-model.mjs";
 
 /* Genişlik hem öznitelik hem satır içi stil olarak yazılır. Yayındaki genel `img{width:100%}`
@@ -54,6 +55,13 @@ const ResizableYoutube = Youtube.extend({
   addAttributes() { return resizableAttributes(this.parent?.()); },
 });
 
+const TwitterPost = Node.create({
+  name: "twitterPost", priority: 1000, group: "block", atom: true, draggable: true,
+  addAttributes: () => ({ url: { default: null, parseHTML: element => parseSocialEmbed(element.outerHTML)?.url } }),
+  parseHTML: () => [{ tag: 'blockquote.twitter-tweet', getAttrs: element => parseSocialEmbed(element.outerHTML)?.type === 'twitter' ? {} : false }],
+  renderHTML: ({ node }) => ["blockquote", { class: "twitter-tweet", "data-dnt": "true" }, ["a", { href: node.attrs.url, target: "_blank", rel: "noreferrer nofollow" }, "X / Twitter gönderisini görüntüle"]],
+});
+
 type MediaAsset = { id: number; publicUrl: string; originalName: string; altText: string; mimeType: string };
 
 /* Küçük tek renkli simge seti; araç çubuğu metin glifleri yerine bunları kullanır. */
@@ -79,7 +87,7 @@ const icons: Record<string, string> = {
 function Icon({ name }: { name: string }) {
   return <svg className="rt-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d={icons[name]} /></svg>;
 }
-type PanelKind = "image" | "video" | "link" | "source" | null;
+type PanelKind = "image" | "video" | "link" | "source" | "embed" | null;
 
 const fontSizes = ["14px", "16px", "18px", "20px", "24px", "28px", "32px"];
 const textColors = [
@@ -103,6 +111,11 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
   const [linkHref, setLinkHref] = useState("");
   const [sourceHtml, setSourceHtml] = useState("");
   const [loadingMedia, setLoadingMedia] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [mediaError, setMediaError] = useState("");
+  const [embedInput, setEmbedInput] = useState("");
+  const [embedError, setEmbedError] = useState("");
+  const [uploadAlt, setUploadAlt] = useState("");
   /* Dışarıdan gelen değeri, kullanıcı yazarken editöre geri basmamak için son yayılan HTML tutulur. */
   const emitted = useRef(value);
 
@@ -119,10 +132,22 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
       TableKit.configure({ table: { resizable: true } }),
       ResizableImage.configure({ inline: false, allowBase64: false }),
       ResizableYoutube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
-      LibraryVideo,
+      LibraryVideo, TwitterPost,
       CharacterCount,
       Placeholder.configure({ placeholder }),
     ],
+    editorProps: {
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData("text/plain").trim() || "";
+        const embed = parseSocialEmbed(text);
+        if (!embed || disabled) return false;
+        const type = embed.type === "youtube" ? "youtube" : "twitterPost";
+        const attrs = embed.type === "youtube" ? { src: embed.url } : { url: embed.url };
+        const node = view.state.schema.nodes[type].create(attrs);
+        view.dispatch(view.state.tr.insert(view.state.selection.to, node));
+        event.preventDefault(); return true;
+      },
+    },
     onUpdate: ({ editor: instance }) => {
       const html = instance.getHTML();
       emitted.current = html; onChange(html);
@@ -137,12 +162,13 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
   }, [editor, value]);
 
   const openMedia = useCallback(async (kind: "image" | "video") => {
-    setPanel(kind); setMediaQuery(""); setLoadingMedia(true);
+    setPanel(kind); setMediaQuery(""); setMediaError(""); setLoadingMedia(true);
     try {
       const response = await fetch(`/api/media?type=${kind}&limit=60`);
-      const data = response.ok ? await response.json() : {};
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Kütüphane yüklenemedi.");
       setLibrary(Array.isArray(data.media) ? data.media : []);
-    } catch { setLibrary([]); }
+    } catch (error) { setLibrary([]); setMediaError(error instanceof Error ? error.message : "Kütüphane yüklenemedi."); }
     setLoadingMedia(false);
   }, []);
 
@@ -155,6 +181,41 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
   const chain = () => editor.chain().focus();
   const visibleMedia = library.filter((item) => !mediaQuery.trim() || `${item.originalName} ${item.altText}`.toLocaleLowerCase("tr-TR").includes(mediaQuery.toLocaleLowerCase("tr-TR")));
   const words = editor.storage.characterCount.words();
+
+  function insertMedia(type: string, attrs: Record<string, unknown>) {
+    return active.chain().focus().insertContentAt(active.state.selection.to, { type, attrs }).run();
+  }
+
+  async function uploadImage(file?: File) {
+    if (!file || disabled || uploading) return;
+    setMediaError("");
+    if (!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type) || file.size > 12 * 1024 * 1024 || !file.size) {
+      setMediaError("JPG, PNG, WebP veya GIF seçin; dosya boş olmamalı ve en fazla 12 MB olmalı."); return;
+    }
+    setUploading(true);
+    try {
+      const form = new FormData(); form.set("file", file); form.set("altText", uploadAlt.trim() || file.name);
+      const response = await fetch("/api/media", { method: "POST", body: form });
+      const data = await response.json();
+      if (!response.ok || !data.media?.publicUrl) throw new Error(data.error || "Fotoğraf yüklenemedi. Yeniden deneyin.");
+      if (active.isDestroyed) return;
+      insertMedia("image", { src: data.media.publicUrl, alt: data.media.altText || file.name });
+      setLibrary(items => [data.media, ...items]); setPanel(null); setUploadAlt("");
+    } catch (error) { setMediaError(error instanceof Error ? error.message : "Bağlantı kurulamadı. Yeniden deneyin."); }
+    finally { setUploading(false); }
+  }
+
+  function applyEmbed() {
+    const embed = parseSocialEmbed(embedInput);
+    if (!embed) { setEmbedError("Geçerli bir X/Twitter gönderisi veya YouTube video bağlantısı / gömme kodu girin."); return; }
+    const inserted = embed.type === "youtube"
+      ? insertMedia("youtube", { src: embed.url })
+      : insertMedia("twitterPost", { url: embed.url });
+    if (!inserted) { setEmbedError("İçerik eklenemedi. Haber metninde bir konum seçip yeniden deneyin."); return; }
+    setPanel(null); setEmbedInput(""); setEmbedError("");
+  }
+
+  function openEmbed() { setEmbedInput(""); setEmbedError(""); setPanel("embed"); }
 
   function applyLink() {
     const href = linkHref.trim();
@@ -177,6 +238,7 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
         <details className="rt-menu"><summary>Ekle</summary><div>
           <button type="button" onClick={() => void openMedia("image")}>Görsel…</button>
           <button type="button" onClick={() => void openMedia("video")}>Video…</button>
+          <button type="button" onClick={openEmbed}>X / YouTube göm…</button>
           <button type="button" onClick={() => { setLinkHref(editor.getAttributes("link").href ?? ""); setPanel("link"); }}>Bağlantı…</button>
           <button type="button" onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>Tablo (3×3)</button>
           <button type="button" onClick={() => chain().setHorizontalRule().run()}>Yatay çizgi</button>
@@ -201,6 +263,7 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
       <div className="rt-toolbar">
         <button type="button" title="Görsel ekle" onClick={() => void openMedia("image")}><Icon name="gorsel" /></button>
         <button type="button" title="Video ekle" onClick={() => void openMedia("video")}><Icon name="video" /></button>
+        <button type="button" title="X / YouTube göm" onClick={openEmbed}>Göm</button>
         <span className="rt-sep" />
         <button type="button" title="Geri al" onClick={() => chain().undo().run()}><Icon name="geri" /></button>
         <button type="button" title="Yinele" onClick={() => chain().redo().run()}><Icon name="ileri" /></button>
@@ -267,32 +330,41 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
             <small>{loadingMedia ? "Yükleniyor…" : `${visibleMedia.length} sonuç`}</small>
             <button type="button" onClick={() => setPanel(null)}>Kapat</button>
           </div>
+          {mediaError && <p role="alert" className="rt-error">{mediaError}</p>}
+          {panel === "image" && <div className="rt-upload">
+            <label>Fotoğraf açıklaması<input value={uploadAlt} onChange={event => setUploadAlt(event.target.value)} placeholder="Fotoğrafta ne var?" disabled={uploading || disabled} /></label>
+            <label className="rt-upload-button">{uploading ? "Fotoğraf yükleniyor…" : "Bilgisayardan fotoğraf yükle"}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Bilgisayardan fotoğraf yükle" disabled={uploading || disabled} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void uploadImage(file); }} />
+            </label>
+            <small role="status">{uploading ? "Yükleniyor; tamamlanınca haberin içine eklenecek." : "JPG, PNG, WebP, GIF · En fazla 12 MB. Yüklenen fotoğraf kütüphaneye de kaydedilir."}</small>
+          </div>}
           <div className="rt-panel-grid">
             {visibleMedia.map((item) => (
               <button type="button" key={item.id} onClick={() => {
-                if (panel === "image") chain().setImage({ src: item.publicUrl, alt: item.altText || item.originalName }).run();
-                else chain().insertContent({ type: "video", attrs: { src: item.publicUrl } }).run();
+                if (panel === "image") insertMedia("image", { src: item.publicUrl, alt: item.altText || item.originalName });
+                else insertMedia("video", { src: item.publicUrl });
                 setPanel(null);
               }}>
                 {panel === "image" ? <img src={item.publicUrl} alt={item.altText} /> : <span className="rt-video-thumb">▶</span>}
                 <small>{item.originalName}</small>
               </button>
             ))}
-            {!loadingMedia && visibleMedia.length === 0 && <p>Kütüphanede kayıt bulunamadı. Medya Kütüphanesi ekranından yükleyebilirsiniz.</p>}
+            {!loadingMedia && visibleMedia.length === 0 && <p>Kütüphanede kayıt bulunamadı.</p>}
           </div>
           {panel === "video" && (
             <div className="rt-panel-foot">
-              <input type="url" placeholder="YouTube bağlantısı yapıştırın" onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                const url = (event.target as HTMLInputElement).value.trim();
-                if (url) { chain().setYoutubeVideo({ src: url }).run(); setPanel(null); }
-              }} />
-              <small>Bağlantıyı yapıştırıp Enter&apos;a basın.</small>
+              <button type="button" onClick={openEmbed}>YouTube bağlantısı veya gömme kodu ekle</button>
             </div>
           )}
         </div>
       )}
+
+      {panel === "embed" && <div className="rt-panel rt-embed-panel" aria-label="X / Twitter ve YouTube gömme">
+        <label>Bağlantı veya gömme kodu<textarea value={embedInput} onChange={event => { setEmbedInput(event.target.value); setEmbedError(""); }} placeholder="X/Twitter gönderi bağlantısını veya YouTube bağlantısını / gömme kodunu yapıştırın…" rows={4} /></label>
+        <small>X/Twitter gönderileri ile YouTube video, Shorts ve canlı video bağlantıları desteklenir.</small>
+        {embedError && <p role="alert" className="rt-error">{embedError}</p>}
+        <div className="rt-panel-foot"><button type="button" disabled={disabled} onClick={applyEmbed}>Habere ekle</button><button type="button" onClick={() => setPanel(null)}>Vazgeç</button></div>
+      </div>}
 
       {panel === "link" && (
         <div className="rt-panel rt-panel-inline" aria-label="Bağlantı">

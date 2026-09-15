@@ -1797,3 +1797,18 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .nav-links>a{flex-shrink:0}
 .nav-inner>.nav-search{grid-column:3;position:relative;width:42px;margin-left:0;justify-content:flex-end}
 .nav-inner>.nav-search.open input{position:absolute;right:0;top:calc(100% + 10px);z-index:10;width:240px;padding:12px;background:#fff;border:1px solid var(--line);box-shadow:0 6px 18px #0002}
+
+.rt-upload,.rt-embed-panel{display:grid;gap:12px;padding:16px;min-width:0}
+.rt-upload label,.rt-embed-panel label{display:grid;gap:6px;font-size:13px;font-weight:700;min-width:0}
+.rt-upload input,.rt-embed-panel textarea{width:100%;max-width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font:inherit;background:white;color:var(--ink)}
+.rt-upload-button{padding:12px;background:#f7f4ef;border:1px dashed #a7adb5;border-radius:8px}
+.rt-error{color:#a20b15;background:#fff0f1;padding:10px;border-radius:6px}
+.rt-upload small,.rt-embed-panel small{line-height:1.5;color:var(--muted)}
+.rt-surface blockquote.twitter-tweet,.rich-body blockquote.twitter-tweet{margin:20px auto;width:min(550px,100%);padding:16px;border:1px solid var(--line);border-radius:12px;overflow-wrap:anywhere}
+.home .lead-breaking{position:absolute;top:18px;right:18px;white-space:nowrap;writing-mode:horizontal-tb;z-index:4;display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:4px;background:#dc151d;color:#fff;font-size:12px;font-weight:900;letter-spacing:1px;line-height:1;box-shadow:0 2px 10px #0003;pointer-events:none}
+.home .lead-breaking i{width:6px;height:6px;flex:none;border-radius:50%;background:white}
+@media(max-width:680px){.home .lead-breaking{top:10px;right:10px;padding:7px 9px;font-size:10px;letter-spacing:.7px;gap:6px}.rt-upload,.rt-embed-panel{padding:12px}}
+@media(min-width:761px){.home .lead-breaking~.lead-copy-right-top,.home .lead-breaking~.lead-copy-left-top{top:64px}}
+.rich-body .koza-twitter-post{margin:20px auto;width:min(550px,100%);padding:16px;border:1px solid var(--line);border-radius:12px;overflow-wrap:anywhere}
+.rich-body .koza-twitter-post[hidden]{display:none}
+.koza-twitter-render{max-width:100%;margin:20px auto}
