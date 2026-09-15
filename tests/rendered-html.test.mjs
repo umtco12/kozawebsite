@@ -3497,3 +3497,25 @@ test("sosyal gömmeler kaydedilir, son dakika bandı yalnız işaretli manşette
   assert.match(css,/\.home \.lead-breaking\{[^}]*white-space:nowrap;writing-mode:horizontal-tb/);
   assert.match(css,/@media\(max-width:680px\)\{\.home \.lead-breaking\{top:10px;right:10px/);
 });
+
+test("admin haber editörü ve arşivi büyük, yalnız yönetime özel yazı ölçeği kullanır", async () => {
+  const panel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const studio = await readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  for (const source of [panel, studio]) {
+    assert.match(source, /className="(?:wide )?editor-title-field"[^>]*>Haber başlığı/);
+    assert.match(source, /className="(?:wide )?editor-spot-field"[^>]*>Spot/);
+  }
+
+  const scale = css.match(/\/\* Admin editör okuma ölçeği başlangıcı\. \*\/[\s\S]*?\/\* Admin editör okuma ölçeği sonu\. \*\//)?.[0] || "";
+  assert.ok(scale, "Yalnız admin paneline ait okuma ölçeği bloğu bulunmalı");
+  assert.match(scale, /\.newsroom-shell \.editor-title-field input\{[^}]*font-size:22px[^}]*line-height:1\.45/);
+  assert.match(scale, /\.newsroom-shell \.editor-spot-field textarea\{[^}]*font-size:18px[^}]*line-height:1\.65/);
+  assert.match(scale, /\.newsroom-shell \.rt-surface \.tiptap\{[^}]*font-size:18px[^}]*line-height:1\.8/);
+  assert.match(scale, /\.newsroom-shell \.article-table \.article-cell strong\{[^}]*font-size:15px[^}]*line-height:1\.45/);
+  assert.match(scale, /\.newsroom-shell \.article-table \.table-source small\{[^}]*font-size:12px/);
+  assert.match(scale, /\.newsroom-shell \.table-actions>a,[^}]*font-size:11px/);
+  assert.doesNotMatch(scale, /\.home\b|\.article-body\b|\.site-|\.lead-|\.news-card/,
+    "Büyük yazı kuralları ziyaretçi yüzeylerine sızmamalı");
+});

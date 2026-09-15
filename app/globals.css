@@ -1812,3 +1812,32 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .rich-body .koza-twitter-post{margin:20px auto;width:min(550px,100%);padding:16px;border:1px solid var(--line);border-radius:12px;overflow-wrap:anywhere}
 .rich-body .koza-twitter-post[hidden]{display:none}
 .koza-twitter-render{max-width:100%;margin:20px auto}
+
+/* Admin editör okuma ölçeği başlangıcı. */
+.newsroom-shell .editor-title-field,.newsroom-shell .editor-spot-field,.newsroom-shell .body-editor-field{font-size:13px}
+.newsroom-shell .editor-title-field input{min-height:58px;padding:13px 16px;font-size:22px;line-height:1.45}
+.newsroom-shell .editor-spot-field textarea{min-height:150px;padding:14px 16px;font-size:18px;line-height:1.65}
+.newsroom-shell .body-editor-label>strong{font-size:13px}
+.newsroom-shell .body-editor-label>span{font-size:12px;line-height:1.5}
+.newsroom-shell .rt-menu>summary,.newsroom-shell .rt-menu>div>button{font-size:14px}
+.newsroom-shell .rt-toolbar>button{min-width:36px;height:36px;font-size:15px}
+.newsroom-shell .rt-select select{height:36px;font-size:14px}
+.newsroom-shell .rt-surface .tiptap{font-size:18px;line-height:1.8}
+.newsroom-shell .rt-status{font-size:12px}
+.newsroom-shell .archive-toolbar button{min-height:42px;font-size:12px}
+.newsroom-shell .archive-search input{height:42px;font-size:14px}
+.newsroom-shell .archive-search small{font-size:11px}
+.newsroom-shell .article-table .table-head{font-size:10px}
+.newsroom-shell .article-table .table-row{padding-block:16px;font-size:12px;line-height:1.45}
+.newsroom-shell .article-table .article-cell{grid-template-columns:86px minmax(0,1fr);gap:14px}
+.newsroom-shell .article-table .article-cell img{height:58px}
+.newsroom-shell .article-table .article-cell b{font-size:10px;line-height:1.4}
+.newsroom-shell .article-table .article-cell strong{font-size:15px;line-height:1.45}
+.newsroom-shell .article-table .status{font-size:9px!important;padding:5px 8px}
+.newsroom-shell .article-table .table-source b{font-size:12px;line-height:1.4}
+.newsroom-shell .article-table .table-source small{font-size:12px;line-height:1.5}
+.newsroom-shell .article-table .table-updated{font-size:12px;line-height:1.45}
+.newsroom-shell .table-actions>a,.newsroom-shell .table-actions>button{min-height:42px;padding-inline:12px;font-size:11px}
+.newsroom-shell .archive-pagination{font-size:13px}
+@media(max-width:600px){.newsroom-shell .article-table .article-cell{grid-template-columns:76px minmax(0,1fr);gap:11px}.newsroom-shell .article-table .article-cell img{height:52px}.newsroom-shell .editor-title-field input{font-size:20px}.newsroom-shell .editor-spot-field textarea,.newsroom-shell .rt-surface .tiptap{font-size:17px}}
+/* Admin editör okuma ölçeği sonu. */
