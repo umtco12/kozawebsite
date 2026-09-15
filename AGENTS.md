@@ -1146,3 +1146,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/admin/panel.tsx`, `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: Yeni regresyonlar önce eksik ortak yazı değişkeni ve görünüm aracı nedeniyle başarısız, uygulamadan sonra başarılı oldu. `npm test` production build ile **114 geçti, 0 başarısız, 0 atlandı**; `npx tsc --noEmit` ve bağımsız `npm run build` başarılı, `npm run lint` **0 hata ve 44 mevcut ham görsel uyarısıyla** tamamlandı. İzole test yöneticisiyle 1440 px masaüstü, 900 px tablet ve 390 px mobilde %130 ölçek kontrol edildi; yatay taşma olmadı. Spot/gövde masaüstünde 18/18 px, mobilde 17/17 px ve aynı font ailesi olarak ölçüldü. %130 tercih yenileme sonrasında aynı kullanıcı için korundu; ziyaretçi ana sayfasında admin aracı/sınıfı bulunmadı ve gövde ölçeği 1 kaldı.
 - Kalan karar veya risk: Tercih kullanıcıya ve kullandığı tarayıcıya özeldir; farklı cihazda yeniden seçilmesi gerekir. Dağıtım sonucu aşağıda kaydedilecektir.
+
+### 2026-09-15 — Admin görünüm ölçeğinin staging dağıtımı
+
+- İstek: Spot ve haber gövdesi eşitliğinin, kullanıcıya özel A−/A+ admin görünüm aracının staging ortamına gönderilmesi.
+- Yapılanlar: `00009074ff7d044bf8aa110bd7f7ff932c9d2010` uygulama commit'i `main` branch'ine fast-forward gönderildi. GitHub Actions temiz kurulum, production bağımlılık denetimi, test/build, lint, kaynak aktarımı, sunucu tarafı yeniden test, atomik sürüm değişimi ve dış smoke adımlarının tamamını başarıyla bitirdi.
+- Değişen ana dosyalar: Dağıtılan uygulama sürümü `0000907`; yayın kaydı için `AGENTS.md`.
+- Doğrulama: GitHub Actions çalışması `34958676191` **2 dakika 28 saniyede başarıyla** tamamlandı. Yerel, CI ve sunucu testlerinde **114 test geçti, 0 başarısız, 0 atlandı**; typecheck ve bağımsız build başarılı, lint 0 hata ve 44 bilinen ham görsel uyarısıyla tamamlandı. Dış kontrolde `/`, `/admin/giris`, `/canli` ve `/son-dakika` HTTP 200; `/admin` HTTP 307 ve `/api/auth/me` HTTP 401 döndürdü. Yayındaki CSS paketinde ortak `--admin-editor-copy-size:18px`, %90/%115/%130 kullanıcı ölçekleri ve erişilebilir admin kontrolü doğrulandı.
+- Kalan karar veya risk: Yayın Hetzner staging IP adresinde HTTP çalışmaktadır; canlı marka alan adı/DNS geçişi bu kapsamda değildir. Görünüm tercihi kullanıcının mevcut tarayıcısında saklanır; başka cihazda yeniden seçilmelidir.
