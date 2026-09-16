@@ -1170,3 +1170,11 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `db/ad-model.mjs`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: Yeni regresyon testi uygulamadan önce eski adlar nedeniyle başarısız, değişiklikten sonra başarılı oldu. `npm test` production build ile **114 geçti, 0 başarısız, 0 atlandı**; `npx tsc --noEmit` ve bağımsız build başarılı, `npm run lint` **0 hata ve 44 mevcut ham görsel uyarısıyla** tamamlandı. İzole yerel yönetici hesabıyla Reklam Merkezi gerçek tarayıcıda açıldı; kartlarda ve reklam alanı seçim menüsünde iki yeni ad göründü, üç eski ifade bulunmadı ve 1280 px görünümde yatay taşma oluşmadı.
 - Kalan karar veya risk: Yalnız görünen metinler değişti; mevcut reklam verileri ve yerleşimleri etkilenmedi. Staging dağıtım sonucu ayrıca kaydedilecektir.
+
+### 2026-09-16 — Reklam adları ve hızlı haber girişinin staging dağıtımı
+
+- İstek: Reklam Merkezi'ndeki yeni konum adlarının ve haber metni alt sınırını 1 karaktere indiren düzeltmenin staging ortamına yayınlanması.
+- Yapılanlar: `32518b6ef032b352136f52b53f5edefb1465351c` uygulama commit'i `main` branch'ine fast-forward gönderildi. GitHub Actions temiz kurulum, production bağımlılık denetimi, test/build, lint, kaynak aktarımı, sunucu tarafı yeniden test, atomik sürüm değişimi ve dış smoke adımlarının tamamını başarıyla bitirdi.
+- Değişen ana dosyalar: Dağıtılan uygulama sürümü `32518b6`; yayın kaydı için `AGENTS.md`.
+- Doğrulama: GitHub Actions çalışması `35074538857` **2 dakika 31 saniyede başarıyla** tamamlandı. Yerel, CI ve sunucu testlerinde **114 test geçti, 0 başarısız, 0 atlandı**; typecheck ve bağımsız build başarılı, lint 0 hata ve 44 bilinen ham görsel uyarısıyla tamamlandı. Dağıtım günlüğü aktif sürümü `32518b6ef032b352136f52b53f5edefb1465351c` olarak doğruladı. Dış kontrolde `/`, `/admin/giris`, `/canli` ve `/son-dakika` HTTP 200; `/admin` HTTP 307 ve `/api/auth/me` HTTP 401 döndürdü.
+- Kalan karar veya risk: Yayın Hetzner staging IP adresinde HTTP çalışmaktadır; canlı marka alan adı/DNS geçişi bu kapsamda değildir. Haber metni boş bırakılamaz; en az bir görünür karakter zorunluluğu korunur.
