@@ -50,7 +50,7 @@ export function validateArticleInput(payload) {
   const spot = String(payload.spot ?? "").trim();
   if (spot.length < 24) errors.spot = "Spot en az 24 karakter olmalı";
   else if (spot.length > 500) errors.spot = "Spot en fazla 500 karakter olmalı";
-  if (String(payload.body ?? "").trim().length < 80) errors.body = "Haber metni en az 80 karakter olmalı";
+  if (String(payload.body ?? "").trim().length < 1) errors.body = "Haber metni en az 1 karakter olmalı";
   if (!String(payload.category ?? "").trim()) errors.category = "Kategori seçilmeli";
   if (!String(payload.heroImage ?? "").trim()) errors.heroImage = "Kapak fotoğrafı seçmeden haber kaydedilemez";
   if (!articleStatuses.includes(payload.status)) errors.status = "Geçerli bir yayın durumu seçilmeli";

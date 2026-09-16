@@ -4,7 +4,7 @@
    - `bodyHtml`: zengin metin editöründen gelen HTML. Doldurulmuşsa yayında bu gösterilir.
    - `content_blocks`: eski blok dizisi. `bodyHtml` boş olan bütün haberler eskisi gibi çalışır.
 
-   `body` sütunu her iki durumda da düz metin projeksiyonudur; arama ve en az 80 karakter
+   `body` sütunu her iki durumda da düz metin projeksiyonudur; arama ve en az 1 karakter
    kuralı bu sütunu kullandığı için zengin metin kaydedilirken buradan üretilir. */
 
 export const MAX_BODY_HTML = 200_000;

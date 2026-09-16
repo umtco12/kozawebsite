@@ -327,6 +327,14 @@ test("admin içerik merkezinin temel yayın araçları görünür", async () => 
 
 test("reklam modeli sabit envanteri, güvenli bağlantıları ve tarih durumlarını doğrular", () => {
   assert.deepEqual(adPlacements.map((item) => item.key), ["site_top", "site_left_rail", "site_right_rail", "home_billboard", "section_inline", "article_sidebar"]);
+  assert.deepEqual(
+    adPlacements.filter((item) => ["home_billboard", "section_inline"].includes(item.key)).map(({ key, label, scope }) => ({ key, label, scope })),
+    [
+      { key: "home_billboard", label: "Ana sayfa manşet altında", scope: "Ana sayfa manşet altında" },
+      { key: "section_inline", label: "Detay Haber Altı Reklam", scope: "Kategori, Son Dakika ve kesintisiz haber akışı" },
+    ],
+    "Reklam Merkezi kullanıcıya verilen yeni konum adlarını göstermeli",
+  );
   const now = Date.now();
   const valid = validateAdvertisement({
     placement: "home_billboard", advertiser: "Koza TV", campaignName: "Kurumsal tanıtım",
@@ -669,10 +677,12 @@ test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını
   const validPayload = { title: "Test için yeterince uzun haber başlığı", spot: "Bu test için yeterince açıklayıcı bir haber spotudur.", body: "Bu haber metni doğrulama sınırını geçmek için yeterince uzun hazırlanmıştır. İkinci cümle içerik alanını tamamlar.", category: "Gündem", status: "draft", heroImage: "/news/studio.jpg", sourceUrl: "https://example.com/haber", videoUrl: "/media/2026/09/0123456789abcdef0123456789abcdef.mp4", homepagePlacement: "side", headlinePosition: "right-top", isHomepageGallery: 1 };
   const valid = validateArticleInput(validPayload);
   assert.equal(valid.valid, true);
+  assert.equal(validateArticleInput({ ...validPayload, body: "A" }).valid, true, "Tek karakterlik haber metni kabul edilmeli");
+  assert.match(validateArticleInput({ ...validPayload, body: "" }).errors.body, /en az 1 karakter/, "Boş haber metni reddedilmeli");
   const invalid = validateArticleInput({ title: "Kısa", spot: "Kısa", body: "Kısa", category: "", status: "published", sourceUrl: "javascript:alert(1)", videoUrl: "javascript:alert(1)", homepagePlacement: "rastgele", headlinePosition: "middle" });
   assert.equal(invalid.valid, false);
   assert.ok(invalid.errors.title);
-  assert.ok(invalid.errors.body);
+  assert.equal(invalid.errors.body, undefined, "Bir karakterden uzun haber metni artık reddedilmemeli");
   assert.ok(invalid.errors.videoUrl);
   assert.ok(invalid.errors.homepagePlacement);
   assert.ok(invalid.errors.headlinePosition);
@@ -2891,7 +2901,7 @@ test("reklam merkezi yönetim kılavuzu açılır, görselli ve gerçek panel di
 test("zengin metin modeli düz metin projeksiyonunu, blok dönüşümünü ve sınırları uygular", async () => {
   const { blocksToHtml, htmlToPlainText, normalizeArticleHtml, plainTextToHtml, MAX_BODY_HTML } = await import("../db/rich-text.mjs");
 
-  /* Arama ve en az 80 karakter kuralı `body` sütununu kullandığı için projeksiyon doğru olmalı. */
+  /* Arama ve en az 1 karakter kuralı `body` sütununu kullandığı için projeksiyon doğru olmalı. */
   assert.equal(htmlToPlainText("<h2>Başlık</h2><p>Birinci <strong>cümle</strong>.</p><p>İkinci cümle.</p>"), "Başlık\n\nBirinci cümle.\n\nİkinci cümle.", "Blok sınırları boş satıra dönmeli ki bloklar yeniden üretilebilsin");
   assert.equal(htmlToPlainText("<p>Satır bir<br>Satır iki</p>"), "Satır bir\nSatır iki");
   assert.equal(htmlToPlainText("<p>Koza &amp; TV &quot;canlı&quot; &#39;yayın&#39;&nbsp;akışı</p>"), 'Koza & TV "canlı" \'yayın\' akışı');
@@ -2987,12 +2997,16 @@ test("zengin metin gövdesi yayında gösterilir; arşivdeki haberler eski düze
   const arama = await html("/arama?q=" + encodeURIComponent("iç bağlantı bulunur"));
   assert.match(arama, /Zengin metin editoru yayin testi/, "Zengin gövdeli haber arama sonuçlarında çıkmalı");
 
-  /* Gövdesi kısa kalan zengin haber kabul edilmemeli. */
+  /* Tek karakterlik zengin haber son dakika akışı için kabul edilmeli. */
   const kisa = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
-    ...ortak, slug: "", title: "Cok kisa govdeli zengin haber", spot: "Kısa gövdenin reddedildiğini doğrulayan yeterince uzun test spotu.",
-    body: "Kısa.", bodyHtml: "<p>Kısa.</p>",
+    ...ortak, slug: "", title: "Cok kisa govdeli zengin haber", spot: "Tek karakterlik gövdenin kabul edildiğini doğrulayan yeterince uzun test spotu.",
+    body: "A", bodyHtml: "<p>A</p>",
   }) });
-  assert.equal(kisa.status, 400, "En az 80 karakter kuralı zengin gövdede de uygulanmalı");
+  assert.equal(kisa.status, 201, "Tek karakterlik haber metni kaydedilebilmeli");
+  const kisaKayit = (await kisa.json()).article;
+  const db = new Database(process.env.KOZA_DB_PATH);
+  db.prepare("DELETE FROM articles WHERE id=?").run(kisaKayit.id);
+  db.close();
 });
 
 test("zengin metin editörü yalnız yönetim paketine girer ve gerekli araçları taşır", async () => {

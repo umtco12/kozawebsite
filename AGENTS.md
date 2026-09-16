@@ -1154,3 +1154,19 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: Dağıtılan uygulama sürümü `0000907`; yayın kaydı için `AGENTS.md`.
 - Doğrulama: GitHub Actions çalışması `34958676191` **2 dakika 28 saniyede başarıyla** tamamlandı. Yerel, CI ve sunucu testlerinde **114 test geçti, 0 başarısız, 0 atlandı**; typecheck ve bağımsız build başarılı, lint 0 hata ve 44 bilinen ham görsel uyarısıyla tamamlandı. Dış kontrolde `/`, `/admin/giris`, `/canli` ve `/son-dakika` HTTP 200; `/admin` HTTP 307 ve `/api/auth/me` HTTP 401 döndürdü. Yayındaki CSS paketinde ortak `--admin-editor-copy-size:18px`, %90/%115/%130 kullanıcı ölçekleri ve erişilebilir admin kontrolü doğrulandı.
 - Kalan karar veya risk: Yayın Hetzner staging IP adresinde HTTP çalışmaktadır; canlı marka alan adı/DNS geçişi bu kapsamda değildir. Görünüm tercihi kullanıcının mevcut tarayıcısında saklanır; başka cihazda yeniden seçilmelidir.
+
+### 2026-09-16 — Haber metni alt sınırının 1 karaktere indirilmesi
+
+- İstek: Son dakika haberlerinin hızlı girilebilmesi için haber metnindeki 80 karakter zorunluluğunun yalnızca 1 karaktere indirilmesi; başka bir davranışın değiştirilmemesi.
+- Yapılanlar: Haber doğrulama modeli, editoryal yayın kontrol listesi, Yeni Haber ekranı ve Yayın Stüdyosu aynı 1 karakter alt sınırına geçirildi. Boş veya yalnız boşluk içeren haber metni reddedilmeye devam ediyor; tek karakter ve üzerindeki metin kaydedilebiliyor. Başlık, spot, kapak görseli ve diğer yayın kuralları değiştirilmedi.
+- Değişen ana dosyalar: `db/article-model.mjs`, `db/index.ts`, `db/rich-text.mjs`, `app/admin/panel.tsx`, `app/admin/workflow-studio.tsx`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: Regresyon testi değişiklikten önce tek karakterli metni modelde ve API'de reddederek başarısız oldu; uygulamadan sonra geçti. `npm test` production build ile **114 geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build` ve `npx tsc --noEmit` başarılı; `npm run lint` **0 hata, 44 mevcut ham görsel uyarısı** ile tamamlandı.
+- Kalan karar veya risk: Değişiklik yerelde hazırdır; commit, push veya staging dağıtımı yapılmadı. Haber metni boş bırakılamaz, en az bir görünür karakter gerekir.
+
+### 2026-09-16 — Reklam konumu başlıklarının sadeleştirilmesi
+
+- İstek: Reklam Merkezi'ndeki **Ana sayfa · manşet sonrası** ve **Ana sayfa marka panosu** ifadelerinin **Ana sayfa manşet altında**, **Bölüm içi reklam** ifadesinin ise **Detay Haber Altı Reklam** olarak doğrudan değiştirilip staging ortamına yayınlanması.
+- Yapılanlar: `home_billboard` reklam konumunun yönetim panelindeki etiket ve kapsam metni **Ana sayfa manşet altında** olarak birleştirildi. `section_inline` konumunun görünen adı **Detay Haber Altı Reklam** oldu. Reklam anahtarları, mevcut kampanyalar, yerleşim davranışı ve ziyaretçi sayfalarındaki reklam gösterimi değiştirilmedi.
+- Değişen ana dosyalar: `db/ad-model.mjs`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: Yeni regresyon testi uygulamadan önce eski adlar nedeniyle başarısız, değişiklikten sonra başarılı oldu. `npm test` production build ile **114 geçti, 0 başarısız, 0 atlandı**; `npx tsc --noEmit` ve bağımsız build başarılı, `npm run lint` **0 hata ve 44 mevcut ham görsel uyarısıyla** tamamlandı. İzole yerel yönetici hesabıyla Reklam Merkezi gerçek tarayıcıda açıldı; kartlarda ve reklam alanı seçim menüsünde iki yeni ad göründü, üç eski ifade bulunmadı ve 1280 px görünümde yatay taşma oluşmadı.
+- Kalan karar veya risk: Yalnız görünen metinler değişti; mevcut reklam verileri ve yerleşimleri etkilenmedi. Staging dağıtım sonucu ayrıca kaydedilecektir.

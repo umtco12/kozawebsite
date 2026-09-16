@@ -5,8 +5,8 @@ export const adPlacements = [
   { key: "site_top", label: "Site üstü lider alan", scope: "Tüm ziyaretçi sayfaları", format: "970×90 · mobil 320×100", shape: "leaderboard" },
   { key: "site_left_rail", label: "Masaüstü sol duvar", scope: "Masaüstü · site geneli", format: "120/300×600 · 1360 px üzeri", shape: "rail" },
   { key: "site_right_rail", label: "Masaüstü sağ duvar", scope: "Masaüstü · site geneli", format: "120/300×600 · 1360 px üzeri", shape: "rail" },
-  { key: "home_billboard", label: "Ana sayfa marka panosu", scope: "Ana sayfa · manşet sonrası", format: "970×250 · responsive", shape: "billboard" },
-  { key: "section_inline", label: "Bölüm içi reklam", scope: "Kategori, Son Dakika ve kesintisiz haber akışı", format: "728×90 · mobil 320×100", shape: "inline" },
+  { key: "home_billboard", label: "Ana sayfa manşet altında", scope: "Ana sayfa manşet altında", format: "970×250 · responsive", shape: "billboard" },
+  { key: "section_inline", label: "Detay Haber Altı Reklam", scope: "Kategori, Son Dakika ve kesintisiz haber akışı", format: "728×90 · mobil 320×100", shape: "inline" },
   { key: "article_sidebar", label: "Haber sağ sütun", scope: "Haber detay sayfası", format: "300×250", shape: "rectangle" },
 ];
 
