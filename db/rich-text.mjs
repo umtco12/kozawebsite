@@ -67,11 +67,25 @@ export function plainTextToHtml(value) {
     .map((chunk) => `<p>${escapeHtml(chunk).replace(/\n/g, "<br>")}</p>`).join("");
 }
 
+/* X gönderileri ve YouTube gömmeleri editoryal kurala göre haber anlatısı bittikten
+   sonra gösterilir. Ürettiğimiz iki güvenli düğüm biçimini ayırıp kendi sıralarını
+   koruyarak HTML'in sonuna taşır; sıradan alıntı ve diğer iframe'lere dokunmaz. */
+const socialEmbedPattern = /<blockquote\b(?=[^>]*\bclass=(?:"[^"]*\btwitter-tweet\b[^"]*"|'[^']*\btwitter-tweet\b[^']*'))[^>]*>[\s\S]*?<\/blockquote>|<div\b(?=[^>]*\bdata-youtube-video(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)[^>]*>[\s\S]*?<\/div>/gi;
+
+export function moveSocialEmbedsToEnd(html) {
+  const embeds = [];
+  const body = String(html ?? "").replace(socialEmbedPattern, (embed) => {
+    embeds.push(embed.trim());
+    return "";
+  }).trim();
+  return embeds.length ? `${body}${embeds.join("")}` : body;
+}
+
 /* Kaydedilen gövdeyi ölçülebilir sınırlar içinde tutar. İçeriği yeniden yazmaz;
-   yalnız boş gövdeyi sadeleştirir ve aşırı uzun yükü keser. */
+   yalnız boş gövdeyi sadeleştirir, aşırı uzun yükü keser ve sosyal gömmeleri sona alır. */
 export function normalizeArticleHtml(html) {
   const value = String(html ?? "").trim();
   if (!value) return "";
   if (!htmlToPlainText(value) && !/<(img|iframe|video|hr|table)\b/i.test(value)) return "";
-  return value.length > MAX_BODY_HTML ? value.slice(0, MAX_BODY_HTML) : value;
+  return moveSocialEmbedsToEnd(value.length > MAX_BODY_HTML ? value.slice(0, MAX_BODY_HTML) : value);
 }

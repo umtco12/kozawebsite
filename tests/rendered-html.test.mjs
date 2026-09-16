@@ -1937,7 +1937,8 @@ test("yeni yayınlanan haber arama, yazar ve son dakika yüzeylerinde anında g�
   assert.match(detail, /class="article-primary-video"/);
   assert.match(detail, /<video[^>]+class="article-video-player"[^>]+src="https:\/\/video\.example\.com\/koza\/kopru\.m3u8"/);
   assert.ok(detail.indexOf("article-figure") < detail.indexOf("article-primary-video"), "Ana video kapak fotoğrafından sonra gelmeli");
-  assert.ok(detail.indexOf("article-primary-video") < detail.indexOf("article-layout"), "Ana video haber metninden önce gelmeli");
+  assert.ok(detail.indexOf("article-layout") < detail.indexOf("article-primary-video"), "Ana video haber metninin sonunda gelmeli");
+  assert.ok(detail.indexOf("Koza TV ekibi gelişmeleri sahadan aktarıyor") < detail.indexOf("article-primary-video"), "Haber metni ana videodan önce tamamlanmalı");
   assert.match(detail, /"@type":"BreadcrumbList"/);
   assert.match(detail, /href="\/yazar\/koza-tv-saha-ekibi"/);
 });
@@ -3477,6 +3478,7 @@ test("ana menü bağlantıları eşit yan sütunlarla ortalanır ve dar alanda k
 
 test("sosyal gömme bağlantı ve kodlarını güvenli sağlayıcı adreslerine dönüştürür", async () => {
   const { parseSocialEmbed: parse } = await import('../db/social-embed.mjs');
+  const { moveSocialEmbedsToEnd } = await import('../db/rich-text.mjs');
   for (const link of ['https://x.com/KozaTv/status/1234567890?s=20','https://twitter.com/KozaTv/status/1234567890']) {
     assert.deepEqual(parse(link), {type:'twitter',id:'1234567890',url:'https://x.com/KozaTv/status/1234567890'});
   }
@@ -3490,18 +3492,27 @@ test("sosyal gömme bağlantı ve kodlarını güvenli sağlayıcı adreslerine 
   assert.match(editor,/Bilgisayardan fotoğraf yükle/);
   assert.match(editor,/fetch\("\/api\/media", \{ method: "POST", body: form \}\)/);
   assert.match(editor,/insertMedia\("image", \{ src: data.media.publicUrl/);
-  assert.match(editor,/insertContentAt\(active.state.selection.to/);
+  assert.match(editor,/insertSocialEmbed\("youtube"/);
+  assert.match(editor,/insertContentAt\(active.state.doc.content.size/);
   assert.match(editor,/role="alert"/);
   assert.match(editor,/onClick=\{applyEmbed\}>Habere ekle/);
+  const siralanan = moveSocialEmbedsToEnd('<p>Birinci paragraf.</p><div data-youtube-video=""><iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe></div><p>Son paragraf.</p><blockquote class="twitter-tweet"><a href="https://x.com/KozaTv/status/1234567890">X</a></blockquote>');
+  assert.ok(siralanan.indexOf('Son paragraf.') < siralanan.indexOf('data-youtube-video'), 'YouTube metnin sonuna taşınmalı');
+  assert.ok(siralanan.indexOf('data-youtube-video') < siralanan.indexOf('twitter-tweet'), 'Gömmelerin kendi sırası korunmalı');
 });
 
-test("sosyal gömmeler kaydedilir, son dakika bandı yalnız işaretli manşette görünür", async t => {
-  const input = {title:'Sosyal gömme ve manşet bandı denetimi',spot:'Haber içi sosyal gönderi ve manşet son dakika işaretini doğrulayan deneme.',body:'Haber içi sosyal gönderinin kayıttan sonra görünmesini ve son dakika bandının yalnız işaretli haberde çıkmasını doğrulayan deneme metni.',bodyHtml:'<p>Haber içi sosyal gönderinin kayıttan sonra görünmesini ve son dakika bandının yalnız işaretli haberde çıkmasını doğrulayan deneme metni.</p><blockquote class="twitter-tweet" data-dnt="true"><a href="https://twitter.com/KozaTv/status/1234567890">X / Twitter gönderisini görüntüle</a></blockquote><div data-youtube-video=""><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" width="400"></iframe></div>',category:'Gündem',status:'published',heroImage:'/news/studio.jpg',imageAlt:'Test',author:'Koza TV',sourceName:'Koza TV',homepagePlacement:'slider',isBreaking:true};
+test("sosyal gömmeler her zaman haber metninin sonunda kaydedilir; son dakika bandı yalnız işaretli manşette görünür", async t => {
+  const input = {title:'Sosyal gömme ve manşet bandı denetimi',spot:'Haber içi sosyal gönderi ve manşet son dakika işaretini doğrulayan deneme.',body:'Haber içi sosyal gönderinin kayıttan sonra görünmesini ve son dakika bandının yalnız işaretli haberde çıkmasını doğrulayan deneme metni. Son metin paragrafı.',bodyHtml:'<p>Haber içi sosyal gönderinin kayıttan sonra görünmesini doğrulayan giriş.</p><blockquote class="twitter-tweet" data-dnt="true"><a href="https://twitter.com/KozaTv/status/1234567890">X / Twitter gönderisini görüntüle</a></blockquote><p>Son metin paragrafı.</p><div data-youtube-video=""><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" width="400"></iframe></div>',category:'Gündem',status:'published',heroImage:'/news/studio.jpg',imageAlt:'Test',author:'Koza TV',sourceName:'Koza TV',homepagePlacement:'slider',isBreaking:true};
   const response = await request('/api/articles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});
   assert.equal(response.status,201);
   const created = (await response.json()).article;
   t.after(()=>{const db=new Database(process.env.KOZA_DB_PATH);db.prepare('DELETE FROM articles WHERE id=?').run(created.id);db.close();});
-  assert.match(await html(`/haber/${created.slug}`),/class="twitter-tweet"/);
+  assert.ok(created.bodyHtml.indexOf('Son metin paragrafı.') < created.bodyHtml.indexOf('twitter-tweet'), 'X gömmesi kayıt sırasında metnin sonuna taşınmalı');
+  assert.ok(created.bodyHtml.indexOf('twitter-tweet') < created.bodyHtml.indexOf('data-youtube-video'), 'X ve YouTube gömmelerinin kendi sırası korunmalı');
+  const detail = await html(`/haber/${created.slug}`);
+  assert.match(detail,/class="twitter-tweet"/);
+  assert.ok(detail.indexOf('Son metin paragrafı.') < detail.indexOf('twitter-tweet'), 'Yayında metin sosyal gömmelerden önce tamamlanmalı');
+  assert.ok(detail.indexOf('twitter-tweet') < detail.indexOf('data-youtube-video'), 'Yayında X ve YouTube gömmeleri sonda ve kendi sırasıyla görünmeli');
   assert.match(await html('/'),/class="lead-breaking"/);
   const changed = await request('/api/articles',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({...created,isBreaking:false})});
   assert.equal(changed.status,200);

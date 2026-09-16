@@ -144,7 +144,7 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
         const type = embed.type === "youtube" ? "youtube" : "twitterPost";
         const attrs = embed.type === "youtube" ? { src: embed.url } : { url: embed.url };
         const node = view.state.schema.nodes[type].create(attrs);
-        view.dispatch(view.state.tr.insert(view.state.selection.to, node));
+        view.dispatch(view.state.tr.insert(view.state.doc.content.size, node));
         event.preventDefault(); return true;
       },
     },
@@ -186,6 +186,12 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
     return active.chain().focus().insertContentAt(active.state.selection.to, { type, attrs }).run();
   }
 
+  /* Sosyal gömmeler haberde anlatının arasına girmemeli; imleç konumundan bağımsız
+     olarak belgenin sonuna eklenir. Sunucu kayıt sırasında aynı kuralı tekrar uygular. */
+  function insertSocialEmbed(type: "youtube" | "twitterPost", attrs: Record<string, unknown>) {
+    return active.chain().focus().insertContentAt(active.state.doc.content.size, { type, attrs }).run();
+  }
+
   async function uploadImage(file?: File) {
     if (!file || disabled || uploading) return;
     setMediaError("");
@@ -209,8 +215,8 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
     const embed = parseSocialEmbed(embedInput);
     if (!embed) { setEmbedError("Geçerli bir X/Twitter gönderisi veya YouTube video bağlantısı / gömme kodu girin."); return; }
     const inserted = embed.type === "youtube"
-      ? insertMedia("youtube", { src: embed.url })
-      : insertMedia("twitterPost", { url: embed.url });
+      ? insertSocialEmbed("youtube", { src: embed.url })
+      : insertSocialEmbed("twitterPost", { url: embed.url });
     if (!inserted) { setEmbedError("İçerik eklenemedi. Haber metninde bir konum seçip yeniden deneyin."); return; }
     setPanel(null); setEmbedInput(""); setEmbedError("");
   }
@@ -361,7 +367,7 @@ export function RichEditor({ value, onChange, disabled = false, placeholder = "H
 
       {panel === "embed" && <div className="rt-panel rt-embed-panel" aria-label="X / Twitter ve YouTube gömme">
         <label>Bağlantı veya gömme kodu<textarea value={embedInput} onChange={event => { setEmbedInput(event.target.value); setEmbedError(""); }} placeholder="X/Twitter gönderi bağlantısını veya YouTube bağlantısını / gömme kodunu yapıştırın…" rows={4} /></label>
-        <small>X/Twitter gönderileri ile YouTube video, Shorts ve canlı video bağlantıları desteklenir.</small>
+        <small>X/Twitter gönderileri ile YouTube video, Shorts ve canlı video bağlantıları desteklenir. Eklenen içerik her zaman haber metninin sonunda gösterilir.</small>
         {embedError && <p role="alert" className="rt-error">{embedError}</p>}
         <div className="rt-panel-foot"><button type="button" disabled={disabled} onClick={applyEmbed}>Habere ekle</button><button type="button" onClick={() => setPanel(null)}>Vazgeç</button></div>
       </div>}

@@ -1,5 +1,6 @@
 import { TwitterWidgets } from "../../twitter-widgets";
 import type { ContentBlock } from "../../../db";
+import { moveSocialEmbedsToEnd } from "../../../db/rich-text.mjs";
 
 function youtubeUrl(value: string) { try { const url = new URL(value); const isYoutube = url.hostname === "youtube.com" || url.hostname.endsWith(".youtube.com"); const id = url.hostname === "youtu.be" ? url.pathname.slice(1) : isYoutube ? url.searchParams.get("v") ?? url.pathname.split("/").pop() : ""; return id && /^[\w-]{6,20}$/.test(id) ? `https://www.youtube-nocookie.com/embed/${id}` : ""; } catch { return ""; } }
 function vimeoUrl(value: string) { try { const url = new URL(value); if (url.hostname !== "vimeo.com" && !url.hostname.endsWith(".vimeo.com")) return ""; const id = url.pathname.split("/").filter(Boolean).findLast((part) => /^\d+$/.test(part)); return id ? `https://player.vimeo.com/video/${id}` : ""; } catch { return ""; } }
@@ -17,7 +18,10 @@ export function ArticleVideoPlayer({ src, title = "Haber videosu", preload = "me
 /* Haber gövdesi. Zengin metin editöründen kaydedilmiş bir gövde varsa o gösterilir;
    yoksa arşivdeki bütün haberler eskisi gibi blok blok render edilir. */
 export function ArticleBody({ article, lazyImages = false }: { article: { bodyHtml: string; blocks: ContentBlock[]; videoUrl: string }; lazyImages?: boolean }) {
-  if (article.bodyHtml.trim()) return <><div className="rich-body" dangerouslySetInnerHTML={{ __html: article.bodyHtml }} /><TwitterWidgets html={article.bodyHtml} /></>;
+  if (article.bodyHtml.trim()) {
+    const bodyHtml = moveSocialEmbedsToEnd(article.bodyHtml);
+    return <><div className="rich-body" dangerouslySetInnerHTML={{ __html: bodyHtml }} /><TwitterWidgets html={bodyHtml} /></>;
+  }
   return <ArticleBlocks blocks={article.blocks} excludeVideoUrl={article.videoUrl} lazyImages={lazyImages} />;
 }
 
