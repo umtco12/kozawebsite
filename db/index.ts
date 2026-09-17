@@ -6,7 +6,7 @@ import Database from "better-sqlite3";
 import { plainBodyToBlocks, slugify } from "./article-model.mjs";
 import { hashPassword, verifyPassword } from "./auth-model.mjs";
 import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "./demo-content-model.mjs";
-import { defaultSettings, legacyScheduleDefault, normalizePath, normalizeSchedule, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
+import { defaultSettings, legacyScheduleDefault, normalizePath, normalizeSchedule, officialImprintSettings, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
 import { normalizeArticleHtml } from "./rich-text.mjs";
 import { legacyPath } from "./import-model.mjs";
 import { agencyUpdateDecision } from "./agency-model.mjs";
@@ -172,6 +172,19 @@ function ensureSchema(db: InstanceType<typeof Database>) {
     db.transaction(() => {
       for (const [key, value] of Object.entries(officialSocialAccounts)) upsert.run(key, value, now);
       db.prepare("INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES (?,?,?,'Sistem')").run(socialSeedKey, "1", now);
+    })();
+  }
+
+  /* Yönetim tarafından iletilen resmî künye bir kez uygulanır. İşaret yazıldıktan sonra
+     yöneticinin panelden yaptığı değişiklikler sonraki açılışlarda kesinlikle ezilmez. */
+  const imprintSeedKey = "_official_imprint_v1";
+  if (!db.prepare("SELECT 1 FROM site_settings WHERE key=?").get(imprintSeedKey)) {
+    const now = Date.now();
+    const upsert = db.prepare(`INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES (?,?,?,'Koza TV resmî künyesi')
+      ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at,updated_by=excluded.updated_by`);
+    db.transaction(() => {
+      for (const [key, value] of Object.entries(officialImprintSettings)) upsert.run(key, value, now);
+      db.prepare("INSERT INTO site_settings (key,value,updated_at,updated_by) VALUES (?,?,?,'Sistem')").run(imprintSeedKey, "1", now);
     })();
   }
 

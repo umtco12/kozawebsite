@@ -14,6 +14,20 @@ export const officialSocialAccounts = {
   socialInstagram: "https://www.instagram.com/kozatelevizyon/",
 };
 
+/* Koza TV'nin yönetim tarafından iletilen resmî künye başlangıç değerleri. İlk açılışta
+   veritabanına bir kez yazılır; sonrasında panelden yapılan değişiklikler korunur. */
+export const officialImprintSettings = {
+  newsDirector: "Murat Aydın",
+  legalName: "Koza TV",
+  responsibleManager: "Mehlika BİLEN",
+  address: "CEMALPAŞA MAHALLESİ FUZULİ CADDESİ GALLERİA İŞ MERKEZİ KAT :2 SEYHAN /ADANA",
+  phone: "02128434848",
+  contactEmail: "info@koza.tv.tr",
+  kepAddress: "adanakozaradyotelevizyon@hs02.kep.tr",
+  uetsAddress: "",
+  hostingProviderInfo: "",
+};
+
 export const settingFields = [
   { key: "siteMotto", group: "yayin", type: "text", label: "Site mottosu", hint: "Koza TV logosunun yanında, sitenin üst bölümünde gösterilir.", placeholder: "Şimdi konuşma zamanı", minLength: 3, maxLength: 80, required: true, default: "Şimdi konuşma zamanı" },
   { key: "liveHlsUrl", group: "yayin", type: "url", label: "Canlı yayın kaynağı", hint: "YouTube canlı yayın bağlantısı veya HLS (.m3u8) adresi. YouTube kanal adresi verilirse o kanalın o anda açık olan yayını gösterilir. Boş bırakılırsa kesinti ekranı çıkar.", placeholder: "https://www.youtube.com/watch?v=... veya https://yayin.example.com/koza.m3u8", default: "" },
@@ -27,14 +41,17 @@ export const settingFields = [
   { key: "socialYoutube", group: "sosyal", type: "url", label: "YouTube", placeholder: officialSocialAccounts.socialYoutube, default: officialSocialAccounts.socialYoutube },
   { key: "socialInstagram", group: "sosyal", type: "url", label: "Instagram", placeholder: officialSocialAccounts.socialInstagram, default: officialSocialAccounts.socialInstagram },
 
-  { key: "legalName", group: "kunye", type: "text", label: "Ticari unvan", maxLength: 200, default: "" },
-  { key: "responsibleManager", group: "kunye", type: "text", label: "Sorumlu müdür", maxLength: 120, default: "" },
-  { key: "newsDirector", group: "kunye", type: "text", label: "Haber koordinatörü", maxLength: 120, default: "" },
-  { key: "address", group: "kunye", type: "textarea", label: "Yayın merkezi adresi", maxLength: 300, default: "" },
-  { key: "phone", group: "kunye", type: "text", label: "Telefon", maxLength: 40, default: "" },
+  { key: "newsDirector", group: "kunye", type: "text", label: "KOZATV.COM.TR Genel Yayın Yönetmeni", maxLength: 120, default: officialImprintSettings.newsDirector },
+  { key: "legalName", group: "kunye", type: "text", label: "Yayıncı", maxLength: 200, default: officialImprintSettings.legalName },
+  { key: "responsibleManager", group: "kunye", type: "text", label: "Sorumlu Yazı İşleri Müdürü", maxLength: 120, default: officialImprintSettings.responsibleManager },
+  { key: "address", group: "kunye", type: "textarea", label: "Yönetim yeri", maxLength: 300, default: officialImprintSettings.address },
+  { key: "phone", group: "kunye", type: "text", label: "İletişim telefonu", maxLength: 40, default: officialImprintSettings.phone },
+  { key: "contactEmail", group: "kunye", type: "email", label: "Kurumsal e-posta", placeholder: "info@koza.tv.tr", default: officialImprintSettings.contactEmail },
+  { key: "kepAddress", group: "kunye", type: "email", label: "Koza TV kayıtlı KEP adresi", placeholder: "kurum@hs02.kep.tr", default: officialImprintSettings.kepAddress },
+  { key: "uetsAddress", group: "kunye", type: "text", label: "Ulusal Elektronik Tebligat Sistemi", hint: "Şimdilik boş bırakılabilir; bilgi girildiğinde Künye sayfasında yayımlanır.", maxLength: 160, default: officialImprintSettings.uetsAddress },
+  { key: "hostingProviderInfo", group: "kunye", type: "textarea", label: "Yer sağlayıcı ticaret unvanı ve adresi", hint: "Şimdilik boş bırakılabilir; bilgi girildiğinde Künye sayfasında yayımlanır.", maxLength: 500, default: officialImprintSettings.hostingProviderInfo },
   { key: "newsEmail", group: "kunye", type: "email", label: "Haber merkezi e-postası", placeholder: "haber@kozatv.com.tr", default: "" },
   { key: "adsEmail", group: "kunye", type: "email", label: "Reklam e-postası", placeholder: "reklam@kozatv.com.tr", default: "" },
-  { key: "contactEmail", group: "kunye", type: "email", label: "Kurumsal iletişim e-postası", placeholder: "iletisim@kozatv.com.tr", default: "" },
 ];
 
 /* Yayın günü kapsamı: program hafta içi, hafta sonu veya her gün ekranda olabilir. */

@@ -1829,7 +1829,7 @@ test("video merkezi ve kurumsal sayfalar yayına hazır biçimde açılır", asy
   assert.match(videos, /Video Merkezi/);
   assert.match(videos, /video içerik/);
 
-  for (const [slug, expected] of [["hakkimizda", /Yayın anlayışımız/], ["kunye", /Yayın kuruluşu/], ["yayin-ilkeleri", /Düzeltme ve yanıt hakkı/], ["iletisim", /İletişim kanalları/], ["kvkk", /Haklarınız/], ["gizlilik", /Veri güvenliği/], ["cerez-politikasi", /Zorunlu çerezler/]]) {
+  for (const [slug, expected] of [["hakkimizda", /Yayın anlayışımız/], ["kunye", /Koza TV Künye Bilgileri/], ["yayin-ilkeleri", /Düzeltme ve yanıt hakkı/], ["iletisim", /İletişim kanalları/], ["kvkk", /Haklarınız/], ["gizlilik", /Veri güvenliği/], ["cerez-politikasi", /Zorunlu çerezler/]]) {
     const body = await html(`/kurumsal/${slug}`);
     assert.match(body, expected, `/kurumsal/${slug} içeriği eksik`);
     assert.match(body, /href="\/kurumsal\/kvkk"/);
@@ -2166,7 +2166,13 @@ test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz
 });
 
 test("site ayarları modeli adres, e-posta ve yayın akışı kurallarını uygular", () => {
-  assert.equal(defaultSettings().siteMotto, "Şimdi konuşma zamanı", "Yeni kurulumun marka mottosu doğru olmalı");
+  const defaults = defaultSettings();
+  assert.equal(defaults.siteMotto, "Şimdi konuşma zamanı", "Yeni kurulumun marka mottosu doğru olmalı");
+  assert.equal(defaults.newsDirector, "Murat Aydın", "Resmî genel yayın yönetmeni varsayılanı korunmalı");
+  assert.equal(defaults.responsibleManager, "Mehlika BİLEN", "Resmî sorumlu yazı işleri müdürü varsayılanı korunmalı");
+  assert.equal(defaults.kepAddress, "adanakozaradyotelevizyon@hs02.kep.tr", "Resmî KEP adresi varsayılanı korunmalı");
+  assert.equal(defaults.uetsAddress, "", "UETS bilgisi verilene kadar boş kalmalı");
+  assert.equal(defaults.hostingProviderInfo, "", "Yer sağlayıcı bilgisi verilene kadar boş kalmalı");
   const good = validateSettings({ siteMotto: "  Şimdi konuşma zamanı  ", liveHlsUrl: "https://yayin.example.com/koza.m3u8", newsEmail: "Haber@KozaTV.com.tr", satelliteInfo: "Türksat 3A", showMarketTicker: false });
   assert.equal(good.valid, true);
   assert.equal(good.values.siteMotto, "Şimdi konuşma zamanı", "Motto çevresindeki boşluklar temizlenmeli");
@@ -2184,6 +2190,9 @@ test("site ayarları modeli adres, e-posta ve yayın akışı kurallarını uygu
   assert.equal(validateSettings({ broadcastSchedule: [{ time: "bozuk", title: "x" }] }).valid, false);
   assert.equal(validateSettings({ siteMotto: "" }).valid, false, "Motto boş bırakılamamalı");
   assert.equal(validateSettings({ siteMotto: "x".repeat(81) }).valid, false, "Motto 80 karakteri aşmamalı");
+  assert.equal(validateSettings({ kepAddress: "gecersiz-kep" }).valid, false, "KEP alanı e-posta biçimini doğrulamalı");
+  assert.equal(validateSettings({ hostingProviderInfo: "x".repeat(501) }).valid, false, "Yer sağlayıcı bilgisi sınırı aşmamalı");
+  assert.equal(validateSettings({ uetsAddress: "", hostingProviderInfo: "" }).valid, true, "Sonradan doldurulacak resmî alanlar boş kaydedilebilmeli");
 });
 
 test("yönlendirme modeli adresleri tek biçime indirir ve korumalı yolları reddeder", () => {
@@ -2248,6 +2257,56 @@ test("site ayarları panelden kaydedilir ve ziyaretçi sayfalarına yansır", as
 
   const anonymous = await anonymousRequest("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ siteMotto: "Yetkisiz motto" }) });
   assert.equal(anonymous.status, 401, "Oturumsuz ayar değişikliği kapalı olmalı");
+});
+
+test("Koza TV künyesi resmî başlıklarla panelden yönetilir ve sonra doldurulacak alanları boş gösterir", async () => {
+  const officialImprint = {
+    newsDirector: "Murat Aydın",
+    legalName: "Koza TV",
+    responsibleManager: "Mehlika BİLEN",
+    address: "CEMALPAŞA MAHALLESİ FUZULİ CADDESİ GALLERİA İŞ MERKEZİ KAT :2 SEYHAN /ADANA",
+    phone: "02128434848",
+    contactEmail: "info@koza.tv.tr",
+    kepAddress: "adanakozaradyotelevizyon@hs02.kep.tr",
+    uetsAddress: "",
+    hostingProviderInfo: "",
+  };
+  const saved = await request("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(officialImprint) });
+  assert.equal(saved.status, 200);
+
+  const settingsResponse = await request("/api/settings");
+  assert.equal(settingsResponse.status, 200);
+  const fields = (await settingsResponse.json()).fields;
+  const labels = Object.fromEntries(fields.map((field) => [field.key, field.label]));
+  assert.equal(labels.newsDirector, "KOZATV.COM.TR Genel Yayın Yönetmeni");
+  assert.equal(labels.legalName, "Yayıncı");
+  assert.equal(labels.responsibleManager, "Sorumlu Yazı İşleri Müdürü");
+  assert.equal(labels.address, "Yönetim yeri");
+  assert.equal(labels.phone, "İletişim telefonu");
+  assert.equal(labels.contactEmail, "Kurumsal e-posta");
+  assert.equal(labels.kepAddress, "Koza TV kayıtlı KEP adresi");
+  assert.equal(labels.uetsAddress, "Ulusal Elektronik Tebligat Sistemi");
+  assert.equal(labels.hostingProviderInfo, "Yer sağlayıcı ticaret unvanı ve adresi");
+
+  const kunye = await html("/kurumsal/kunye");
+  assert.match(kunye, /KOZATV\.COM\.TR Genel Yayın Yönetmeni/);
+  assert.match(kunye, /Murat Aydın/);
+  assert.match(kunye, /Yayıncı/);
+  assert.match(kunye, /Koza TV/);
+  assert.match(kunye, /Sorumlu Yazı İşleri Müdürü/);
+  assert.match(kunye, /Mehlika BİLEN/);
+  assert.match(kunye, /CEMALPAŞA MAHALLESİ FUZULİ CADDESİ GALLERİA İŞ MERKEZİ KAT :2 SEYHAN \/ADANA/);
+  assert.match(kunye, /href="tel:02128434848"/);
+  assert.match(kunye, /href="mailto:info@koza\.tv\.tr"/);
+  assert.match(kunye, /href="mailto:adanakozaradyotelevizyon@hs02\.kep\.tr"/);
+  assert.match(kunye, /<dt>Ulusal Elektronik Tebligat Sistemi<\/dt><dd><\/dd>/, "UETS başlığı değeri boşken de ziyaretçiye gösterilmeli");
+  assert.match(kunye, /<dt>Yer sağlayıcı ticaret unvanı ve adresi<\/dt><dd><\/dd>/, "Yer sağlayıcı başlığı değeri boşken de ziyaretçiye gösterilmeli");
+  assert.doesNotMatch(kunye, /Bilgi yönetim panelinden tanımlanacak/, "Künyede iç sistem yer tutucusu yayımlanmamalı");
+  assert.match(kunye, /class="static-contact imprint-contact"/, "Künye kendine özgü okunabilir yerleşimi kullanmalı");
+
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.imprint-contact dl>div\{[^}]*grid-template-columns:minmax\(210px,\.72fr\) minmax\(0,1\.28fr\)/, "Masaüstünde künye başlık ve değerleri dengeli iki sütunda olmalı");
+  assert.match(css, /@media\(max-width:640px\)\{[\s\S]*?\.imprint-contact dl>div\{grid-template-columns:1fr/, "Mobilde künye tek sütuna inmeli");
 });
 
 test("eski adresler panelden eşlenir ve ziyaretçiyi kalıcı olarak yeni adrese gönderir", async () => {
