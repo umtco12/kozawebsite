@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import { Inter, Merriweather } from "next/font/google";
 import "./globals.css";
 
-const inter=Inter({variable:"--font-inter",subsets:["latin","latin-ext"]});
-const merriweather=Merriweather({variable:"--font-serif",subsets:["latin","latin-ext"],weight:["700","900"]});
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.kozatv.com.tr"),
   title: {
@@ -30,4 +27,4 @@ export const metadata: Metadata = {
     images: ["/og-v2.png"],
   },
 };
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="tr"><body className={`${inter.variable} ${merriweather.variable}`}>{children}</body></html>}
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="tr"><body>{children}</body></html>}

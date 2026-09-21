@@ -1,6 +1,7 @@
 import { getNewsSource, listNewsSources, saveNewsSource } from "../../../db";
 import { validateAgencySource } from "../../../db/agency-model.mjs";
 import { authorizeAdmin } from "../write-access";
+import { isUniqueConstraintError } from "../../../db/error-model.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +22,7 @@ async function persist(request: Request, updating: boolean) {
     const source = saveNewsSource({ ...validation.value, id: updating ? Number(payload.id) : undefined }, auth.user!.fullName);
     return Response.json({ ok: true, source }, { status: updating ? 200 : 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("UNIQUE constraint failed")) return Response.json({ error: "Bu ajans adresi daha önce eklenmiş." }, { status: 409 });
+    if (isUniqueConstraintError(error)) return Response.json({ error: "Bu ajans adresi daha önce eklenmiş." }, { status: 409 });
     return Response.json({ error: "Ajans bağlantısı kaydedilemedi." }, { status: 503 });
   }
 }

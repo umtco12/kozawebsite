@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { hasCompleteMarketRates } from "./api/piyasa/market-model.mjs";
 import { getSwipeDirection } from "./slider-gesture.mjs";
 
 type MarketData = {
@@ -25,7 +26,17 @@ export function LiveData() {
       request = new AbortController();
       fetch("/api/piyasa", { cache: "no-store", signal: request.signal })
         .then((response) => (response.ok ? response.json() : null))
-        .then((payload: MarketData | null) => { if (!cancelled && payload?.ok) setData(payload); })
+        .then((payload: MarketData | null) => {
+          if (cancelled || !payload?.ok) return;
+          setData((current) => {
+            if (!current) return payload;
+            /* Geçici iki kurluk TCMB yanıtı, ekranda bulunan tam dört kalemlik bandı silemez. */
+            if (hasCompleteMarketRates(current.rates) && !hasCompleteMarketRates(payload.rates)) {
+              return { ...current, weather: payload.weather ?? current.weather };
+            }
+            return { ...payload, weather: payload.weather ?? current.weather };
+          });
+        })
         .catch(() => {});
     };
 

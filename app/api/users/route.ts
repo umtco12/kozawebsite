@@ -1,5 +1,6 @@
 import { createAdminUser, listAdminUsers, updateAdminUser, type AdminRole } from "../../../db";
 import { authorizeAdmin } from "../write-access";
+import { isUniqueConstraintError } from "../../../db/error-model.mjs";
 
 const roles: AdminRole[] = ["admin", "publisher", "editor", "reporter", "viewer"];
 
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, user }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Kullanıcı oluşturulamadı.";
-    return Response.json({ error: message.includes("UNIQUE") ? "Bu e-posta ile bir kullanıcı zaten var." : message }, { status: message.includes("UNIQUE") ? 409 : 400 });
+    return Response.json({ error: isUniqueConstraintError(error) ? "Bu e-posta ile bir kullanıcı zaten var." : message }, { status: isUniqueConstraintError(error) ? 409 : 400 });
   }
 }
 

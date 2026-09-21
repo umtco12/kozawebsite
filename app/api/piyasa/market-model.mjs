@@ -5,6 +5,8 @@ const selectedMarkets = [
   { sourceCode: "EURTRY", code: "EUR", name: "Euro", fractionDigits: 2 },
 ];
 
+const requiredMarketCodes = selectedMarkets.map((market) => market.code);
+
 const turkishMonths = new Map([
   ["ocak", "01"], ["şubat", "02"], ["mart", "03"], ["nisan", "04"],
   ["mayıs", "05"], ["haziran", "06"], ["temmuz", "07"], ["ağustos", "08"],
@@ -64,4 +66,31 @@ export function parseMynetMarketPayload(payload) {
 
   const referenceDate = rates.find((rate) => rate.code === "USD")?.asOf || rates[0]?.asOf || "";
   return { rates, date: compactDate(referenceDate), source: "Mynet Finans" };
+}
+
+/**
+ * BIST, altın, dolar ve euro birlikte gelmedikçe yanıt tam piyasa verisi sayılmaz.
+ * Böylece yalnız TCMB'den gelen iki döviz kuru daha önceki tam bandı ezemez.
+ */
+export function hasCompleteMarketRates(rates) {
+  if (!Array.isArray(rates) || rates.length !== requiredMarketCodes.length) return false;
+  const codes = new Set(rates.map((rate) => rate?.code));
+  return requiredMarketCodes.every((code) => codes.has(code));
+}
+
+/**
+ * Yeni kaynak eksikse son başarılı tam piyasa verisini korur. Hava durumu da aynı
+ * biçimde son doğrulanmış değere düşer; hiçbir değer uydurulmaz.
+ */
+export function preferCompleteMarketSnapshot(fresh, stored) {
+  const freshHasAllRates = hasCompleteMarketRates(fresh?.rates);
+  const storedHasAllRates = hasCompleteMarketRates(stored?.rates);
+  const useStoredRates = !freshHasAllRates && storedHasAllRates;
+
+  return {
+    rates: useStoredRates ? stored.rates : Array.isArray(fresh?.rates) ? fresh.rates : [],
+    rateSource: useStoredRates ? stored.rateSource : String(fresh?.rateSource ?? ""),
+    rateDate: useStoredRates ? stored.rateDate : String(fresh?.rateDate ?? ""),
+    weather: fresh?.weather ?? stored?.weather ?? null,
+  };
 }

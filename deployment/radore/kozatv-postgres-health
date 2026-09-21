@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+database="${KOZA_DATABASE_NAME:-kozatv}"
+data_dir="${KOZA_DATA_DIR:-/srv/kozatv/data}"
+backup_root="${KOZA_BACKUP_DIR:-/srv/kozatv/backups}"
+max_disk="${KOZA_MAX_DISK_PERCENT:-85}"
+max_backup_age_minutes="${KOZA_MAX_BACKUP_AGE_MINUTES:-1800}"
+
+used="$(df --output=pcent /srv/kozatv | tail -1 | tr -dc '0-9')"
+[[ "$used" =~ ^[0-9]+$ && "$used" -lt "$max_disk" ]] || { echo "ALARM: Koza TV disk kullanımı %${used:-bilinmiyor}" >&2; exit 1; }
+
+systemctl is-active --quiet postgresql.service
+systemctl is-active --quiet kozatv.service
+systemctl is-active --quiet caddy.service
+runuser -u kozatv -- pg_isready --dbname="$database" --quiet
+
+database_status="$(runuser -u kozatv -- psql --dbname="$database" -Atqc "SELECT (SELECT COUNT(*) FROM articles) || '|' || (SELECT COUNT(*) FROM media_assets)")"
+[[ "$database_status" =~ ^[0-9]+\|[0-9]+$ ]] || { echo "ALARM: PostgreSQL sayımları okunamadı." >&2; exit 1; }
+
+home_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8201/)"
+auth_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8201/api/auth/me)"
+[[ "$home_status" == "200" ]] || { echo "ALARM: Ana sayfa HTTP $home_status" >&2; exit 1; }
+[[ "$auth_status" == "401" ]] || { echo "ALARM: Yetkisiz oturum ucu HTTP $auth_status" >&2; exit 1; }
+
+IFS='|' read -r article_count media_count <<< "$database_status"
+media_files="$(find "$data_dir/media" -type f | wc -l)"
+(( media_files >= media_count )) || { echo "ALARM: Medya dosyası sayısı kayıttan az: files=$media_files db=$media_count" >&2; exit 1; }
+
+latest_backup="$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -mmin "-$max_backup_age_minutes" -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
+[[ -n "$latest_backup" && -s "$latest_backup/kozatv.dump" && -s "$latest_backup/media.tar.gz" && -s "$latest_backup/SHA256SUMS" ]] || {
+  echo "ALARM: Son $max_backup_age_minutes dakika içinde eksiksiz günlük yedek yok." >&2
+  exit 1
+}
+
+echo "Koza TV sağlık kontrolü başarılı: disk=%$used articles=$article_count media=$media_count files=$media_files"

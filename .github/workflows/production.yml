@@ -1,0 +1,79 @@
+name: Koza TV Radore Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: kozatv-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-deploy:
+    name: Test ve Radore dağıtımı
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: production
+      url: http://${{ vars.KOZA_HOST || '46.45.185.67' }}/
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v7
+
+      - name: Node.js 22 hazırla
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Bağımlılıkları temiz kur
+        run: npm ci
+
+      - name: Üretim bağımlılıklarını denetle
+        run: npm audit --omit=dev
+
+      - name: Test ve standalone build
+        run: npm test
+
+      - name: Kod kalitesini kontrol et
+        run: npm run lint
+
+      - name: SSH anahtarını hazırla
+        env:
+          RADORE_SSH_KEY: ${{ secrets.RADORE_SSH_KEY }}
+        run: |
+          test -n "$RADORE_SSH_KEY"
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$RADORE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          cp deployment/radore/known_hosts ~/.ssh/known_hosts
+          chmod 0644 ~/.ssh/known_hosts
+
+      - name: Kaynak kodu Radore sunucusuna aktar
+        run: |
+          ssh koza-deploy@${{ vars.KOZA_HOST || '46.45.185.67' }} "install -d -m 0750 /srv/kozatv/incoming/${GITHUB_SHA}"
+          rsync -az --delete \
+            --exclude=.git \
+            --exclude=node_modules \
+            --exclude=dist \
+            --exclude=.next \
+            --exclude=.wrangler \
+            --exclude=data \
+            ./ "koza-deploy@${{ vars.KOZA_HOST || '46.45.185.67' }}:/srv/kozatv/incoming/${GITHUB_SHA}/"
+
+      - name: Atomik Radore dağıtımını çalıştır
+        run: ssh koza-deploy@${{ vars.KOZA_HOST || '46.45.185.67' }} "sudo /usr/local/sbin/kozatv-deploy ${GITHUB_SHA}"
+
+      - name: Dışarıdan smoke test
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://${{ vars.KOZA_HOST || '46.45.185.67' }}/ >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://${{ vars.KOZA_HOST || '46.45.185.67' }}/canli >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://${{ vars.KOZA_HOST || '46.45.185.67' }}/yazarlar >/dev/null
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://${{ vars.KOZA_HOST || '46.45.185.67' }}/admin/giris)" = "200"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://${{ vars.KOZA_HOST || '46.45.185.67' }}/admin)" = "307"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://${{ vars.KOZA_HOST || '46.45.185.67' }}/api/auth/me)" = "401"

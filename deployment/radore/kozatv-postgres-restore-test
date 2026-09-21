@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+backup_root="${KOZA_BACKUP_DIR:-/srv/kozatv/backups}"
+case "$backup_root" in
+  /srv/kozatv/backups|/srv/kozatv/backups/*) ;;
+  *) echo "Güvensiz yedek dizini reddedildi: $backup_root" >&2; exit 2 ;;
+esac
+
+latest="$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
+if [[ -z "$latest" ]]; then echo "Geri yükleme testi için yedek bulunamadı." >&2; exit 3; fi
+
+cd "$latest"
+sha256sum -c SHA256SUMS
+pg_restore --list kozatv.dump >/dev/null
+
+test_database="kozatv_restore_test_$$"
+restore_dir="$(mktemp -d)"
+cleanup() {
+  runuser -u postgres -- dropdb --if-exists "$test_database" >/dev/null 2>&1 || true
+  rm -rf -- "$restore_dir"
+}
+trap cleanup EXIT
+
+runuser -u postgres -- createdb --owner=kozatv "$test_database"
+runuser -u kozatv -- pg_restore --exit-on-error --no-owner --dbname="$test_database" < kozatv.dump
+article_count="$(runuser -u kozatv -- psql --dbname="$test_database" -Atqc 'SELECT COUNT(*) FROM articles')"
+media_count="$(runuser -u kozatv -- psql --dbname="$test_database" -Atqc 'SELECT COUNT(*) FROM media_assets')"
+if [[ ! "$article_count" =~ ^[0-9]+$ || ! "$media_count" =~ ^[0-9]+$ ]]; then echo "Geri yüklenen veritabanı sayımları geçersiz." >&2; exit 3; fi
+
+tar --extract --gzip --file media.tar.gz --directory "$restore_dir"
+restored_files="$(find "$restore_dir/media" -type f | wc -l)"
+if (( restored_files < media_count )); then echo "Geri yüklenen medya sayısı veritabanı kaydından az." >&2; exit 4; fi
+
+echo "Koza TV geri yükleme testi başarılı: articles=$article_count media=$media_count files=$restored_files"

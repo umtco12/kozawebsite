@@ -21,7 +21,7 @@ import { selectHomepageLeads } from "../db/homepage-model.mjs";
 import { HOMEPAGE_ORDER_REPAIR_KEY, homepagePlacementLimits, normalizeHomepagePlacementLimits, promoteHomepageArticle, repairUnrankedSliderArticles, syncLegacyHomepagePlacements, validateHomepageLayout } from "../db/homepage-order.mjs";
 import { ensureHomepageLatestSchema, homepageLatestOrderSql, moveHomepageArticlesToLatest, recordHomepageLatestEntries } from "../db/homepage-latest.mjs";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
-import { parseMynetMarketPayload } from "../app/api/piyasa/market-model.mjs";
+import { hasCompleteMarketRates, parseMynetMarketPayload, preferCompleteMarketSnapshot } from "../app/api/piyasa/market-model.mjs";
 import { agencyUpdateDecision, applyCategoryMap, buildAgencyHeaders, normalizeAgencyPayload, renderAgencyDisclaimer, validateAgencySource } from "../db/agency-model.mjs";
 import { canAccessArticle, canEditArticle, canManageAgencyMetadata, canPublish, canWriteStatus } from "../db/editorial-permissions.mjs";
 import { adPlacements, advertisementState, validateAdvertisement } from "../db/ad-model.mjs";
@@ -42,6 +42,10 @@ process.env.KOZA_DB_PATH = join(
 process.env.KOZA_MEDIA_PATH = join(
   tmpdir(),
   `koza-media-test-${process.pid}-${Date.now()}`,
+);
+process.env.KOZA_MARKET_CACHE_PATH = join(
+  tmpdir(),
+  `koza-market-test-${process.pid}-${Date.now()}.json`,
 );
 process.env.KOZA_MEDIA_QUOTA_BYTES = "100";
 process.env.KOZA_BOOTSTRAP_ADMIN_EMAIL = "admin@koza.test";
@@ -1654,8 +1658,8 @@ test("canlı haber platformu yol haritası kritik ürün alanlarını kapsar", a
   assert.match(roadmap, /geri yükleme testi/i);
 });
 
-test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güvenliği sağlar", async () => {
-  const [service, caddy, deploymentNotes, workflow, deployScript, deploySudoers, agencyService, agencyTimer] = await Promise.all([
+test("Hetzner miras dağıtım dosyaları servis izolasyonu ve uygulama katmanı güvenliği sağlar", async () => {
+  const [service, caddy, deploymentNotes, deployScript, deploySudoers, agencyService, agencyTimer] = await Promise.all([
     readFile(
       new URL("deployment/hetzner/kozatv.service", projectRoot),
       "utf8",
@@ -1666,10 +1670,6 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güve
     ),
     readFile(
       new URL("deployment/hetzner/README.md", projectRoot),
-      "utf8",
-    ),
-    readFile(
-      new URL(".github/workflows/staging.yml", projectRoot),
       "utf8",
     ),
     readFile(
@@ -1696,21 +1696,12 @@ test("Hetzner dağıtım dosyaları servis izolasyonu ve uygulama katmanı güve
   assert.doesNotMatch(caddy, /respond @admin 404/);
   assert.doesNotMatch(caddy, /respond @content_write 403/);
   assert.doesNotMatch(deploymentNotes, /WUg%|Elma258020/);
-  assert.match(workflow, /branches: \[main\]/);
-  assert.match(workflow, /actions\/checkout@v7/);
-  assert.match(workflow, /actions\/setup-node@v7/);
-  assert.match(workflow, /secrets\.HETZNER_SSH_KEY/);
-  assert.match(workflow, /npm audit --omit=dev/);
-  assert.match(workflow, /sudo \/usr\/local\/sbin\/kozatv-deploy/);
-  assert.doesNotMatch(workflow, /StrictHostKeyChecking=no/);
   assert.match(deployScript, /\^\[0-9a-f\]\{40\}\$/);
   assert.match(deployScript, /trap rollback ERR/);
   assert.match(deployScript, /systemctl restart kozatv\.service/);
   assert.match(deployScript, /api\/auth\/me/);
   assert.match(deployScript, /KOZA_RELEASE_KEEP_COUNT=4/);
   assert.match(deployScript, /\/usr\/local\/sbin\/kozatv-prune-releases/);
-  assert.match(workflow, /admin\/giris/);
-  assert.match(workflow, /api\/auth\/me/);
   assert.match(
     deploySudoers,
     /^koza-deploy ALL=\(root\) NOPASSWD: \/usr\/local\/sbin\/kozatv-deploy \*$/m,
@@ -2379,6 +2370,23 @@ test("piyasa modeli BIST, altın ve döviz değişimlerini güvenli biçimde ayr
   assert.throws(() => parseMynetMarketPayload(null), /nesne değil/);
 });
 
+test("piyasa bandı geçici kaynak hatasında son başarılı tam veriyi korur", () => {
+  const fullRates = [
+    { code: "XU100", name: "BIST 100", value: "13.317", change: "%0,24", direction: "up", asOf: "21 Eylül 2026" },
+    { code: "GOLD", name: "Altın", value: "6.784", change: "%-1,19", direction: "down", asOf: "21 Eylül 2026" },
+    { code: "USD", name: "Dolar", value: "48,80", change: "%0,06", direction: "up", asOf: "21 Eylül 2026" },
+    { code: "EUR", name: "Euro", value: "56,01", change: "%-0,06", direction: "down", asOf: "21 Eylül 2026" },
+  ];
+  const partialRates = fullRates.filter((rate) => ["USD", "EUR"].includes(rate.code)).map((rate) => ({ ...rate, change: "", direction: "neutral" }));
+  const stored = { rates: fullRates, rateSource: "Mynet Finans", rateDate: "21.09.2026", weather: { label: "İstanbul", value: "25°" } };
+  const partial = { rates: partialRates, rateSource: "TCMB", rateDate: "21.09.2026", weather: null };
+
+  assert.equal(hasCompleteMarketRates(fullRates), true);
+  assert.equal(hasCompleteMarketRates(partialRates), false);
+  assert.deepEqual(preferCompleteMarketSnapshot(partial, stored), stored, "İki kurluk yedek tam piyasa bandını ve hava durumunu silmemeli");
+  assert.deepEqual(preferCompleteMarketSnapshot(partial, null).rates, partialRates, "Son başarılı kayıt yoksa yalnız doğrulanmış yedek değerler gösterilmeli");
+});
+
 test("piyasa göstergesi sunucu tarafından okunur ve veri yoksa uydurma değer üretmez", async () => {
   const response = await request("/api/piyasa");
   assert.equal(response.status, 200);
@@ -2411,11 +2419,16 @@ test("piyasa göstergesi sunucu tarafından okunur ve veri yoksa uydurma değer 
   assert.match(client, /directionLabel/, "Yükseliş ve düşüş yönü erişilebilir metinle açıklanmalı");
   assert.doesNotMatch(client, /live-data-source|data\.rateSource|Mynet Finans/, "Üçüncü taraf piyasa kaynağı ziyaretçi bandında marka olarak gösterilmemeli");
   assert.match(client, /aria-live=["']polite["']/, "Kur değişimi ekran okuyucuyu bölmeden duyurulmalı");
+  assert.match(client, /hasCompleteMarketRates\(current\.rates\).*hasCompleteMarketRates\(payload\.rates\)/s, "Eksik yenileme tarayıcıdaki tam piyasa bandını ezmemeli");
 
   const route = await readFile(new URL("../app/api/piyasa/route.ts", import.meta.url), "utf8");
   assert.match(route, /https:\/\/finans\.mynet\.com\/api\/real-time/, "BIST, altın ve değişim verisi Koza'nın kullandığı piyasa akışından okunmalı");
   assert.match(route, /https:\/\/www\.tcmb\.gov\.tr\/kurlar\/today\.xml/, "TCMB güvenli yedek kur kaynağı olarak korunmalı");
   assert.match(route, /const CACHE_MS = 5 \* 60 \* 1000/, "Piyasa kaynağı kontrollü aralıkla yeniden okunmalı");
+  assert.match(route, /const DEGRADED_CACHE_MS = 30 \* 1000/, "Eksik piyasa yanıtı kısa sürede yeniden denenmeli");
+  assert.match(route, /KOZA_MARKET_CACHE_PATH|market-cache\.json/, "Worker'lar son başarılı piyasa verisini ortak dosyada paylaşmalı");
+  assert.match(route, /writeSharedCache/, "Tam piyasa verisi kalıcı ortak önbelleğe yazılmalı");
+  assert.match(route, /cache-control": "no-store"/, "Eksik veya eski piyasa yanıtı tarayıcı ara önbelleğinde tutulmamalı");
 });
 
 test("operasyon kurgusu izleme, kurtarma hedefi ve canlıya geçiş kapılarını tanımlar", async () => {
@@ -2595,14 +2608,16 @@ test("taşıma rehberi veri taşıma ve dağıtım değişkeni kurallarını tan
   for (const heading of ["Neden kolay", "Taşıma adımları", "Dikkat edilecek noktalar"]) {
     assert.ok(guide.includes(heading), `${heading} bölümü bulunmalı`);
   }
-  assert.match(guide, /koza\.sqlite/, "Veritabanı dosyasının yolu yazılmalı");
-  assert.match(guide, /kozatv-restore\.sh/, "Geri yükleme yolu yazılmalı");
+  assert.match(guide, /PostgreSQL/, "Üretim veritabanı mimarisi yazılmalı");
+  assert.match(guide, /kozatv-postgres-backup/, "Doğrulanmış yedekleme yolu yazılmalı");
+  assert.match(guide, /pg_restore --exit-on-error/, "Geri yükleme yolu yazılmalı");
   assert.match(guide, /KOZA_HOST/, "Dağıtım değişkeni yazılmalı");
 
   /* Dağıtım hattı sunucu adresini değişkenden okumalı; taşımada kod değişmemeli. */
-  const workflow = await readFile(new URL("../.github/workflows/staging.yml", import.meta.url), "utf8");
+  const workflow = await readFile(new URL("../.github/workflows/production.yml", import.meta.url), "utf8");
   assert.match(workflow, /vars\.KOZA_HOST/, "Sunucu adresi GitHub değişkeninden gelmeli");
   assert.ok(workflow.includes("known_hosts"), "Sabit SSH host anahtarı doğrulaması korunmalı");
+  assert.doesNotMatch(workflow, /46\.225\.169\.52|HETZNER_SSH_KEY|deployment\/hetzner/, "Eski Hetzner stage dağıtım hedefi kalmamalı");
 });
 
 test("büyük harfli arşiv başlıkları okunur biçimde gösterilir, kısaltmalar korunur", () => {

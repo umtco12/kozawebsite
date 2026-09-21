@@ -1,0 +1,53 @@
+[Unit]
+Description=Koza TV PostgreSQL web uygulamasi
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=kozatv
+Group=kozatv
+WorkingDirectory=/srv/kozatv/current
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8201
+Environment=KOZA_WORKERS=6
+Environment=KOZA_MEDIA_PATH=/srv/kozatv/data/media
+Environment=KOZA_MEDIA_QUOTA_BYTES=107374182400
+EnvironmentFile=/etc/kozatv/app.env
+EnvironmentFile=-/etc/kozatv/agency.env
+ExecStart=/usr/local/bin/node /srv/kozatv/current/scripts/start-cluster.mjs
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/kozatv/data
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+RemoveIPC=true
+UMask=0077
+MemoryMax=2G
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kozatv
+
+[Install]
+WantedBy=multi-user.target

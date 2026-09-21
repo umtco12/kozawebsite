@@ -1,6 +1,7 @@
 import { getAdminArticle, getArticleStats, listArticles, countArchiveArticles, saveArticle, type ArticleInput, type ArticleStatus } from "../../../db";
 import { validateArticleInput } from "../../../db/article-model.mjs";
 import { canAccessArticle, canEditArticle, canManageAgencyMetadata, canWriteStatus } from "../../../db/editorial-permissions.mjs";
+import { isUniqueConstraintError } from "../../../db/error-model.mjs";
 import { authorizeAdmin } from "../write-access";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,8 @@ async function persist(request: Request) {
     if (message.includes("EDIT_CONFLICT")) return Response.json({ error: "Haber başka bir editör tarafından güncellendi. Son sürümü açıp değişikliklerinizi karşılaştırın.", code: "EDIT_CONFLICT" }, { status: 409 });
     if (message.includes("WORKFLOW_APPROVAL_REQUIRED")) return Response.json({ error: "Haber yalnızca yönetici tarafından yayınlanabilir veya planlanabilir.", code: "WORKFLOW_APPROVAL_REQUIRED" }, { status: 409 });
     if (message.includes("AGENCY_SOURCE_NOT_FOUND")) return Response.json({ error: "Seçilen ajans bağlantısı bulunamadı." }, { status: 400 });
-    if (message.includes("UNIQUE constraint failed")) return Response.json({ error: "Bu başlık veya URL adıyla bir haber zaten var" }, { status: 409 });
+    if (isUniqueConstraintError(error)) return Response.json({ error: "Bu başlık veya URL adıyla bir haber zaten var" }, { status: 409 });
+    console.error("Haber kayıt hatası", error);
     return Response.json({ error: "Haber kaydedilemedi" }, { status: 503 });
   }
 }

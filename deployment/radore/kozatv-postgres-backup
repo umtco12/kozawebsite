@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+database="${KOZA_DATABASE_NAME:-kozatv}"
+data_dir="${KOZA_DATA_DIR:-/srv/kozatv/data}"
+backup_root="${KOZA_BACKUP_DIR:-/srv/kozatv/backups}"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+daily_dir="$backup_root/daily/$stamp"
+
+case "$backup_root" in
+  /srv/kozatv/backups|/srv/kozatv/backups/*) ;;
+  *) echo "Güvensiz yedek dizini reddedildi: $backup_root" >&2; exit 2 ;;
+esac
+
+install -d -m 0700 "$backup_root/daily" "$backup_root/weekly" "$backup_root/monthly"
+find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf -- {} +
+find "$backup_root/weekly" -mindepth 1 -maxdepth 1 -type d -mtime +35 -exec rm -rf -- {} +
+find "$backup_root/monthly" -mindepth 1 -maxdepth 1 -type d -mtime +370 -exec rm -rf -- {} +
+
+if [[ -e "$daily_dir" ]]; then
+  echo "Bu zaman damgasına ait yedek zaten var: $daily_dir" >&2
+  exit 3
+fi
+
+install -d -m 0700 "$daily_dir"
+trap 'rm -rf -- "$daily_dir"' ERR
+runuser -u kozatv -- pg_dump --dbname="$database" --format=custom --compress=9 > "$daily_dir/kozatv.dump"
+pg_restore --list "$daily_dir/kozatv.dump" >/dev/null
+tar --create --gzip --file "$daily_dir/media.tar.gz" --directory "$data_dir" media
+sha256sum "$daily_dir/kozatv.dump" "$daily_dir/media.tar.gz" > "$daily_dir/SHA256SUMS"
+printf '{"createdAt":"%s","database":"%s","dump":"kozatv.dump","media":"media.tar.gz"}\n' "$stamp" "$database" > "$daily_dir/manifest.json"
+trap - ERR
+
+if [[ "$(date -u +%u)" == "7" ]]; then cp -a "$daily_dir" "$backup_root/weekly/$stamp"; fi
+if [[ "$(date -u +%d)" == "01" ]]; then cp -a "$daily_dir" "$backup_root/monthly/$stamp"; fi
+if [[ -n "${KOZA_BACKUP_REMOTE:-}" ]]; then rsync -a --delete "$backup_root/" "$KOZA_BACKUP_REMOTE/"; fi
+
+echo "Koza TV PostgreSQL yedeği tamamlandı: $daily_dir"

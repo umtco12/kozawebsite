@@ -1,5 +1,6 @@
 import { listCategories, saveCategory, type CategoryInput } from "../../../db";
 import { slugify } from "../../../db/article-model.mjs";
+import { isUniqueConstraintError } from "../../../db/error-model.mjs";
 import { authorizeAdmin } from "../write-access";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ async function persist(request: Request) {
     return Response.json({ ok: true, category: saveCategory({ ...payload, name, slug }, auth.user!.fullName) }, { status: payload.id ? 200 : 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    if (message.includes("UNIQUE constraint failed")) return Response.json({ error: "Bu kategori adı veya URL'si zaten kullanılıyor." }, { status: 409 });
+    if (isUniqueConstraintError(error)) return Response.json({ error: "Bu kategori adı veya URL'si zaten kullanılıyor." }, { status: 409 });
     return Response.json({ error: message || "Kategori kaydedilemedi." }, { status: 400 });
   }
 }

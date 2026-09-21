@@ -1,0 +1,14 @@
+[Unit]
+Description=Koza TV PostgreSQL, servis, disk, medya ve yedek saglik kontrolu
+After=postgresql.service kozatv.service caddy.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/kozatv-postgres-health
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/srv/kozatv
