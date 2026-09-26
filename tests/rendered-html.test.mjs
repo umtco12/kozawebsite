@@ -3413,9 +3413,10 @@ test("ana sayfa haber akışı kutusu son eklenen beş yayındaki haberi sırala
   const aside = home.match(/<aside class="home-breaking-news"[\s\S]*?<\/aside>/)?.[0] || "";
   assert.equal((aside.match(/<li>/g) || []).length, 5);
   assert.doesNotMatch(home, /<aside class="home-photo-gallery/);
-  assert.match(aside, /<h2 id="home-breaking-heading">Son Haberler<\/h2>/, "Kutu başlığı Son Haberler olmalı");
+  assert.match(aside, /<h2 id="home-breaking-heading">Haber Akışı<\/h2>/, "Kutu başlığı Haber Akışı olmalı");
   assert.doesNotMatch(aside, /Son Dakika/, "Kutuda son dakika adlandırması kalmamalı");
-  assert.match(aside, /HABER AKIŞI/);
+  assert.match(aside, /ANLIK/);
+  assert.doesNotMatch(aside, /Son Haberler/, "Ana bölüm başlığı sağ kutunun içinde tekrarlanmamalı");
   assert.match(aside, /<time dateTime=|<time datetime=/);
   assert.match(aside, /Tüm haberleri gör/);
   assert.match(aside, /href="\/son-dakika"/);
