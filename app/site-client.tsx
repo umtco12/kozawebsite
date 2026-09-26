@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { hasCompleteMarketRates } from "./api/piyasa/market-model.mjs";
+import { ResponsiveImage } from "./responsive-image";
 import { getSwipeDirection } from "./slider-gesture.mjs";
 
 type MarketData = {
@@ -221,10 +222,12 @@ export function LeadSlider({ items }: { items: Lead[] }) {
     >
       <div className="lead-slides" aria-hidden="true">
         {slides.map((slide, index) => (
-          <img
+          <ResponsiveImage
             className={index === active ? "lead-slide active" : "lead-slide"}
             src={slide.image}
             alt=""
+            sizes="(max-width: 760px) calc(100vw - 24px), (max-width: 1100px) calc(100vw - 40px), 900px"
+            preferredWidth={1024}
             loading={index === 0 ? "eager" : "lazy"}
             fetchPriority={index === 0 ? "high" : "auto"}
             key={`${slide.href}-${slide.image}`}

@@ -18,7 +18,7 @@ fi
 pre_restore="/srv/kozatv/backups/pre-restore/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$pre_restore"
 sqlite3 "$data_dir/koza.sqlite" ".backup '$pre_restore/koza.sqlite'"
-tar --create --gzip --file "$pre_restore/media.tar.gz" --directory "$data_dir" media
+tar --create --gzip --file "$pre_restore/media.tar.gz" --exclude='media/_variants' --directory "$data_dir" media
 
 restore_tmp="$(mktemp -d /srv/kozatv/restore.XXXXXX)"
 trap 'rm -rf -- "$restore_tmp"' EXIT

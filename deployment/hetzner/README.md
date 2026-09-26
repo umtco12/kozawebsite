@@ -44,7 +44,7 @@ Bu dizin Koza TV'nin mevcut Hetzner Debian sunucusunda çalışması için gerek
 
 ## Yedekleme, geri yükleme ve alarm
 
-- `kozatv-backup.timer` her gece WAL uyumlu SQLite snapshot'ı ve medya arşivi üretir; SHA-256 doğrulaması yapar.
+- `kozatv-backup.timer` her gece WAL uyumlu SQLite snapshot'ı ve medya arşivi üretir; SHA-256 doğrulaması yapar. Orijinallerden yeniden üretilebilen `media/_variants` responsive WebP önbelleği arşive alınmaz.
 - Günlük kopyalar 7 gün, haftalık kopyalar 35 gün, aylık kopyalar 370 gün tutulur.
 - Süresi dolan kopyalar yeni arşiv oluşturulmadan önce temizlenir; yarım kalan günlük arşiv hata halinde otomatik kaldırılır.
 - `KOZA_BACKUP_REMOTE` tanımlanırsa yedek ağacı `rsync` ile ikinci hedefe aktarılır.

@@ -24,7 +24,8 @@ mkdir -p "$data_dir/media"
 
 sqlite3 "$data_dir/koza.sqlite" ".timeout 10000" ".backup '$daily_dir/koza.sqlite'"
 sqlite3 "$daily_dir/koza.sqlite" "PRAGMA quick_check" | grep -qx ok
-tar --create --gzip --file "$daily_dir/media.tar.gz" --directory "$data_dir" media
+# Responsive WebP kopyaları orijinallerden yeniden üretilebilen önbellektir.
+tar --create --gzip --file "$daily_dir/media.tar.gz" --exclude='media/_variants' --directory "$data_dir" media
 sha256sum "$daily_dir/koza.sqlite" "$daily_dir/media.tar.gz" > "$daily_dir/SHA256SUMS"
 printf '{"createdAt":"%s","database":"koza.sqlite","media":"media.tar.gz"}\n' "$stamp" > "$daily_dir/manifest.json"
 trap - ERR

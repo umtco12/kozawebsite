@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import test, { after, before } from "node:test";
 import Database from "better-sqlite3";
 import { unzipSync } from "fflate";
+import sharp from "sharp";
 import {
   defaultContent,
   isValidContentUpdate,
@@ -34,6 +36,7 @@ import { nextBreakingId, reconcileBreakingId } from "../app/breaking-ticker-mode
 import { isBreakingItems, toBreakingItems } from "../db/breaking-feed-model.mjs";
 import { createYouTubeFeedLoader, KOZA_YOUTUBE_FEED_URL, parseYouTubeFeed, YOUTUBE_REFRESH_MS, YOUTUBE_STALE_MS } from "../db/youtube-feed.mjs";
 import { evaluateSystemStatus } from "../db/system-status.mjs";
+import { responsiveImageAttributes } from "../app/responsive-image-model.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -49,7 +52,7 @@ process.env.KOZA_MARKET_CACHE_PATH = join(
   tmpdir(),
   `koza-market-test-${process.pid}-${Date.now()}.json`,
 );
-process.env.KOZA_MEDIA_QUOTA_BYTES = "100";
+process.env.KOZA_MEDIA_QUOTA_BYTES = String(10 * 1024 * 1024);
 process.env.KOZA_BOOTSTRAP_ADMIN_EMAIL = "admin@koza.test";
 process.env.KOZA_BOOTSTRAP_ADMIN_PASSWORD = "Koza!Test2026Secure";
 process.env.KOZA_BOOTSTRAP_ADMIN_NAME = "Koza Test Yöneticisi";
@@ -1388,6 +1391,68 @@ test("fotoğraf ve videolar kalıcı medya alanına doğrulanarak yüklenir, ara
   assert.equal(served.headers.get("content-type"), "image/png");
   assert.deepEqual(Buffer.from(await served.arrayBuffer()), png);
 
+  /* Gerçek boyutlu yeni bir haber fotoğrafı yüklenince dört WebP türevi yükleme
+     sırasında hazırlanır; ana sayfa orijinal JPEG'i istemez. */
+  const responsiveJpeg = await sharp(randomBytes(1600 * 900 * 3), { raw: { width: 1600, height: 900, channels: 3 } })
+    .jpeg({ quality: 95 })
+    .toBuffer();
+  const responsiveForm = new FormData();
+  responsiveForm.set("file", new Blob([responsiveJpeg], { type: "image/jpeg" }), "koza-responsive-test.jpg");
+  responsiveForm.set("altText", "Duyarlı görsel test fotoğrafı");
+  responsiveForm.set("credit", "Performans Laboratuvarı");
+  const responsiveUpload = await request("/api/media", { method: "POST", body: responsiveForm });
+  assert.equal(responsiveUpload.status, 201);
+  const responsiveMedia = (await responsiveUpload.json()).media;
+  const responsiveMatch = /^\/media\/(\d{4})\/(\d{2})\/([a-f0-9]{32})\.jpg$/.exec(responsiveMedia.publicUrl);
+  assert.ok(responsiveMatch, "Yeni fotoğraf orijinal ve sabit içerik imzalı adresini korumalı");
+  const [, responsiveYear, responsiveMonth, responsiveHash] = responsiveMatch;
+  for (const width of [480, 768, 1024, 1440]) {
+    const variantPath = join(process.env.KOZA_MEDIA_PATH, "_variants", responsiveYear, responsiveMonth, `${responsiveHash}-${width}.webp`);
+    assert.ok((await stat(variantPath)).isFile(), `${width}px WebP yükleme sırasında hazırlanmalı`);
+    const variant = await request(`/media/_variants/${responsiveYear}/${responsiveMonth}/${responsiveHash}-${width}.webp`);
+    assert.equal(variant.status, 200);
+    assert.equal(variant.headers.get("content-type"), "image/webp");
+    assert.match(variant.headers.get("cache-control") ?? "", /immutable/);
+    const variantBytes = Buffer.from(await variant.arrayBuffer());
+    const metadata = await sharp(variantBytes).metadata();
+    assert.equal(metadata.width, width);
+    assert.ok(variantBytes.length < responsiveJpeg.length, `${width}px türev orijinalden küçük olmalı`);
+  }
+  assert.deepEqual(responsiveImageAttributes("https://example.com/dis-gorsel.jpg", { sizes: "50vw" }), { src: "https://example.com/dis-gorsel.jpg" }, "Harici görseller güvenli türev rotasına sokulmamalı");
+  assert.deepEqual(responsiveImageAttributes("/news/gorsel-yok.svg", { sizes: "50vw" }), { src: "/news/gorsel-yok.svg" }, "Statik yer tutucu olduğu gibi kalmalı");
+  assert.equal((await request(`/media/_variants/${responsiveYear}/${responsiveMonth}/${responsiveHash}-999.webp`)).status, 404, "İzin verilmeyen türev boyutu üretilmemeli");
+
+  const brokenHash = "f".repeat(32);
+  const brokenOriginal = Buffer.from([0xff, 0xd8, 0xff, 0x00, 0x01, 0x02]);
+  await mkdir(join(process.env.KOZA_MEDIA_PATH, responsiveYear, responsiveMonth), { recursive: true });
+  await writeFile(join(process.env.KOZA_MEDIA_PATH, responsiveYear, responsiveMonth, `${brokenHash}.jpg`), brokenOriginal);
+  const safeFallback = await request(`/media/_variants/${responsiveYear}/${responsiveMonth}/${brokenHash}-480.webp`);
+  assert.equal(safeFallback.status, 200, "Türev üretilemezse haber görseli tamamen kaybolmamalı");
+  assert.equal(safeFallback.headers.get("content-type"), "image/jpeg");
+  assert.equal(safeFallback.headers.get("cache-control"), "no-store", "Bozuk türev yanıtı kalıcı önbelleğe alınmamalı");
+  assert.deepEqual(Buffer.from(await safeFallback.arrayBuffer()), brokenOriginal);
+
+  const fixtureDb = new Database(process.env.KOZA_DB_PATH);
+  const lead = fixtureDb.prepare("SELECT id,hero_image,image_alt FROM articles WHERE status='published' AND homepage_placement='slider' ORDER BY homepage_order,id LIMIT 1").get();
+  assert.ok(lead, "Ana sayfa responsive görsel testi için manşet haberi bulunmalı");
+  fixtureDb.prepare("UPDATE articles SET hero_image=?,image_alt=? WHERE id=?").run(responsiveMedia.publicUrl, "Duyarlı ana sayfa görseli", lead.id);
+  fixtureDb.close();
+  let responsiveHome;
+  try {
+    responsiveHome = await html("/");
+  } finally {
+    const restoreDb = new Database(process.env.KOZA_DB_PATH);
+    restoreDb.prepare("UPDATE articles SET hero_image=?,image_alt=? WHERE id=?").run(lead.hero_image, lead.image_alt, lead.id);
+    restoreDb.close();
+  }
+  for (const width of [480, 768, 1024, 1440]) assert.match(responsiveHome, new RegExp(`${responsiveHash}-${width}\\.webp ${width}w`), `Ana sayfa ${width}px adayını srcset içinde sunmalı`);
+  const leadImageTag = responsiveHome.match(new RegExp(`<img[^>]*${responsiveHash}-1024\\.webp[^>]*>`))?.[0] ?? "";
+  assert.match(leadImageTag, /fetchPriority="high"/i, "Yalnız ilk manşet yüksek önceliğini korumalı");
+  assert.doesNotMatch(leadImageTag, new RegExp(responsiveMedia.publicUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "Ana sayfa manşeti orijinal JPEG'i istememeli");
+  const homeSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.ok((homeSource.match(/<ResponsiveImage/g) ?? []).length >= 4, "Ana sayfadaki bütün haber görsel bölgeleri responsive bileşeni kullanmalı");
+  assert.doesNotMatch(homeSource, /<img src=\{(?:article|grid\[0\])\.heroImage\}/, "Ana sayfa haber kartları orijinal görseli doğrudan istememeli");
+
   const invalidForm = new FormData();
   invalidForm.set("file", new Blob(["zararlı içerik"], { type: "image/png" }), "sahte.png");
   const invalid = await request("/api/media", { method: "POST", body: invalidForm });
@@ -1418,11 +1483,11 @@ test("fotoğraf ve videolar kalıcı medya alanına doğrulanarak yüklenir, ara
   assert.equal(invalidVideo.status, 400);
   const library = await request("/api/media");
   const libraryBody = await library.json();
-  assert.equal(libraryBody.stats.total, 2);
-  assert.equal(libraryBody.stats.imageCount, 1);
+  assert.equal(libraryBody.stats.total, 3);
+  assert.equal(libraryBody.stats.imageCount, 2);
   assert.equal(libraryBody.stats.videoCount, 1);
-  assert.equal(libraryBody.stats.totalBytes, png.length + mp4.length);
-  assert.equal(libraryBody.stats.quotaBytes, 100);
+  assert.equal(libraryBody.stats.totalBytes, png.length + responsiveJpeg.length + mp4.length);
+  assert.equal(libraryBody.stats.quotaBytes, 10 * 1024 * 1024);
   const searchedByDescription = await request("/api/media?q=Koza%20TV%20test%20g%C3%B6rseli");
   assert.equal(searchedByDescription.status, 200);
   assert.equal((await searchedByDescription.json()).media[0].originalName, "koza-test.png");
@@ -1435,11 +1500,127 @@ test("fotoğraf ve videolar kalıcı medya alanına doğrulanarak yüklenir, ara
   const noMediaMatches = await request("/api/media?q=bulunmayan-fotograf");
   assert.equal((await noMediaMatches.json()).media.length, 0, "Arama bütün arşivde yalnız eşleşen fotoğrafları döndürmeli");
   const quotaForm = new FormData();
-  quotaForm.set("file", new Blob([png], { type: "image/png" }), "ikinci.png");
+  const oversizedForQuota = Buffer.alloc(10 * 1024 * 1024);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(oversizedForQuota);
+  quotaForm.set("file", new Blob([oversizedForQuota], { type: "image/png" }), "kota-disinda.png");
   const quotaExceeded = await request("/api/media", { method: "POST", body: quotaForm });
   assert.equal(quotaExceeded.status, 507);
   const external = await anonymousRequest("/api/media", { method: "POST", headers: { host: "46.225.169.52", "x-forwarded-host": "46.225.169.52" } });
   assert.equal(external.status, 401);
+});
+
+test("responsive görseller kaliteyi, şeffaflığı, yönü ve eşzamanlı önbelleği korur", async () => {
+  const variantWidths = [480, 768, 1024, 1440];
+
+  /* Şeffaf PNG yeni yükleme hattından geçmeli ve alfa kanalı WebP'de korunmalı. */
+  const transparentPng = await sharp({
+    create: { width: 900, height: 600, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite([{
+    input: Buffer.from('<svg width="900" height="600"><rect x="80" y="60" width="740" height="480" rx="80" fill="#e30613"/><circle cx="450" cy="300" r="150" fill="#ffffff" fill-opacity="0.72"/></svg>'),
+  }]).png().toBuffer();
+  const transparentForm = new FormData();
+  transparentForm.set("file", new Blob([transparentPng], { type: "image/png" }), "koza-seffaf.png");
+  transparentForm.set("altText", "Şeffaf Koza TV görseli");
+  const transparentUpload = await request("/api/media", { method: "POST", body: transparentForm });
+  assert.equal(transparentUpload.status, 201);
+  const transparentMedia = (await transparentUpload.json()).media;
+  const transparentMatch = /^\/media\/(\d{4})\/(\d{2})\/([a-f0-9]{32})\.png$/.exec(transparentMedia.publicUrl);
+  assert.ok(transparentMatch);
+  const [, transparentYear, transparentMonth, transparentHash] = transparentMatch;
+  for (const width of variantWidths) {
+    assert.ok((await stat(join(process.env.KOZA_MEDIA_PATH, "_variants", transparentYear, transparentMonth, `${transparentHash}-${width}.webp`))).isFile());
+  }
+  const transparentVariant = Buffer.from(await (await request(`/media/_variants/${transparentYear}/${transparentMonth}/${transparentHash}-480.webp`)).arrayBuffer());
+  const transparentMetadata = await sharp(transparentVariant).metadata();
+  const transparentStats = await sharp(transparentVariant).stats();
+  assert.equal(transparentMetadata.hasAlpha, true, "PNG şeffaflığı WebP türevinde korunmalı");
+  assert.equal(transparentStats.channels[3].min, 0, "Tam şeffaf pikseller kaybolmamalı");
+  assert.equal(transparentStats.channels[3].max, 255, "Tam opak pikseller kaybolmamalı");
+
+  /* WebP kaynaklar da aynı yükleme anı türevlerini üretmeli. */
+  const sourceWebp = await sharp(Buffer.from('<svg width="1200" height="800"><defs><linearGradient id="g"><stop stop-color="#071526"/><stop offset="1" stop-color="#e30613"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><circle cx="820" cy="360" r="220" fill="#ffffff" fill-opacity=".8"/></svg>')).webp({ quality: 92 }).toBuffer();
+  const webpForm = new FormData();
+  webpForm.set("file", new Blob([sourceWebp], { type: "image/webp" }), "koza-kaynak.webp");
+  webpForm.set("altText", "WebP kaynak test görseli");
+  const webpUpload = await request("/api/media", { method: "POST", body: webpForm });
+  assert.equal(webpUpload.status, 201);
+  const webpMedia = (await webpUpload.json()).media;
+  const webpMatch = /^\/media\/(\d{4})\/(\d{2})\/([a-f0-9]{32})\.webp$/.exec(webpMedia.publicUrl);
+  assert.ok(webpMatch);
+  for (const width of variantWidths) {
+    assert.ok((await stat(join(process.env.KOZA_MEDIA_PATH, "_variants", webpMatch[1], webpMatch[2], `${webpMatch[3]}-${width}.webp`))).isFile());
+  }
+
+  /* GIF olduğu gibi saklanmalı; animasyonu bozacak responsive dönüşüme sokulmamalı. */
+  const gif = Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64");
+  const gifForm = new FormData();
+  gifForm.set("file", new Blob([gif], { type: "image/gif" }), "koza-hareketli.gif");
+  gifForm.set("altText", "GIF koruma testi");
+  const gifUpload = await request("/api/media", { method: "POST", body: gifForm });
+  assert.equal(gifUpload.status, 201);
+  const gifMedia = (await gifUpload.json()).media;
+  assert.deepEqual(responsiveImageAttributes(gifMedia.publicUrl, { sizes: "100vw" }), { src: gifMedia.publicUrl }, "GIF responsive dönüştürme dışında kalmalı");
+  assert.equal((await request(gifMedia.publicUrl)).headers.get("content-type"), "image/gif");
+
+  const legacyDirectory = join(process.env.KOZA_MEDIA_PATH, "2099", "12");
+  await mkdir(legacyDirectory, { recursive: true });
+
+  /* EXIF orientation=6 kaynak, fiziksel piksel yönüne çevrilip yatay 480×320 olmalı. */
+  const orientedHash = `1${"0".repeat(31)}`;
+  const orientedJpeg = await sharp({ create: { width: 600, height: 900, channels: 3, background: "#164b78" } })
+    .withMetadata({ orientation: 6 })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  await writeFile(join(legacyDirectory, `${orientedHash}.jpg`), orientedJpeg);
+  const orientedResponse = await request(`/media/_variants/2099/12/${orientedHash}-480.webp`);
+  assert.equal(orientedResponse.status, 200);
+  const orientedMetadata = await sharp(Buffer.from(await orientedResponse.arrayBuffer())).metadata();
+  assert.deepEqual([orientedMetadata.width, orientedMetadata.height], [480, 320], "EXIF yönü türeve fiziksel olarak uygulanmalı");
+  assert.equal(orientedMetadata.orientation, undefined, "Türev yeniden yön bilgisine bağımlı kalmamalı");
+
+  /* Küçük arşiv görseli yapay biçimde büyütülmemeli. */
+  const smallHash = `2${"0".repeat(31)}`;
+  const smallJpeg = await sharp({ create: { width: 240, height: 160, channels: 3, background: "#d8d0c4" } }).jpeg({ quality: 90 }).toBuffer();
+  await writeFile(join(legacyDirectory, `${smallHash}.jpg`), smallJpeg);
+  const smallVariant = await request(`/media/_variants/2099/12/${smallHash}-480.webp`);
+  const smallMetadata = await sharp(Buffer.from(await smallVariant.arrayBuffer())).metadata();
+  assert.deepEqual([smallMetadata.width, smallMetadata.height], [240, 160], "Kaynak çözünürlüğü yetersizse görsel büyütülmemeli");
+
+  /* Aynı eski görsele gelen ilk 24 istek tek ve eksiksiz önbellek dosyasına ulaşmalı. */
+  const concurrentHash = `3${"0".repeat(31)}`;
+  const newsroomSvg = Buffer.from('<svg width="1800" height="1200"><defs><linearGradient id="sky" x2="1" y2="1"><stop stop-color="#041b45"/><stop offset=".55" stop-color="#174fb5"/><stop offset="1" stop-color="#ef2532"/></linearGradient></defs><rect width="1800" height="1200" fill="url(#sky)"/><rect x="110" y="760" width="1580" height="260" rx="30" fill="#071526" fill-opacity=".82"/><circle cx="1350" cy="410" r="260" fill="#f4d4b4"/><path d="M1050 1120 C1100 650 1600 650 1650 1120" fill="#111827"/><rect x="160" y="820" width="760" height="42" fill="#ffffff"/><rect x="160" y="900" width="1120" height="28" fill="#dce5f3"/></svg>');
+  const newsroomJpeg = await sharp(newsroomSvg).jpeg({ quality: 95, chromaSubsampling: "4:4:4" }).toBuffer();
+  await writeFile(join(legacyDirectory, `${concurrentHash}.jpg`), newsroomJpeg);
+  const concurrentUrl = `/media/_variants/2099/12/${concurrentHash}-1024.webp`;
+  const concurrentResponses = await Promise.all(Array.from({ length: 24 }, () => request(concurrentUrl)));
+  assert.ok(concurrentResponses.every((response) => response.status === 200), "Eşzamanlı isteklerin tamamı başarılı olmalı");
+  const concurrentBodies = await Promise.all(concurrentResponses.map(async (response) => Buffer.from(await response.arrayBuffer())));
+  for (const body of concurrentBodies.slice(1)) assert.deepEqual(body, concurrentBodies[0], "Bütün worker yanıtları aynı eksiksiz türevi vermeli");
+  const concurrentVariantPath = join(process.env.KOZA_MEDIA_PATH, "_variants", "2099", "12", `${concurrentHash}-1024.webp`);
+  const firstStat = await stat(concurrentVariantPath);
+  const variantFiles = await readdir(dirname(concurrentVariantPath));
+  assert.deepEqual(variantFiles.filter((name) => name.startsWith(`${concurrentHash}-1024`)), [`${concurrentHash}-1024.webp`], "Yarım veya geçici türev dosyası kalmamalı");
+  const cachedResponse = await request(concurrentUrl);
+  assert.equal(cachedResponse.status, 200);
+  const cachedStat = await stat(concurrentVariantPath);
+  assert.equal(cachedStat.mtimeMs, firstStat.mtimeMs, "Önbellekteki türev ikinci istekte yeniden yazılmamalı");
+  const rangeResponse = await request(concurrentUrl, { headers: { range: "bytes=0-99" } });
+  assert.equal(rangeResponse.status, 206, "Responsive WebP byte-range isteklerini desteklemeli");
+  assert.equal(rangeResponse.headers.get("content-range"), `bytes 0-99/${concurrentBodies[0].length}`);
+  assert.equal((await rangeResponse.arrayBuffer()).byteLength, 100);
+
+  /* Kalite 80 WebP'nin aynı boyuta indirilmiş referansa göre nesnel PSNR eşiği. */
+  const reference = await sharp(newsroomJpeg).rotate().resize({ width: 1024, fit: "inside", withoutEnlargement: true }).removeAlpha().raw().toBuffer();
+  const decodedVariant = await sharp(concurrentBodies[0]).removeAlpha().raw().toBuffer();
+  assert.equal(decodedVariant.length, reference.length);
+  let squaredError = 0;
+  for (let index = 0; index < reference.length; index += 1) {
+    const difference = reference[index] - decodedVariant[index];
+    squaredError += difference * difference;
+  }
+  const meanSquaredError = squaredError / reference.length;
+  const psnr = 10 * Math.log10((255 * 255) / meanSquaredError);
+  assert.ok(psnr >= 30, `WebP kalite eşiği en az 30 dB olmalı; ölçülen ${psnr.toFixed(2)} dB`);
 });
 
 test("haber detay, kategori, sitemap, robots ve RSS keşfedilebilirlik yüzeyleri çalışır", async () => {
@@ -1786,13 +1967,14 @@ test("Hetzner miras dağıtım dosyaları servis izolasyonu ve uygulama katmanı
 test("SQLite ve medya yedeği üretilir, checksum ve geri yükleme ön kontrolünden geçer", async () => {
   const root = await mkdtemp(join(tmpdir(), "koza-backup-test-"));
   const data = join(root, "data"); const backups = join(root, "backups");
-  await mkdir(join(data, "media"), { recursive: true });
+  await mkdir(join(data, "media", "_variants"), { recursive: true });
   const expired = join(backups, "daily", "eski-yedek");
   await mkdir(expired, { recursive: true });
   await writeFile(join(expired, "yarim-kalan.tar.gz"), "gecersiz");
   const expiredAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
   await utimes(expired, expiredAt, expiredAt);
   await writeFile(join(data, "media", "sample.txt"), "Koza medya yedek testi");
+  await writeFile(join(data, "media", "_variants", "rebuildable.webp"), "yeniden üretilebilir");
   await execFileAsync("sqlite3", [join(data, "koza.sqlite"), "CREATE TABLE news(id INTEGER PRIMARY KEY,title TEXT); INSERT INTO news(title) VALUES('Koza test');"]);
   const backupScript = new URL("deployment/hetzner/kozatv-backup.sh", projectRoot).pathname;
   await execFileAsync("bash", [backupScript], { env: { ...process.env, KOZA_DATA_DIR: data, KOZA_BACKUP_DIR: backups } });
@@ -1801,11 +1983,17 @@ test("SQLite ve medya yedeği üretilir, checksum ve geri yükleme ön kontrolü
   const [stamp] = daily; const snapshot = join(backups, "daily", stamp);
   assert.equal((await stat(join(snapshot, "koza.sqlite"))).isFile(), true);
   assert.equal((await stat(join(snapshot, "media.tar.gz"))).isFile(), true);
+  const archive = await execFileAsync("tar", ["--list", "--gzip", "--file", join(snapshot, "media.tar.gz")]);
+  assert.match(archive.stdout, /media\/sample\.txt/, "Orijinal medya yedekte korunmalı");
+  assert.doesNotMatch(archive.stdout, /_variants/, "Yeniden üretilebilir varyantlar yedeği şişirmemeli");
   const verified = await execFileAsync("bash", [new URL("deployment/hetzner/kozatv-restore.sh", projectRoot).pathname, snapshot], { env: { ...process.env, KOZA_RESTORE_VERIFY_ONLY: "1" } });
   assert.match(verified.stdout, /geri yüklemeye hazır/);
   const source = await readFile(backupScript, "utf8");
   assert.ok(source.indexOf('find "$backup_root/daily"') < source.indexOf('mkdir "$daily_dir"'), "Yedek temizliği yeni arşivden önce çalışmalı");
   assert.match(source, /trap 'rm -rf -- "\$daily_dir"' ERR/, "Yarım kalan günlük yedek hata halinde kaldırılmalı");
+  assert.match(source, /--exclude='media\/_variants'/, "Responsive görsel önbelleği yedek dışında kalmalı");
+  const productionBackup = await readFile(new URL("../deployment/radore/kozatv-postgres-backup", import.meta.url), "utf8");
+  assert.match(productionBackup, /--exclude='media\/_variants'/, "Üretim yedeği de yalnız orijinalleri saklamalı");
 });
 
 test("başarılı dağıtım aktif sürümle birlikte yalnız son dört sürümü korur", async () => {

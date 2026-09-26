@@ -28,7 +28,7 @@ export async function GET(request: Request, context: { params: Promise<{ path: s
     const headers: Record<string, string> = {
       "content-type": media.mimeType,
       "content-length": String(end - start + 1),
-      "cache-control": "public, max-age=31536000, immutable",
+      "cache-control": media.variantFallback ? "no-store" : "public, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
       "accept-ranges": "bytes",
     };

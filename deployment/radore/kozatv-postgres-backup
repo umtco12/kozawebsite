@@ -54,8 +54,10 @@ trap 'rm -rf -- "$backup_dir"' ERR
 runuser -u kozatv -- pg_dump --dbname="$database" --format=custom --compress=9 > "$backup_dir/kozatv.dump"
 pg_restore --list "$backup_dir/kozatv.dump" >/dev/null
 
+# Responsive WebP kopyaları orijinallerden yeniden üretilebilen önbellektir. Yedeğe
+# yalnız geri getirilemez medya dosyalarını alarak disk ve uzak hedefi şişirmeyiz.
 if [[ "$bucket" == "daily" ]]; then
-  tar --create --gzip --file "$backup_dir/media.tar.gz" --directory "$data_dir" media
+  tar --create --gzip --file "$backup_dir/media.tar.gz" --exclude='media/_variants' --directory "$data_dir" media
   sha256sum "$backup_dir/kozatv.dump" "$backup_dir/media.tar.gz" > "$backup_dir/SHA256SUMS"
   printf '{"createdAt":"%s","localDate":"%s","type":"%s","database":"%s","dump":"kozatv.dump","media":"media.tar.gz"}\n' \
     "$stamp" "$local_date" "$backup_type" "$database" > "$backup_dir/manifest.json"

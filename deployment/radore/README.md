@@ -7,7 +7,7 @@ Bu hedef Ubuntu 24.04 LTS, Node.js 22, PostgreSQL 16, Caddy ve systemd kullanır
 - Kalıcı uygulama veritabanının adı `kozatv`'dir; `/etc/kozatv/app.env` bu veritabanının Unix soketi adresini taşır.
 - Kalıcı medya `/srv/kozatv/data/media`, sürümler `/srv/kozatv/releases` altındadır.
 - `KOZA_DATABASE_URL` root sahipli `/etc/kozatv/app.env` dosyasından okunur.
-- Her gece bir kez `pg_dump` + medya arşivi alınır; deployment öncesinde medya tekrar paketlenmeden yalnız küçük PostgreSQL yedeği alınır. Aylık timer gerçek geçici veritabanına geri yükleme yapar.
+- Her gece bir kez `pg_dump` + medya arşivi alınır; deployment öncesinde medya tekrar paketlenmeden yalnız küçük PostgreSQL yedeği alınır. Aylık timer gerçek geçici veritabanına geri yükleme yapar. Orijinallerden yeniden üretilebilen `media/_variants` responsive WebP önbelleği arşive alınmaz; geri yükleme sonrasında ihtiyaç oldukça yeniden oluşur.
 - Beş dakikalık sağlık timer'ı PostgreSQL/Caddy/uygulama servislerini, HTTP sözleşmesini, disk sınırını, medya sayısını ve son günlük yedeğin yaşını denetler.
 - Radore Veeam haftalık VM yedeği, uygulama yedeğinin yerine değil ikinci fiziksel katmanı olarak kullanılır.
 - DNS değiştirilmeden önce IP üzerinden ziyaretçi rotaları, admin giriş/rol akışı, medya ve yazma smoke testi geçmelidir.

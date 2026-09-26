@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, stat, statfs, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
+import sharpModule from "sharp";
+import { RESPONSIVE_IMAGE_WIDTHS } from "../app/responsive-image-model.mjs";
 
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 150 * 1024 * 1024;
@@ -19,6 +21,16 @@ const acceptedTypes: Record<string, AcceptedType> = {
 };
 
 const typeByExtension = Object.fromEntries(Object.entries(acceptedTypes).map(([mimeType, accepted]) => [accepted.extension, mimeType]));
+const MINIMUM_FREE_BYTES = 1024 * 1024 * 1024;
+const variantPattern = /^([a-f0-9]{32})-(480|768|1024|1440)\.webp$/;
+const variantJobs = new Map<string, Promise<string>>();
+type SharpPipeline = {
+  rotate: () => SharpPipeline;
+  resize: (options: { width: number; fit: "inside"; withoutEnlargement: boolean }) => SharpPipeline;
+  webp: (options: { quality: number; effort: number; smartSubsample: boolean }) => SharpPipeline;
+  toBuffer: () => Promise<Buffer>;
+};
+const sharp = sharpModule as unknown as (input: string, options: { failOn: "error" }) => SharpPipeline;
 
 export function mediaRoot() {
   const databaseSibling = process.env.KOZA_DB_PATH ? resolve(dirname(process.env.KOZA_DB_PATH), "media") : resolve(process.cwd(), "data/media");
@@ -74,8 +86,9 @@ async function storeFile(file: File, requiredKind?: MediaKind, remainingQuotaByt
   await mkdir(directory, { recursive: true });
   const disk = await statfs(directory);
   const availableBytes = Number(disk.bavail) * Number(disk.bsize);
-  if (availableBytes - buffer.length < 1024 * 1024 * 1024) throw new Error("Sunucuda ayrılması gereken 1 GB güvenlik alanı nedeniyle medya yüklenemedi.");
+  if (availableBytes - buffer.length < MINIMUM_FREE_BYTES) throw new Error("Sunucuda ayrılması gereken 1 GB güvenlik alanı nedeniyle medya yüklenemedi.");
   try { await writeFile(resolve(directory, filename), buffer, { flag: "wx" }); } catch (writeError) { if ((writeError as NodeJS.ErrnoException).code !== "EEXIST") throw writeError; }
+  if (accepted.kind === "image" && mimeType !== "image/gif") await warmResponsiveImageVariants(storageKey);
   return { storageKey, publicUrl: `/media/${storageKey}`, mimeType, sizeBytes: buffer.length };
 }
 
@@ -94,14 +107,93 @@ function resolveStoredPath(parts: string[]) {
   return target;
 }
 
+function parseVariant(parts: string[]) {
+  if (parts.length !== 4 || parts[0] !== "_variants" || !/^\d{4}$/.test(parts[1]) || !/^\d{2}$/.test(parts[2])) throw new Error("Geçersiz görsel türevi");
+  const match = variantPattern.exec(parts[3]);
+  if (!match) throw new Error("Geçersiz görsel türevi");
+  return { year: parts[1], month: parts[2], hash: match[1], width: Number(match[2]) };
+}
+
+async function originalForVariant(parts: string[]) {
+  const variant = parseVariant(parts);
+  for (const extension of ["jpg", "png", "webp"]) {
+    const path = resolveStoredPath([variant.year, variant.month, `${variant.hash}.${extension}`]);
+    try {
+      const details = await stat(path);
+      if (details.isFile()) return { path, mimeType: typeByExtension[extension], sizeBytes: details.size, ...variant };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  throw new Error("Görselin orijinali bulunamadı");
+}
+
+async function generateResponsiveVariant(parts: string[]) {
+  const target = resolveStoredPath(parts);
+  try {
+    const details = await stat(target);
+    if (details.isFile()) return target;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  const existingJob = variantJobs.get(target);
+  if (existingJob) return existingJob;
+
+  const job = (async () => {
+    const original = await originalForVariant(parts);
+    const output = await sharp(original.path, { failOn: "error" })
+      .rotate()
+      .resize({ width: original.width, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80, effort: 4, smartSubsample: true })
+      .toBuffer();
+    const directory = dirname(target);
+    await mkdir(directory, { recursive: true });
+    const disk = await statfs(directory);
+    const availableBytes = Number(disk.bavail) * Number(disk.bsize);
+    if (availableBytes - output.length < MINIMUM_FREE_BYTES) throw new Error("Görsel türevi için 1 GB güvenlik alanı korunamadı");
+    const temporary = `${target}.${process.pid}-${Date.now()}.tmp`;
+    try {
+      await writeFile(temporary, output, { flag: "wx" });
+      await rename(temporary, target);
+    } finally {
+      await unlink(temporary).catch(() => undefined);
+    }
+    return target;
+  })();
+  variantJobs.set(target, job);
+  try { return await job; } finally { variantJobs.delete(target); }
+}
+
+export async function warmResponsiveImageVariants(storageKey: string) {
+  const match = /^(\d{4})\/(\d{2})\/([a-f0-9]{32})\.(?:jpe?g|png|webp)$/i.exec(storageKey);
+  if (!match) return;
+  for (const width of RESPONSIVE_IMAGE_WIDTHS) {
+    try {
+      await generateResponsiveVariant(["_variants", match[1], match[2], `${match[3]}-${width}.webp`]);
+    } catch (error) {
+      console.warn(`Görsel türevi hazırlanamadı (${storageKey}, ${width}px):`, error instanceof Error ? error.message : error);
+    }
+  }
+}
+
 export async function readStoredMedia(parts: string[]) {
-  const path = resolveStoredPath(parts);
+  let path = resolveStoredPath(parts);
+  let variantFallback = false;
+  if (parts[0] === "_variants") {
+    try {
+      path = await generateResponsiveVariant(parts);
+    } catch {
+      path = (await originalForVariant(parts)).path;
+      variantFallback = true;
+    }
+  }
   const extension = path.split(".").pop()?.toLowerCase() ?? "";
   const mimeType = typeByExtension[extension];
   if (!mimeType) throw new Error("Desteklenmeyen medya türü");
   const details = await stat(path);
   if (!details.isFile()) throw new Error("Medya bulunamadı");
-  return { path, mimeType, sizeBytes: details.size, kind: acceptedTypes[mimeType].kind };
+  return { path, mimeType, sizeBytes: details.size, kind: acceptedTypes[mimeType].kind, variantFallback };
 }
 
 export async function readStoredImage(parts: string[]) {

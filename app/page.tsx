@@ -6,6 +6,7 @@ import { AdSlot } from "./ad-slot";
 import { HomeVideos } from "./home-videos";
 import { HomeBreakingNews } from "./home-breaking-news";
 import { BreakingTicker } from "./breaking-ticker";
+import { ResponsiveImage } from "./responsive-image";
 import { toBreakingItems } from "../db/breaking-feed-model.mjs";
 import "./home-breaking-news.css";
 
@@ -61,7 +62,7 @@ export default async function Home() {
             <aside className="hero-side-news" aria-label="Manşet yanı haberleri">
               {sideNews.map((article, index) => (
                 <a href={`/haber/${article.slug}`} className={`hero-side-card hero-side-card-${index + 1}`} key={article.id}>
-                  <img src={article.heroImage} alt={article.imageAlt} loading={index === 0 ? "eager" : "lazy"} />
+                  <ResponsiveImage src={article.heroImage} alt={article.imageAlt} sizes="(max-width: 760px) calc(100vw - 24px), (max-width: 1100px) 50vw, 330px" preferredWidth={480} loading={index === 0 ? "eager" : "lazy"} />
                   <div>
                     <h2>{displayTitle(article.title)}</h2>
                   </div>
@@ -76,7 +77,7 @@ export default async function Home() {
             {belowNews.map((article) => (
               <a href={`/haber/${article.slug}`} className="headline-below-card" key={article.id}>
                 <div className="headline-below-image">
-                  <img src={article.heroImage} alt={article.imageAlt} loading="lazy" />
+                  <ResponsiveImage src={article.heroImage} alt={article.imageAlt} sizes="(max-width: 760px) calc(100vw - 24px), (max-width: 1100px) 50vw, 300px" preferredWidth={480} loading="lazy" />
                   {article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}
                 </div>
                 <div><span>{article.category}</span><h2>{displayTitle(article.title)}</h2></div>
@@ -93,7 +94,7 @@ export default async function Home() {
             <div className={`latest-lead-layout latest-with-breaking${grid[0] ? "" : " latest-no-lead"}`}>
               {grid[0] ? (
                 <a href={`/haber/${grid[0].slug}`} className="news-card featured" key={grid[0].id}>
-                  <div className="news-thumb"><img src={grid[0].heroImage} alt={grid[0].imageAlt} loading="lazy" />{grid[0].isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
+                  <div className="news-thumb"><ResponsiveImage src={grid[0].heroImage} alt={grid[0].imageAlt} sizes="(max-width: 760px) 120px, (max-width: 1100px) 50vw, 560px" preferredWidth={768} loading="lazy" />{grid[0].isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <div className="card-body">
                     <span>{grid[0].category}</span>
                     <h3>{displayTitle(grid[0].title)}</h3>
@@ -106,7 +107,7 @@ export default async function Home() {
             <div className="news-grid latest-news-grid">
               {grid.slice(1).map((article) => (
                 <a href={`/haber/${article.slug}`} className="news-card" key={article.id}>
-                  <div className="news-thumb"><img src={article.heroImage} alt={article.imageAlt} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
+                  <div className="news-thumb"><ResponsiveImage src={article.heroImage} alt={article.imageAlt} sizes="(max-width: 760px) 120px, (max-width: 1100px) 50vw, 280px" preferredWidth={480} loading="lazy" />{article.isBreaking ? <b className="breaking-ribbon">SON DAKİKA</b> : null}</div>
                   <div className="card-body">
                     <span>{article.category}</span>
                     <h3>{displayTitle(article.title)}</h3>
