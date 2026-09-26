@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { displayTitle } from "../db/title-model.mjs";
 import { BREAKING_REFRESH_MS, createBreakingRefresh } from "./breaking-news-refresh.mjs";
 
-/* Ana sayfadaki "HABER AKIŞI · Son Eklenenler" kutusu.
+/* Ana sayfadaki "HABER AKIŞI · Son Haberler" kutusu.
    Son dakika işaretine bakmaz: en son yayına alınan beş haberi yeniden eskiye sıralar.
    Yeni haber yayınlandığında en üste girer ve beşinci haber listeden düşer.
    Dosya ve sınıf adlarındaki "breaking" ilk sürümden kalmadır. */
@@ -47,7 +47,7 @@ export function HomeBreakingNews({ initialItems }: { initialItems: BreakingItem[
     <aside className="home-breaking-news" aria-labelledby="home-breaking-heading" ref={region} onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget) && queued.current) { apply(queued.current); queued.current = null; setAnnouncement("Haber akışı güncellendi."); }
     }}>
-      <header><span className="home-breaking-kicker"><i aria-hidden="true" /> HABER AKIŞI</span><h2 id="home-breaking-heading">Son Eklenenler</h2></header>
+      <header><span className="home-breaking-kicker"><i aria-hidden="true" /> HABER AKIŞI</span><h2 id="home-breaking-heading">Son Haberler</h2></header>
       <ol>
         {items.map((article) => {
           const stamp = newsTime(article.publishedAt);

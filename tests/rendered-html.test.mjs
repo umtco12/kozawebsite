@@ -29,7 +29,8 @@ import { ensureAdvertisementSchema } from "../db/ad-schema.mjs";
 import { formSignature, istanbulInputTimestamp, istanbulInputValue, toggleConfirmation } from "../app/admin/ad-form-model.mjs";
 import { homepageLayoutSignature, moveHomepageLayoutCard } from "../app/admin/homepage-layout-model.mjs";
 import { extractGalleryImages, selectHomepagePhotoGalleries, selectPhotoGalleries } from "../db/photo-gallery-model.mjs";
-import { createBreakingRefresh, BREAKING_REFRESH_MS } from "../app/breaking-news-refresh.mjs";
+import { createBreakingRefresh, BREAKING_REFRESH_MS, BREAKING_ROTATION_MS } from "../app/breaking-news-refresh.mjs";
+import { nextBreakingId, reconcileBreakingId } from "../app/breaking-ticker-model.mjs";
 import { isBreakingItems, toBreakingItems } from "../db/breaking-feed-model.mjs";
 import { createYouTubeFeedLoader, KOZA_YOUTUBE_FEED_URL, parseYouTubeFeed, YOUTUBE_REFRESH_MS, YOUTUBE_STALE_MS } from "../db/youtube-feed.mjs";
 
@@ -1548,14 +1549,15 @@ test("içerik API kalıcı SQLite verisini yazar ve yeniden okur", async () => {
 });
 
 test("ana sayfa tarih, mobil ve hareket azaltma kurallarını kaynakta korur", async () => {
-  const [page, css, chrome] = await Promise.all([
+  const [page, ticker, css, chrome] = await Promise.all([
     readFile(new URL("app/page.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/breaking-ticker.tsx", projectRoot), "utf8"),
     readFile(new URL("app/globals.css", projectRoot), "utf8"),
     readFile(new URL("app/site-chrome.tsx", projectRoot), "utf8"),
   ]);
 
-  assert.match(page, /Intl\.DateTimeFormat\("tr-TR"/);
-  assert.match(page, /timeZone:\s*"Europe\/Istanbul"/);
+  assert.match(page + ticker, /Intl\.DateTimeFormat\("tr-TR"/);
+  assert.match(page + ticker, /timeZone:\s*"Europe\/Istanbul"/);
   assert.doesNotMatch(page, /20 Ağustos 2026, Perşembe/);
   assert.match(css, /@media\(max-width:900px\)/);
   assert.match(css, /@media\(max-width:600px\)/);
@@ -3411,8 +3413,8 @@ test("ana sayfa haber akışı kutusu son eklenen beş yayındaki haberi sırala
   const aside = home.match(/<aside class="home-breaking-news"[\s\S]*?<\/aside>/)?.[0] || "";
   assert.equal((aside.match(/<li>/g) || []).length, 5);
   assert.doesNotMatch(home, /<aside class="home-photo-gallery/);
-  assert.match(aside, /<h2 id="home-breaking-heading">Son Eklenenler<\/h2>/, "Kutu başlığı son eklenenleri anlatmalı");
-  assert.doesNotMatch(aside, /Son Dakika|Son Haberler/, "Kutuda son dakika veya Son Haberler adlandırması kalmamalı");
+  assert.match(aside, /<h2 id="home-breaking-heading">Son Haberler<\/h2>/, "Kutu başlığı Son Haberler olmalı");
+  assert.doesNotMatch(aside, /Son Dakika/, "Kutuda son dakika adlandırması kalmamalı");
   assert.match(aside, /HABER AKIŞI/);
   assert.match(aside, /<time dateTime=|<time datetime=/);
   assert.match(aside, /Tüm haberleri gör/);
@@ -3458,6 +3460,82 @@ test("son dakika canlı yenilemesi geçerli listeyi alır; hata ve bozuk yanıtt
   refresher.stop(); const stoppedCalls=calls; await refresher.refresh(); assert.equal(calls,stoppedCalls);
   let finish; const late = createBreakingRefresh({onItems: () => assert.fail("Durdurulmuş bileşen güncellenmemeli"),fetcher: () => new Promise(resolve => { finish=resolve; })});
   const pending=late.refresh(); late.stop(); finish(Response.json({items:[item]})); await pending;
+});
+
+test("üst son dakika şeridi yalnız işaretli yayındaki beş haberi döndürür ve kaldırılan işareti canlı akıştan çıkarır", async (t) => {
+  assert.equal(BREAKING_ROTATION_MS, 6000);
+  const items = [
+    { id: 1, slug: "bir", title: "Bir", publishedAt: Date.now() },
+    { id: 2, slug: "iki", title: "İki", publishedAt: Date.now() },
+    { id: 3, slug: "uc", title: "Üç", publishedAt: Date.now() },
+  ];
+  assert.equal(nextBreakingId(items, 1), 2);
+  assert.equal(nextBreakingId(items, 3), 1, "Son haberden sonra ilk habere dönmeli");
+  assert.equal(nextBreakingId(items, 99), 1, "Görünür haber kaldırıldıysa en yeni haber seçilmeli");
+  assert.equal(reconcileBreakingId(items, 2), 2);
+  assert.equal(reconcileBreakingId(items, 99), 1);
+  assert.equal(reconcileBreakingId([], 1), null);
+
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const ids = [];
+  t.after(() => {
+    db.transaction(() => { for (const id of ids) db.prepare("DELETE FROM articles WHERE id=?").run(id); })();
+    db.close();
+  });
+  const latestPublished = Number(db.prepare("SELECT COALESCE(MAX(published_at),0) AS newest FROM articles").get().newest);
+  const base = Math.max(Date.now(), latestPublished) + 7_200_000;
+  const insert = (index, status, flag, publishedAt) => {
+    const result = db.prepare("INSERT INTO articles(slug,title,spot,body,category,status,is_breaking,published_at,created_at,updated_at) VALUES (?,?, 'Test spotu','Test gövdesi','Gündem',?,?,?,?,?)")
+      .run(`ust-serit-${index}`, `Üst şerit ${index}`, status, flag, publishedAt, Date.now(), Date.now());
+    ids.push(Number(result.lastInsertRowid));
+    return Number(result.lastInsertRowid);
+  };
+  for (let index = 1; index <= 6; index++) insert(index, "published", 1, base + index * 60_000);
+  insert(7, "published", 0, base + 8 * 60_000);
+  insert(8, "draft", 1, base + 9 * 60_000);
+
+  const read = async () => {
+    const response = await fetch(`${baseUrl}/api/breaking-ticker`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const payload = await response.json();
+    assert.ok(isBreakingItems(payload.items));
+    return payload.items;
+  };
+  assert.deepEqual((await read()).map((item) => item.slug), [6, 5, 4, 3, 2].map((index) => `ust-serit-${index}`));
+  const home = await html("/");
+  const ticker = home.match(/<section class="breaking"[\s\S]*?<\/section>/)?.[0] ?? "";
+  assert.match(ticker, /data-active-id="[^"]+"/);
+  assert.match(ticker, /href="\/haber\/ust-serit-6"/);
+  assert.equal((ticker.match(/<a\b/g) ?? []).length, 1, "Görünen şeridin tamamı tek haber bağlantısı olmalı");
+
+  db.prepare("UPDATE articles SET is_breaking=0 WHERE slug='ust-serit-6'").run();
+  const withoutFlag = await read();
+  assert.deepEqual(withoutFlag.map((item) => item.slug), [5, 4, 3, 2, 1].map((index) => `ust-serit-${index}`));
+  assert.ok(!withoutFlag.some((item) => item.slug === "ust-serit-6"), "İşareti kaldırılan haber canlı listeden çıkmalı");
+  db.prepare("UPDATE articles SET status='draft' WHERE slug='ust-serit-5'").run();
+  assert.ok(!(await read()).some((item) => item.slug === "ust-serit-5"), "Yayından alınan haber şeritte kalmamalı");
+  assert.equal((await fetch(`${baseUrl}/api/breaking-ticker`, { method: "POST", body: "{}" })).status, 405);
+
+  let requested = "";
+  const refresher = createBreakingRefresh({
+    endpoint: "/api/breaking-ticker",
+    onItems() {},
+    fetcher: async (url) => { requested = url; return Response.json({ items: [] }); },
+  });
+  await refresher.refresh();
+  assert.equal(requested, "/api/breaking-ticker");
+  refresher.stop();
+
+  const component = await readFile(new URL("../app/breaking-ticker.tsx", import.meta.url), "utf8");
+  assert.match(component, /window\.setTimeout/);
+  assert.match(component, /nextBreakingId\(items, current\)/);
+  assert.match(component, /BREAKING_ROTATION_MS/);
+  assert.match(component, /prefers-reduced-motion: reduce/);
+  assert.match(component, /onMouseEnter|onFocusCapture/);
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /@keyframes breaking-ticker-in/);
+  assert.match(css, /@media\(prefers-reduced-motion:reduce\)\{\.breaking-inner\{animation:none!important\}\}/);
 });
 
 test("medya boyutu sınırları ve kaydedilen duyarlı genişlik", async () => {

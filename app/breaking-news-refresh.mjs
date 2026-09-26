@@ -1,9 +1,10 @@
 import { isBreakingItems } from "../db/breaking-feed-model.mjs";
 
 export const BREAKING_REFRESH_MS = 60_000;
+export const BREAKING_ROTATION_MS = 6_000;
 
 /** Eşzamanlı istekleri birleştirir; hatalı yanıtta görünür haberler korunur. */
-export function createBreakingRefresh({ onItems, fetcher = fetch }) {
+export function createBreakingRefresh({ onItems, fetcher = fetch, endpoint = "/api/breaking-news" }) {
   let pending;
   let stopped = false;
   let controller;
@@ -15,7 +16,7 @@ export function createBreakingRefresh({ onItems, fetcher = fetch }) {
       const timer = setTimeout(() => controller?.abort(), 8000);
       pending = (async () => {
         try {
-          const response = await fetcher("/api/breaking-news", { cache: "no-store", signal: controller.signal });
+          const response = await fetcher(endpoint, { cache: "no-store", signal: controller.signal });
           if (!response.ok) return;
           const data = await response.json();
           if (!stopped && isBreakingItems(data.items)) onItems(data.items);

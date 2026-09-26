@@ -1725,10 +1725,13 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 
 /* Son dakika şeridinin tamamı bağlantıdır; "Habere git" yalnız görsel bir işarettir. */
 .breaking-inner{cursor:pointer}
+.breaking-inner{animation:breaking-ticker-in .28s ease-out}
+@keyframes breaking-ticker-in{from{opacity:.35;transform:translateY(4px)}to{opacity:1;transform:none}}
 .breaking-inner:hover p{text-decoration:underline;text-underline-offset:3px}
 .breaking-inner:focus-visible{outline:2px solid #fff;outline-offset:-4px}
 .breaking-go span{display:inline-block;transition:transform .18s ease}
 .breaking-inner:hover .breaking-go span{transform:translateX(3px)}
+@media(prefers-reduced-motion:reduce){.breaking-inner{animation:none!important}}
 
 /* Manşette görselin her yeri habere gider. Katman gölgenin üstünde, yazının ve
    slider kumandasının altındadır; kaydırma hareketi bölümün click yakalayıcısıyla ayıklanır. */

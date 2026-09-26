@@ -5,15 +5,11 @@ import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
 import { AdSlot } from "./ad-slot";
 import { HomeVideos } from "./home-videos";
 import { HomeBreakingNews } from "./home-breaking-news";
+import { BreakingTicker } from "./breaking-ticker";
 import { toBreakingItems } from "../db/breaking-feed-model.mjs";
 import "./home-breaking-news.css";
 
 export const dynamic = "force-dynamic";
-
-function clock(value: number | null) {
-  if (!value) return "Şimdi";
-  return new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" }).format(value);
-}
 
 export default async function Home() {
   const categories = navCategories();
@@ -35,9 +31,8 @@ export default async function Home() {
     headlinePosition: article.headlinePosition,
   }));
 
-  /* Üstteki kırmızı şerit yalnız son dakika işaretli habere aittir. */
+  /* Üstteki kırmızı şerit yalnız son dakika işaretli son beş haberi döndürür. */
   const breakingPool = listBreakingArticles(5, true);
-  const breaking = breakingPool[0];
   /* Yan kutu ise işaretten bağımsız olarak en son eklenen beş haberi gösterir:
      yeni haber en üste girer, beşinciyi listeden düşürür. */
   const feedPool = listLatestArticles(5);
@@ -47,17 +42,7 @@ export default async function Home() {
     <main className="home">
       <SiteHeader categories={categories} active="home" />
 
-      {/* Şeridin tamamı bağlantıdır: okur habere gitmek için "Habere git" yazısını aramaz. */}
-      {breaking && (
-        <section className="breaking" id="sondakika" aria-label="Son dakika">
-          <a className="wrap breaking-inner" href={`/haber/${breaking.slug}`}>
-            <strong><i /> SON DAKİKA</strong>
-            <time>{clock(breaking.publishedAt)}</time>
-            <p>{displayTitle(breaking.title)}</p>
-            <b className="breaking-go">Habere git <span aria-hidden="true">→</span></b>
-          </a>
-        </section>
-      )}
+      <BreakingTicker initialItems={toBreakingItems(breakingPool)} />
 
       <div className="wrap content">
         <header className="front-page-head">
