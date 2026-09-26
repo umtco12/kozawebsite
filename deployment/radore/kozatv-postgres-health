@@ -61,8 +61,13 @@ IFS='|' read -r article_count media_count <<< "$database_status"
 media_files="$(find "$data_dir/media" -type f | wc -l)"
 (( media_files >= media_count )) || { echo "ALARM: Medya dosyası sayısı kayıttan az: files=$media_files db=$media_count" >&2; exit 1; }
 
-latest_backup="$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -mmin "-$max_backup_age_minutes" -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
-[[ -n "$latest_backup" && -s "$latest_backup/kozatv.dump" && -s "$latest_backup/media.tar.gz" && -s "$latest_backup/SHA256SUMS" ]] || {
+latest_backup=""
+while IFS= read -r backup_candidate; do
+  [[ -s "$backup_candidate/kozatv.dump" && -s "$backup_candidate/media.tar.gz" && -s "$backup_candidate/SHA256SUMS" ]] || continue
+  latest_backup="$backup_candidate"
+  break
+done < <(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -mmin "-$max_backup_age_minutes" -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-)
+[[ -n "$latest_backup" ]] || {
   echo "ALARM: Son $max_backup_age_minutes dakika içinde eksiksiz günlük yedek yok." >&2
   exit 1
 }

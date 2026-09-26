@@ -137,6 +137,8 @@ test("Radore yayını PostgreSQL'i dışarı açmaz; doğrulamalı yedek ve ger�
   assert.match(health, /system-health\.json/);
   assert.match(health, /latestBackupAt/);
   assert.match(health, /install -o kozatv -g kozatv -m 0600/);
+  assert.match(health, /while IFS= read -r backup_candidate/, "Sağlık kontrolü devam eden yedeği atlayıp önceki tamamlanmış yedeği aramalı");
+  assert.doesNotMatch(health, /sort -nr \| head -n 1/, "Yalnız en yeni klasörü seçmek yedekleme yarışı sırasında yanlış alarm üretir");
   assert.match(healthService, /ReadWritePaths=\/srv\/kozatv\/data/);
   assert.match(restore, /system-restore-test\.json/);
   assert.match(restore, /install -o kozatv -g kozatv -m 0600/);
