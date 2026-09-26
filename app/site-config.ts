@@ -36,7 +36,7 @@ export type CorporatePage = {
   contact?: { label: string; value: string }[];
 };
 
-export const corporateSlugs = ["hakkimizda", "kunye", "yayin-ilkeleri", "iletisim", "kvkk", "gizlilik", "cerez-politikasi"] as const;
+export const corporateSlugs = ["hakkimizda", "yayin-ilkeleri", "iletisim", "kvkk", "gizlilik", "cerez-politikasi", "kunye"] as const;
 export const corporateTitles: Record<string, string> = {
   hakkimizda: "Hakkımızda",
   kunye: "Künye",

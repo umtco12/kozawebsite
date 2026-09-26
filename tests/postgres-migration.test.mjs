@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { compilePostgresQuery } from "../db/postgres-adapter.mjs";
 import { isUniqueConstraintError } from "../db/error-model.mjs";
+
+const execFileAsync = promisify(execFile);
 
 test("PostgreSQL bağdaştırıcısı konumsal parametreleri ve SQLite arama sözdizimini güvenle çevirir", () => {
   const query = compilePostgresQuery(
@@ -155,6 +161,54 @@ test("Radore yayını PostgreSQL'i dışarı açmaz; doğrulamalı yedek ve ger�
   assert.match(readme, /00-kozatv-hardening\.conf/);
   assert.match(readme, /passwordauthentication no/);
   assert.match(knownHosts, /^46\.45\.185\.67 ssh-ed25519 [A-Za-z0-9+/=]+\n$/);
+});
+
+test("Radore yedekleri sabit sayıda tutulur ve deployment medya arşivini tekrar oluşturmaz", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kozatv-backup-retention-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const retention = new URL("../deployment/radore/kozatv-backup-retention", import.meta.url).pathname;
+  const backup = await readFile(new URL("../deployment/radore/kozatv-postgres-backup", import.meta.url), "utf8");
+  const deploy = await readFile(new URL("../deployment/radore/deploy.sh", import.meta.url), "utf8");
+  const readme = await readFile(new URL("../deployment/radore/README.md", import.meta.url), "utf8");
+  const limits = { "pre-deploy": 3, daily: 7, weekly: 4, monthly: 3 };
+
+  for (const [bucket, keep] of Object.entries(limits)) {
+    const directory = join(root, bucket);
+    await mkdir(directory, { recursive: true });
+    for (let index = 1; index <= keep + 3; index += 1) {
+      await mkdir(join(directory, `202609${String(index).padStart(2, "0")}T000000Z`));
+    }
+    await mkdir(join(directory, "elle-korunan-kurtarma"));
+  }
+
+  await execFileAsync("bash", [retention], {
+    env: { ...process.env, KOZA_BACKUP_DIR: root, KOZA_BACKUP_TEST_ROOT: root },
+  });
+
+  for (const [bucket, keep] of Object.entries(limits)) {
+    const entries = (await readdir(join(root, bucket))).sort();
+    const automatic = entries.filter((entry) => /^20\d{6}T\d{6}Z$/.test(entry));
+    assert.equal(automatic.length, keep, `${bucket} için yalnız son ${keep} otomatik yedek kalmalı`);
+    assert.equal(automatic.at(-1), `202609${String(keep + 3).padStart(2, "0")}T000000Z`);
+    assert.ok(entries.includes("elle-korunan-kurtarma"), "Elle adlandırılan kurtarma kopyası silinmemeli");
+  }
+
+  await assert.rejects(
+    execFileAsync("bash", [retention], { env: { ...process.env, KOZA_BACKUP_DIR: join(tmpdir(), "koza-guvensiz-hedef") } }),
+    /Güvensiz yedek dizini reddedildi/,
+  );
+
+  assert.match(backup, /daily\|--daily/);
+  assert.match(backup, /pre-deploy\|--pre-deploy/);
+  assert.match(backup, /existing_today/);
+  assert.match(backup, /if \[\[ "\$bucket" == "daily" \]\]; then\n\s+tar --create/,
+    "Medya yalnız günlük tam yedekte arşivlenmeli");
+  assert.match(backup, /cp -al/, "Haftalık ve aylık kopyalar diski tekrar şişirmemeli");
+  assert.match(backup, /rsync -aH --delete/, "Uzak kopyada hard-link yapısı korunmalı");
+  assert.match(deploy, /kozatv-postgres-backup --pre-deploy/);
+  assert.doesNotMatch(deploy, /kozatv-postgres-backup\s*\n/,
+    "Deployment tam medya yedeği çalıştırmamalı");
+  assert.match(readme, /son \*\*3 deployment veritabanı yedeği\*\*, \*\*7 günlük tam yedek\*\*, \*\*4 haftalık\*\* ve \*\*3 aylık\*\*/);
 });
 
 test("Radore uygulama kümesi işlemciyi kullanır ve worker kaybında kontrollü yeniden başlar", async () => {

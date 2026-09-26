@@ -1907,6 +1907,9 @@ test("gizlilik belgesindeki kurumsal içerikler doğru sayfalara taşınır ve �
   assert.match(about, /Güncel ve Renkli Programlar Koza TV'de/);
   assert.match(about, /Koza TV Yayın Bilgileri/);
   assert.doesNotMatch(about, /class="static-live"/, "Kurumsal yan menüde canlı yayın çağrısı kalmamalı");
+  const corporateAside = about.match(/<aside class="static-aside">([\s\S]*?)<\/aside>/)?.[1] ?? "";
+  const corporateLinks = [...corporateAside.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(corporateLinks.at(-1), "/kurumsal/kunye", "Künye kurumsal yan menünün son bağlantısı olmalı");
 
   const principles = await html("/kurumsal/yayin-ilkeleri");
   assert.match(principles, /Bizim de kabul ettiğimiz temel ilkeler/);
@@ -2717,6 +2720,13 @@ test("taşıma rehberi veri taşıma ve dağıtım değişkeni kurallarını tan
   assert.match(workflow, /vars\.KOZA_HOST/, "Sunucu adresi GitHub değişkeninden gelmeli");
   assert.ok(workflow.includes("known_hosts"), "Sabit SSH host anahtarı doğrulaması korunmalı");
   assert.doesNotMatch(workflow, /46\.225\.169\.52|HETZNER_SSH_KEY|deployment\/hetzner/, "Eski Hetzner stage dağıtım hedefi kalmamalı");
+
+  const domainCaddy = await readFile(new URL("../deployment/radore/Caddyfile.domain", import.meta.url), "utf8");
+  assert.match(domainCaddy, /^kozatv\.com\.tr \{/m, "Kök alan adı Caddy yapılandırmasında bulunmalı");
+  assert.match(domainCaddy, /^www\.kozatv\.com\.tr \{/m, "Kanonik www alan adı Caddy yapılandırmasında bulunmalı");
+  assert.match(domainCaddy, /redir https:\/\/www\.kozatv\.com\.tr\{uri\} permanent/, "Kök alan adı kanonik www adresine yönlenmeli");
+  assert.match(domainCaddy, /reverse_proxy 127\.0\.0\.1:8201/, "Alan adı trafiği yalnız yerel uygulamaya aktarılmalı");
+  assert.match(domainCaddy, /Strict-Transport-Security/, "HTTPS yanıtlarında HSTS korunmalı");
 });
 
 test("büyük harfli arşiv başlıkları okunur biçimde gösterilir, kısaltmalar korunur", () => {

@@ -5,35 +5,86 @@ umask 077
 database="${KOZA_DATABASE_NAME:-kozatv}"
 data_dir="${KOZA_DATA_DIR:-/srv/kozatv/data}"
 backup_root="${KOZA_BACKUP_DIR:-/srv/kozatv/backups}"
+retention_command="${KOZA_BACKUP_RETENTION_COMMAND:-/usr/local/sbin/kozatv-backup-retention}"
+mode="${1:-daily}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-daily_dir="$backup_root/daily/$stamp"
+local_date="$(TZ=Europe/Istanbul date +%Y-%m-%d)"
 
 case "$backup_root" in
   /srv/kozatv/backups|/srv/kozatv/backups/*) ;;
   *) echo "Güvensiz yedek dizini reddedildi: $backup_root" >&2; exit 2 ;;
 esac
 
-install -d -m 0700 "$backup_root/daily" "$backup_root/weekly" "$backup_root/monthly"
-find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf -- {} +
-find "$backup_root/weekly" -mindepth 1 -maxdepth 1 -type d -mtime +35 -exec rm -rf -- {} +
-find "$backup_root/monthly" -mindepth 1 -maxdepth 1 -type d -mtime +370 -exec rm -rf -- {} +
+case "$mode" in
+  daily|--daily) bucket="daily"; backup_type="daily-full" ;;
+  pre-deploy|--pre-deploy) bucket="pre-deploy"; backup_type="pre-deploy-database" ;;
+  *) echo "Kullanım: kozatv-postgres-backup [--daily|--pre-deploy]" >&2; exit 2 ;;
+esac
 
-if [[ -e "$daily_dir" ]]; then
-  echo "Bu zaman damgasına ait yedek zaten var: $daily_dir" >&2
+install -d -m 0700 "$backup_root/daily" "$backup_root/pre-deploy" "$backup_root/weekly" "$backup_root/monthly"
+exec 9>"$backup_root/.backup.lock"
+flock -n 9 || { echo "Başka bir yedekleme işlemi devam ediyor." >&2; exit 4; }
+"$retention_command"
+
+if [[ "$bucket" == "daily" ]]; then
+  existing_today="$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -print \
+    | sort -r \
+    | while IFS= read -r candidate; do
+        if [[ -s "$candidate/kozatv.dump" && -s "$candidate/media.tar.gz" && -s "$candidate/SHA256SUMS" ]] \
+          && grep -Fq "\"localDate\":\"$local_date\"" "$candidate/manifest.json" 2>/dev/null; then
+          printf '%s\n' "$candidate"
+          break
+        fi
+      done)"
+  if [[ -n "$existing_today" ]]; then
+    echo "Bugünün tam yedeği zaten var: $existing_today"
+    exit 0
+  fi
+fi
+
+backup_dir="$backup_root/$bucket/$stamp"
+
+if [[ -e "$backup_dir" ]]; then
+  echo "Bu zaman damgasına ait yedek zaten var: $backup_dir" >&2
   exit 3
 fi
 
-install -d -m 0700 "$daily_dir"
-trap 'rm -rf -- "$daily_dir"' ERR
-runuser -u kozatv -- pg_dump --dbname="$database" --format=custom --compress=9 > "$daily_dir/kozatv.dump"
-pg_restore --list "$daily_dir/kozatv.dump" >/dev/null
-tar --create --gzip --file "$daily_dir/media.tar.gz" --directory "$data_dir" media
-sha256sum "$daily_dir/kozatv.dump" "$daily_dir/media.tar.gz" > "$daily_dir/SHA256SUMS"
-printf '{"createdAt":"%s","database":"%s","dump":"kozatv.dump","media":"media.tar.gz"}\n' "$stamp" "$database" > "$daily_dir/manifest.json"
+install -d -m 0700 "$backup_dir"
+trap 'rm -rf -- "$backup_dir"' ERR
+runuser -u kozatv -- pg_dump --dbname="$database" --format=custom --compress=9 > "$backup_dir/kozatv.dump"
+pg_restore --list "$backup_dir/kozatv.dump" >/dev/null
+
+if [[ "$bucket" == "daily" ]]; then
+  tar --create --gzip --file "$backup_dir/media.tar.gz" --directory "$data_dir" media
+  sha256sum "$backup_dir/kozatv.dump" "$backup_dir/media.tar.gz" > "$backup_dir/SHA256SUMS"
+  printf '{"createdAt":"%s","localDate":"%s","type":"%s","database":"%s","dump":"kozatv.dump","media":"media.tar.gz"}\n' \
+    "$stamp" "$local_date" "$backup_type" "$database" > "$backup_dir/manifest.json"
+else
+  sha256sum "$backup_dir/kozatv.dump" > "$backup_dir/SHA256SUMS"
+  printf '{"createdAt":"%s","localDate":"%s","type":"%s","database":"%s","dump":"kozatv.dump"}\n' \
+    "$stamp" "$local_date" "$backup_type" "$database" > "$backup_dir/manifest.json"
+fi
 trap - ERR
 
-if [[ "$(date -u +%u)" == "7" ]]; then cp -a "$daily_dir" "$backup_root/weekly/$stamp"; fi
-if [[ "$(date -u +%d)" == "01" ]]; then cp -a "$daily_dir" "$backup_root/monthly/$stamp"; fi
-if [[ -n "${KOZA_BACKUP_REMOTE:-}" ]]; then rsync -a --delete "$backup_root/" "$KOZA_BACKUP_REMOTE/"; fi
+snapshot_copy() {
+  local destination="$1"
+  local temporary="$destination.partial-$$"
+  rm -rf -- "$temporary"
+  if ! cp -al "$backup_dir" "$temporary"; then
+    rm -rf -- "$temporary"
+    return 1
+  fi
+  mv "$temporary" "$destination"
+}
 
-echo "Koza TV PostgreSQL yedeği tamamlandı: $daily_dir"
+if [[ "$bucket" == "daily" && "$(TZ=Europe/Istanbul date +%u)" == "7" ]]; then
+  snapshot_copy "$backup_root/weekly/$stamp"
+fi
+if [[ "$bucket" == "daily" && "$(TZ=Europe/Istanbul date +%d)" == "01" ]]; then
+  snapshot_copy "$backup_root/monthly/$stamp"
+fi
+
+"$retention_command"
+if [[ -n "${KOZA_BACKUP_REMOTE:-}" ]]; then rsync -aH --delete "$backup_root/" "$KOZA_BACKUP_REMOTE/"; fi
+
+echo "Koza TV PostgreSQL yedeği tamamlandı: $backup_dir"

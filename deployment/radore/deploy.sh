@@ -44,8 +44,9 @@ trap rollback ERR
 runuser -u kozatv -- bash -lc "cd '$release_dir' && npm ci"
 runuser -u kozatv -- bash -lc "cd '$release_dir' && npm test"
 
-# Uygulama açılışındaki şema uyarlamalarından önce doğrulanmış PostgreSQL + medya yedeği al.
-/usr/local/sbin/kozatv-postgres-backup
+# Uygulama açılışındaki şema uyarlamalarından önce küçük, doğrulanmış
+# PostgreSQL yedeği al. Tam medya arşivi gece zamanlayıcısıyla günde bir kez alınır.
+/usr/local/sbin/kozatv-postgres-backup --pre-deploy
 
 ln -sfn "$release_dir" "$current_link.next"
 chown -h kozatv:kozatv "$current_link.next"

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+backup_root="${KOZA_BACKUP_DIR:-/srv/kozatv/backups}"
+
+case "$backup_root" in
+  /srv/kozatv/backups|/srv/kozatv/backups/*) ;;
+  "${KOZA_BACKUP_TEST_ROOT:-/__koza_test_root_not_set__}") ;;
+  *) echo "Güvensiz yedek dizini reddedildi: $backup_root" >&2; exit 2 ;;
+esac
+
+prune_bucket() {
+  local bucket="$1"
+  local keep_count="$2"
+  local bucket_dir="$backup_root/$bucket"
+  local count remove_count target name
+
+  install -d -m 0700 "$bucket_dir"
+  count="$(find "$bucket_dir" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' | wc -l | tr -d ' ')"
+  remove_count=$((count - keep_count))
+  if (( remove_count <= 0 )); then
+    return 0
+  fi
+
+  find "$bucket_dir" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -print \
+    | sort \
+    | head -n "$remove_count" \
+    | while IFS= read -r target; do
+        name="${target##*/}"
+        [[ "$name" =~ ^20[0-9]{6}T[0-9]{6}Z$ ]]
+        [[ "$target" == "$bucket_dir/$name" ]]
+        rm -rf -- "$target"
+        echo "Eski $bucket yedeği kaldırıldı: $name"
+      done
+}
+
+prune_bucket pre-deploy 3
+prune_bucket daily 7
+prune_bucket weekly 4
+prune_bucket monthly 3
