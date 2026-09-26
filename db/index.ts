@@ -1,5 +1,5 @@
 import { archiveSearchText, articleArchiveFilter, backfillArticleActors } from "./article-archive-model.mjs";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, statSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import Database from "better-sqlite3";
@@ -277,6 +277,30 @@ export function getDb() {
     }
   }
   return database;
+}
+export function getSystemDatabaseMetrics() {
+  const startedAt = performance.now();
+  const db = getDb();
+  const counts = db.prepare(`SELECT
+    (SELECT COUNT(*) FROM articles) AS article_count,
+    (SELECT COUNT(*) FROM media_assets) AS media_record_count,
+    (SELECT COALESCE(SUM(size_bytes),0) FROM media_assets) AS media_bytes`).get() as { article_count: number; media_record_count: number; media_bytes: number };
+  let sizeBytes = 0;
+  if (process.env.KOZA_DATABASE_URL) {
+    const size = db.prepare("SELECT pg_database_size(current_database()) AS size_bytes").get() as { size_bytes: number };
+    sizeBytes = Number(size.size_bytes || 0);
+  } else {
+    try { sizeBytes = statSync(databasePath()).size; } catch { sizeBytes = 0; }
+  }
+  return {
+    available: true,
+    engine: process.env.KOZA_DATABASE_URL ? "postgresql" : "sqlite",
+    sizeBytes,
+    latencyMs: Math.max(0, Math.round((performance.now() - startedAt) * 10) / 10),
+    articleCount: Number(counts.article_count || 0),
+    mediaRecordCount: Number(counts.media_record_count || 0),
+    mediaBytes: Number(counts.media_bytes || 0),
+  };
 }
 export function getContentRows(): ContentRow[] { return getDb().prepare("SELECT key,value FROM content_items ORDER BY key").all() as ContentRow[]; }
 export function upsertContentItem(key: string, value: unknown) { getDb().prepare("INSERT INTO content_items (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(key, JSON.stringify(value), Date.now()); }

@@ -100,6 +100,7 @@ test("Radore yayını PostgreSQL'i dışarı açmaz; doğrulamalı yedek ve ger�
   const backup = await readFile(new URL("../deployment/radore/kozatv-postgres-backup", import.meta.url), "utf8");
   const restore = await readFile(new URL("../deployment/radore/kozatv-postgres-restore-test", import.meta.url), "utf8");
   const health = await readFile(new URL("../deployment/radore/kozatv-postgres-health", import.meta.url), "utf8");
+  const healthService = await readFile(new URL("../deployment/radore/kozatv-postgres-health.service", import.meta.url), "utf8");
   const healthTimer = await readFile(new URL("../deployment/radore/kozatv-postgres-health.timer", import.meta.url), "utf8");
   const sshHardening = await readFile(new URL("../deployment/radore/sshd-hardening.conf", import.meta.url), "utf8");
   const knownHosts = await readFile(new URL("../deployment/radore/known_hosts", import.meta.url), "utf8");
@@ -133,6 +134,12 @@ test("Radore yayını PostgreSQL'i dışarı açmaz; doğrulamalı yedek ve ger�
   assert.match(health, /media_files >= media_count/);
   assert.match(health, /max_backup_age_minutes/);
   assert.match(health, /auth_status.*401/);
+  assert.match(health, /system-health\.json/);
+  assert.match(health, /latestBackupAt/);
+  assert.match(health, /install -o kozatv -g kozatv -m 0600/);
+  assert.match(healthService, /ReadWritePaths=\/srv\/kozatv\/data/);
+  assert.match(restore, /system-restore-test\.json/);
+  assert.match(restore, /install -o kozatv -g kozatv -m 0600/);
   assert.match(healthTimer, /OnUnitActiveSec=5m/);
   assert.match(readme, /5432.*açılmaz/);
   assert.match(readme, /DNS değiştirilmeden önce/);

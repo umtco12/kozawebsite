@@ -1871,3 +1871,43 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .admin-accessibility output{min-width:40px;color:#4e5964;font-size:9px;font-weight:900;text-align:center}
 @media(max-width:1050px){.newsroom-top{flex-wrap:wrap;gap:14px}.newsroom-account-tools{width:100%;flex-wrap:wrap}.admin-accessibility>span{font-size:8px}}
 /* Admin kullanıcı görünüm ölçeği sonu. */
+
+/* Yöneticiye özel, salt okunur sunucu ve veri sağlığı özeti. */
+.system-status-panel{display:grid;gap:18px}
+.system-status-summary{display:flex;align-items:center;justify-content:space-between;gap:28px;padding:24px 26px;border:1px solid #dce3e8;border-left:5px solid #23815b;border-radius:12px;background:linear-gradient(135deg,#fff 0%,#f4faf7 100%);box-shadow:0 8px 28px #1a2a3510}
+.system-status-summary.warning{border-left-color:#d28a16;background:linear-gradient(135deg,#fff 0%,#fff8e9 100%)}
+.system-status-summary.critical{border-left-color:#c92721;background:linear-gradient(135deg,#fff 0%,#fff0f0 100%)}
+.system-status-summary>div:first-child>span,.system-status-guide span{font-size:10px;font-weight:900;letter-spacing:1.3px;color:#7c8791}
+.system-status-summary h2{margin:7px 0 8px;font:900 28px/1.15 var(--font-serif),Georgia,serif;color:#17222d}
+.system-status-summary p{max-width:720px;margin:0;color:#64707b;font-size:13px;line-height:1.65}
+.system-status-actions{display:grid;justify-items:end;gap:8px;min-width:175px}
+.system-status-actions button,.system-status-error button{min-height:42px;padding:0 16px;border:0;border-radius:7px;background:#17222d;color:#fff;font-size:12px;font-weight:900;cursor:pointer}
+.system-status-actions button:disabled{opacity:.55;cursor:wait}
+.system-status-actions button:focus-visible,.system-status-error button:focus-visible{outline:3px solid #ef9da1;outline-offset:3px}
+.system-status-actions small{color:#7d8791;font-size:10px}
+.system-status-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:#e8f5ee;color:#176644;font-size:9px;font-style:normal;font-weight:900;letter-spacing:.4px;white-space:nowrap}
+.system-status-badge:before{content:"";width:7px;height:7px;border-radius:50%;background:#23815b;box-shadow:0 0 0 3px #23815b1c}
+.system-status-badge.warning{background:#fff2d6;color:#8b5a08}.system-status-badge.warning:before{background:#d28a16;box-shadow:0 0 0 3px #d28a161f}
+.system-status-badge.critical{background:#ffe7e7;color:#a31818}.system-status-badge.critical:before{background:#c92721;box-shadow:0 0 0 3px #c927211f}
+.system-status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.system-status-card{display:flex;min-width:0;min-height:226px;flex-direction:column;padding:19px;border:1px solid #dde3e8;border-top:4px solid #23815b;border-radius:10px;background:#fff;box-shadow:0 5px 20px #17222d0c}
+.system-status-card.warning{border-top-color:#d28a16}.system-status-card.critical{border-top-color:#c92721}
+.system-status-card header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.system-status-card header>span{font-size:9px;font-weight:900;letter-spacing:1.1px;color:#89939c}
+.system-status-card h3{margin:18px 0 5px;font-size:13px;color:#53606b}
+.system-status-card>strong{font:900 25px/1.15 var(--font-serif),Georgia,serif;color:#17222d}
+.system-status-card p{margin:14px 0 8px;color:#4e5a65;font-size:12px;line-height:1.5}
+.system-status-card p b{color:#17222d}
+.system-status-card>small{margin-top:auto;color:#7b858e;font-size:10px;line-height:1.55}
+.system-status-card progress{width:100%;height:8px;margin:13px 0 1px;overflow:hidden;border:0;border-radius:999px;background:#edf0f2;accent-color:#23815b}
+.system-status-card.warning progress{accent-color:#d28a16}.system-status-card.critical progress{accent-color:#c92721}
+.system-status-guide{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(0,2fr);gap:24px;align-items:center;padding:20px 24px;border-radius:10px;background:#17222d;color:#fff}
+.system-status-guide h3{margin:6px 0 0;font:800 21px var(--font-serif),Georgia,serif}
+.system-status-guide ul{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0;padding:0;list-style:none}
+.system-status-guide li{font-size:10px;line-height:1.55;color:#cdd4d9}.system-status-guide li b{color:#fff}
+.system-status-guide i{display:inline-block;width:9px;height:9px;margin-right:5px;border-radius:50%;background:#23815b}.system-status-guide i.warning{background:#d28a16}.system-status-guide i.critical{background:#c92721}
+.system-status-loading,.system-status-error{padding:40px;border:1px solid #dde3e8;border-radius:10px;background:#fff;color:#63707b;text-align:center}
+.system-status-error b{display:block;color:#a31818;font-size:18px}.system-status-error p{margin:8px 0 18px}
+.system-status-inline-error{padding:12px 14px;border:1px solid #f0c7c7;border-radius:8px;background:#fff4f4;color:#9d2929;font-size:11px;font-weight:700}
+@media(max-width:1180px){.system-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.system-status-guide{grid-template-columns:1fr}.system-status-guide ul{grid-template-columns:1fr}}
+@media(max-width:650px){.system-status-summary{align-items:flex-start;flex-direction:column;padding:20px}.system-status-summary h2{font-size:23px}.system-status-actions{width:100%;justify-items:stretch}.system-status-actions .system-status-badge{justify-self:start}.system-status-actions button{width:100%}.system-status-grid{grid-template-columns:1fr}.system-status-card{min-height:210px}.system-status-guide{padding:18px}}

@@ -3,6 +3,42 @@ set -Eeuo pipefail
 umask 077
 
 backup_root="${KOZA_BACKUP_DIR:-/srv/kozatv/backups}"
+data_dir="${KOZA_DATA_DIR:-/srv/kozatv/data}"
+status_file="${KOZA_RESTORE_STATUS_PATH:-$data_dir/system-restore-test.json}"
+test_database=""
+restore_dir=""
+article_count=0
+media_count=0
+restored_files=0
+status_written=false
+
+write_snapshot() {
+  local snapshot_status="$1"
+  local checked_at_ms temporary
+  checked_at_ms="$(date +%s)000"
+  temporary="${status_file}.tmp.$$"
+  install -d -o kozatv -g kozatv -m 0750 "$data_dir"
+  printf '{"version":1,"status":"%s","checkedAt":%s,"articleCount":%s,"mediaRecordCount":%s,"mediaFileCount":%s}\n' \
+    "$snapshot_status" "$checked_at_ms" "$article_count" "$media_count" "$restored_files" > "$temporary"
+  install -o kozatv -g kozatv -m 0600 "$temporary" "$status_file"
+  rm -f -- "$temporary"
+}
+
+cleanup() {
+  [[ -z "$test_database" ]] || runuser -u postgres -- dropdb --if-exists "$test_database" >/dev/null 2>&1 || true
+  [[ -z "$restore_dir" ]] || rm -rf -- "$restore_dir"
+}
+
+finish() {
+  local exit_code="$?"
+  trap - EXIT
+  set +e
+  cleanup
+  if (( exit_code != 0 )) && [[ "$status_written" != "true" ]]; then write_snapshot critical; fi
+  exit "$exit_code"
+}
+trap finish EXIT
+
 case "$backup_root" in
   /srv/kozatv/backups|/srv/kozatv/backups/*) ;;
   *) echo "Güvensiz yedek dizini reddedildi: $backup_root" >&2; exit 2 ;;
@@ -17,11 +53,6 @@ pg_restore --list kozatv.dump >/dev/null
 
 test_database="kozatv_restore_test_$$"
 restore_dir="$(mktemp -d)"
-cleanup() {
-  runuser -u postgres -- dropdb --if-exists "$test_database" >/dev/null 2>&1 || true
-  rm -rf -- "$restore_dir"
-}
-trap cleanup EXIT
 
 runuser -u postgres -- createdb --owner=kozatv "$test_database"
 runuser -u kozatv -- pg_restore --exit-on-error --no-owner --dbname="$test_database" < kozatv.dump
@@ -33,4 +64,6 @@ tar --extract --gzip --file media.tar.gz --directory "$restore_dir"
 restored_files="$(find "$restore_dir/media" -type f | wc -l)"
 if (( restored_files < media_count )); then echo "Geri yüklenen medya sayısı veritabanı kaydından az." >&2; exit 4; fi
 
+write_snapshot healthy
+status_written=true
 echo "Koza TV geri yükleme testi başarılı: articles=$article_count media=$media_count files=$restored_files"

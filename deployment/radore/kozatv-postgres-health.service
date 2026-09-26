@@ -12,3 +12,4 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 ReadOnlyPaths=/srv/kozatv
+ReadWritePaths=/srv/kozatv/data

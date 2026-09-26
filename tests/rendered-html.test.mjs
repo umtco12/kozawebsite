@@ -33,6 +33,7 @@ import { createBreakingRefresh, BREAKING_REFRESH_MS, BREAKING_ROTATION_MS } from
 import { nextBreakingId, reconcileBreakingId } from "../app/breaking-ticker-model.mjs";
 import { isBreakingItems, toBreakingItems } from "../db/breaking-feed-model.mjs";
 import { createYouTubeFeedLoader, KOZA_YOUTUBE_FEED_URL, parseYouTubeFeed, YOUTUBE_REFRESH_MS, YOUTUBE_STALE_MS } from "../db/youtube-feed.mjs";
+import { evaluateSystemStatus } from "../db/system-status.mjs";
 
 const projectRoot = new URL("../", import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -675,6 +676,72 @@ test("rol sistemi ilk parola değişimini zorunlu tutar ve viewer yazma işlemin
   const permanentCookie = relogin.headers.get("set-cookie")?.split(";")[0] ?? "";
   const forbidden = await anonymousRequest("/api/categories", { method: "POST", headers: { "content-type": "application/json", cookie: permanentCookie }, body: JSON.stringify({ name: "Yetkisiz" }) });
   assert.equal(forbidden.status, 403);
+});
+
+test("sistem durumu disk, PostgreSQL, medya, yedek ve geri yükleme sınırlarını güvenli biçimde sınıflandırır", () => {
+  const now = Date.UTC(2026, 8, 26, 12, 0, 0);
+  const healthyInput = {
+    now,
+    disk: { available: true, totalBytes: 500_000_000_000, usedBytes: 45_000_000_000, freeBytes: 455_000_000_000, usedPercent: 9 },
+    database: { available: true, engine: "postgresql", sizeBytes: 78_000_000, latencyMs: 8, articleCount: 8107, mediaRecordCount: 7758, mediaBytes: 730_000_000 },
+    healthSnapshot: { version: 1, status: "healthy", checkedAt: now - 2 * 60_000, diskUsedPercent: 9, articleCount: 8107, mediaRecordCount: 7758, mediaFileCount: 7758, latestBackupAt: now - 4 * 60 * 60_000, services: { postgresql: true, application: true, proxy: true } },
+    restoreSnapshot: { version: 1, status: "healthy", checkedAt: now - 5 * 24 * 60 * 60_000, articleCount: 8107, mediaRecordCount: 7758, mediaFileCount: 7758 },
+  };
+  const healthy = evaluateSystemStatus(healthyInput);
+  assert.equal(healthy.overall, "healthy");
+  assert.equal(healthy.disk.status, "healthy");
+  assert.equal(healthy.database.status, "healthy");
+  assert.equal(healthy.media.status, "healthy");
+  assert.equal(healthy.backup.status, "healthy");
+  assert.equal(healthy.restore.status, "healthy");
+
+  const warning = evaluateSystemStatus({ ...healthyInput, disk: { ...healthyInput.disk, usedPercent: 75 } });
+  assert.equal(warning.disk.status, "warning", "Disk %75 olduğunda erken uyarı başlamalı");
+
+  const critical = evaluateSystemStatus({
+    ...healthyInput,
+    disk: { ...healthyInput.disk, usedPercent: 85 },
+    healthSnapshot: { ...healthyInput.healthSnapshot, checkedAt: now - 20 * 60_000, mediaFileCount: 7757 },
+  });
+  assert.equal(critical.overall, "critical");
+  assert.equal(critical.disk.status, "critical", "Sunucu sağlık betiğiyle aynı %85 alarm sınırı korunmalı");
+  assert.equal(critical.monitor.status, "critical", "Beş dakikalık kontrol uzun süre yenilenmezse kritik olmalı");
+  assert.equal(critical.media.status, "critical", "Fiziksel medya sayısı veritabanı kaydından az olamaz");
+});
+
+test("Sistem Durumu yalnız yöneticiye açıktır ve hassas sunucu bilgisi döndürmez", async () => {
+  assert.equal((await anonymousRequest("/api/system-status")).status, 401);
+  const publisher = await createRoleSession("publisher", "SistemDurumuYetkisi");
+  assert.equal((await anonymousRequest("/api/system-status", { headers: { cookie: publisher.cookie } })).status, 403);
+
+  const response = await request("/api/system-status");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const payload = await response.json();
+  assert.ok(["healthy", "warning", "critical"].includes(payload.overall));
+  assert.equal(payload.database.status, "healthy");
+  assert.ok(payload.database.articleCount > 0);
+  assert.ok(Number.isFinite(payload.disk.usedPercent));
+  const serialized = JSON.stringify(payload);
+  assert.doesNotMatch(serialized, /postgresql:\/\/|KOZA_DATABASE_URL|\/srv\/kozatv|46\.45\.185\.67/);
+
+  const panel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const systemPanel = await readFile(new URL("../app/admin/system-status.tsx", import.meta.url), "utf8");
+  assert.match(panel, /currentUser\.role === "admin"[\s\S]*Sistem Durumu/);
+  assert.match(panel, /tab === "system"[\s\S]*<SystemStatusPanel/);
+  assert.match(systemPanel, /window\.setInterval\([^,]+, 60_000\)/);
+  assert.match(systemPanel, /Şimdi yenile/);
+  assert.match(systemPanel, /Disk alanı|Veritabanı|Günlük yedek|Geri yükleme testi/);
+});
+
+test("İçerik Aktarımı yönetim panelinden gizlenir ancak aktarım altyapısı korunur", async () => {
+  const panel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const importer = await readFile(new URL("../app/admin/content-import.tsx", import.meta.url), "utf8");
+  const importRoute = await readFile(new URL("../app/api/import/route.ts", import.meta.url), "utf8");
+
+  assert.doesNotMatch(panel, /ContentImport|id: "import"|tab === "import"|İçerik Aktarımı/);
+  assert.match(importer, /export function ContentImport/);
+  assert.match(importRoute, /export async function (GET|POST)/);
 });
 
 test("haber modeli Türkçe başlıkları slug'a çevirir ve yayın alanlarını doğrular", () => {
