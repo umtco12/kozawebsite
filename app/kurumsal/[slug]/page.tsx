@@ -49,6 +49,11 @@ export default async function CorporatePageView({ params }: Props) {
             <section key={section.heading}>
               <h2>{section.heading}</h2>
               {section.paragraphs.map((paragraph) => <p key={paragraph.slice(0, 24)}>{paragraph}</p>)}
+              {section.items && (
+                <ul className="static-list">
+                  {section.items.map((item) => <li key={item.slice(0, 32)}>{item}</li>)}
+                </ul>
+              )}
             </section>
           ))}
           {page.contact && (
@@ -63,7 +68,6 @@ export default async function CorporatePageView({ params }: Props) {
           {corporateSlugs.map((item) => (
             <a href={`/kurumsal/${item}`} key={item} className={item === page.slug ? "active" : ""}>{corporateTitles[item]}</a>
           ))}
-          <a href="/canli" className="static-live">Canlı yayını izle →</a>
         </aside>
       </div>
       <SiteFooter categories={categories} />

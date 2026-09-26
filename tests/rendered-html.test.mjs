@@ -1889,7 +1889,7 @@ test("video merkezi ve kurumsal sayfalar yayına hazır biçimde açılır", asy
   assert.match(videos, /Video Merkezi/);
   assert.match(videos, /video içerik/);
 
-  for (const [slug, expected] of [["hakkimizda", /Yayın anlayışımız/], ["kunye", /Koza TV Künye Bilgileri/], ["yayin-ilkeleri", /Düzeltme ve yanıt hakkı/], ["iletisim", /İletişim kanalları/], ["kvkk", /Haklarınız/], ["gizlilik", /Veri güvenliği/], ["cerez-politikasi", /Zorunlu çerezler/]]) {
+  for (const [slug, expected] of [["hakkimizda", /Güncel ve Renkli Programlar/], ["kunye", /Koza TV Künye Bilgileri/], ["yayin-ilkeleri", /Düzeltme ve yanıt hakkı/], ["iletisim", /İletişim kanalları/], ["kvkk", /Kişisel verilerinize yönelik haklarınıza ilişkin/], ["gizlilik", /Kullanım Şartları/], ["cerez-politikasi", /Çerezler \(Cookie\)/]]) {
     const body = await html(`/kurumsal/${slug}`);
     assert.match(body, expected, `/kurumsal/${slug} içeriği eksik`);
     assert.match(body, /href="\/kurumsal\/kvkk"/);
@@ -1899,6 +1899,36 @@ test("video merkezi ve kurumsal sayfalar yayına hazır biçimde açılır", asy
   const missing = await notFoundHtml("/kurumsal/olmayan-sayfa");
   assert.match(missing, /bulunamadı/);
   assert.match(missing, /name="robots" content="noindex"/i, "Bulunamayan sayfa indekslenmemeli");
+});
+
+test("gizlilik belgesindeki kurumsal içerikler doğru sayfalara taşınır ve şablon artıkları yayımlanmaz", async () => {
+  const about = await html("/kurumsal/hakkimizda");
+  assert.match(about, /Akdeniz'in bir numarası/);
+  assert.match(about, /Güncel ve Renkli Programlar Koza TV'de/);
+  assert.match(about, /Koza TV Yayın Bilgileri/);
+  assert.doesNotMatch(about, /class="static-live"/, "Kurumsal yan menüde canlı yayın çağrısı kalmamalı");
+
+  const principles = await html("/kurumsal/yayin-ilkeleri");
+  assert.match(principles, /Bizim de kabul ettiğimiz temel ilkeler/);
+  assert.match(principles, /Suçlu olduğu yargı kararıyla belirlenmedikçe/);
+  assert.match(principles, /<ul class="static-list">/, "Yayın ilkeleri okunabilir bir liste olarak sunulmalı");
+
+  const kvkk = await html("/kurumsal/kvkk");
+  assert.match(kvkk, /Kişisel verilerinize ilişkin/);
+  assert.match(kvkk, /Kişisel veri işlenip işlenmediğini öğrenme/);
+  assert.match(kvkk, /Kişisel verilere ilişkin iletişim izni/);
+
+  const privacy = await html("/kurumsal/gizlilik");
+  assert.match(privacy, /Kullanım Şartları/);
+  assert.match(privacy, /Fikri ve sınai mülkiyet/);
+
+  const cookies = await html("/kurumsal/cerez-politikasi");
+  assert.match(cookies, /Çerezler \(Cookie\)/);
+  assert.match(cookies, /Tercihlerinizi yönetme/);
+
+  for (const body of [about, principles, kvkk, privacy, cookies]) {
+    assert.doesNotMatch(body, /XXXXX|gazi\.io|http:\/\/x\.com|Figen Taşkın|Nevşehir Mahkemeleri/, "Belgedeki yabancı şablon artıkları ziyaretçiye çıkmamalı");
+  }
 });
 
 test("foto galeri güvenli görselleri toplar, listeler ve ayrıntı sayfasında açar", async () => {
