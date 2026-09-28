@@ -737,6 +737,39 @@ test("Sistem Durumu yalnız yöneticiye açıktır ve hassas sunucu bilgisi dön
   assert.match(systemPanel, /Disk alanı|Veritabanı|Günlük yedek|Geri yükleme testi/);
 });
 
+test("teknik ve SEO araçları günlük yayın menüsünden ayrılır", async () => {
+  const adminBody = await html("/admin");
+  assert.match(adminBody, /Teknik ve SEO/);
+  assert.match(adminBody, /Yönlendirme ve altyapı/);
+  assert.match(adminBody, /Sistem Durumu/);
+  assert.match(adminBody, /Adres Yönetimi/);
+
+  const publisher = await createRoleSession("publisher", "TeknikMenuYayinYonetmeni");
+  const publisherResponse = await anonymousRequest("/admin", { headers: { cookie: publisher.cookie, accept: "text/html" } });
+  assert.equal(publisherResponse.status, 200);
+  const publisherBody = await publisherResponse.text();
+  assert.match(publisherBody, /Teknik ve SEO/);
+  assert.match(publisherBody, /Adres Yönetimi/);
+  assert.doesNotMatch(publisherBody, /Sistem Durumu/, "Yayın yönetmeni sunucu sağlığına erişmemeli");
+
+  const editor = await createRoleSession("editor", "TeknikMenuEditor");
+  const editorResponse = await anonymousRequest("/admin", { headers: { cookie: editor.cookie, accept: "text/html" } });
+  assert.equal(editorResponse.status, 200);
+  const editorBody = await editorResponse.text();
+  assert.doesNotMatch(editorBody, /Teknik ve SEO|Sistem Durumu|Adres Yönetimi/, "Editörün günlük yayın menüsü teknik araçlarla kalabalıklaşmamalı");
+
+  const [panel, styles, legacyRedirect] = await Promise.all([
+    readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/legacy-redirect.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(panel, /className="newsroom-nav-section"/);
+  assert.match(panel, /role="group" aria-labelledby="technical-tools-label"/);
+  assert.match(styles, /\.newsroom-nav-section\{/);
+  assert.match(styles, /\.newsroom-nav-submenu/);
+  assert.match(legacyRedirect, /findRedirect/, "Menü düzenlenirken çalışan yönlendirme altyapısı korunmalı");
+});
+
 test("İçerik Aktarımı yönetim panelinden gizlenir ancak aktarım altyapısı korunur", async () => {
   const panel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
   const importer = await readFile(new URL("../app/admin/content-import.tsx", import.meta.url), "utf8");
@@ -4019,4 +4052,45 @@ test("admin görünüm ölçeği kullanıcıya özel, erişilebilir ve yalnız y
   assert.match(accessibility, /\.admin-accessibility button:focus-visible/);
   assert.doesNotMatch(accessibility, /\.home\b|\.article-body\b|\.site-|\.lead-|\.news-card/,
     "Kullanıcı görünüm ölçeği ziyaretçi yüzeylerine sızmamalı");
+});
+
+test("haber gövdesi masaüstü, tablet ve mobilde rahat okuma ölçeğini korur", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const scale = css.match(/\/\* Haber okuma ölçeği başlangıcı\. \*\/[\s\S]*?\/\* Haber okuma ölçeği sonu\. \*\//)?.[0] || "";
+
+  assert.ok(scale, "Haber okuma ölçeği için bağımsız CSS bloğu bulunmalı");
+  assert.match(scale, /\.article-body,\.continuous-body\{font-size:19px;line-height:1\.78\}/,
+    "Ana haber metni masaüstünde 19 px olmalı");
+  assert.match(scale, /@media\(max-width:900px\)\{\.article-body\{width:100%;max-width:720px;margin-inline:auto\}\}/,
+    "Tablet okuma sütunu 720 px ile sınırlanıp ortalanmalı");
+  assert.match(scale, /@media\(max-width:600px\)\{\.article-body,\.continuous-body\{font-size:18px;line-height:1\.75\}\}/,
+    "Ana haber ve kesintisiz okuma metni mobilde 18 px olmalı");
+  assert.doesNotMatch(scale, /figcaption|source-box|article-meta/,
+    "Okuma ölçeği yardımcı metinlerin boyutunu değiştirmemeli");
+});
+
+test("ana navbar bütün ziyaretçi sayfalarında aynı bağlantıları gösterir", async () => {
+  function navSignature(page) {
+    const nav = page.match(/<nav class="nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    assert.ok(nav, "Sayfada ana navbar bulunmalı");
+    return [...nav.matchAll(/<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)]
+      .map(([, href, label]) => `${href}:${label.trim()}`);
+  }
+
+  const paths = [
+    "/",
+    "/son-dakika",
+    "/kategori/gundem",
+    "/canli",
+    "/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde",
+  ];
+  const signatures = await Promise.all(paths.map(async (path) => navSignature(await html(path))));
+  const expected = signatures[0];
+
+  for (let index = 1; index < signatures.length; index += 1) {
+    assert.deepEqual(signatures[index], expected, `${paths[index]} navbarı ana sayfayla aynı olmalı`);
+  }
+  assert.ok(expected.includes("/kategori/teknoloji:Teknoloji"));
+  assert.ok(!expected.some((item) => item.endsWith(":Video") || item.endsWith(":Videolar")),
+    "Video bağlantısı sayfa değiştirince navbar içinde belirmemeli");
 });

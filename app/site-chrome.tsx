@@ -8,10 +8,12 @@ import { BroadcastFlow } from "./broadcast-flow";
 
 export type NavCategory = { id: number; name: string; slug: string };
 
+const primaryNavCategories = (categories: NavCategory[]) => categories.filter((category) => category.slug !== "video");
+
 export function navCategories(): NavCategory[] {
-  return listCategories(true)
-    .filter((category) => category.slug !== "video")
-    .map((category) => ({ id: category.id, name: category.name, slug: category.slug }));
+  return primaryNavCategories(
+    listCategories(true).map((category) => ({ id: category.id, name: category.name, slug: category.slug })),
+  );
 }
 
 function istanbulDate() {
@@ -59,6 +61,9 @@ function DesktopAdRails() {
 
 export function SiteHeader({ categories, active = "" }: { categories: NavCategory[]; active?: string }) {
   const settings = getSiteSettings();
+  /* Bazı ayrıntı sayfaları görünür kategorileri doğrudan veritabanından gönderebilir.
+     Ortak başlık son savunma olarak ana navbar sözleşmesini her rotada aynı tutar. */
+  const primaryCategories = primaryNavCategories(categories);
   // eslint-disable-next-line react-hooks/purity -- Sunucu isteğinin saat anlık görüntüsü; istemcinin ilk renderı da aynı değerle başlar.
   const broadcastNow = Date.now();
   return (
@@ -83,14 +88,14 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
             <a className="live-button" href="/canli"><i /> CANLI YAYIN</a>
           </div>
           <BroadcastFlow schedule={getBroadcastSchedule()} initialNow={broadcastNow} />
-          <MobileMenu categories={categories.map(({ name, slug }) => ({ name, slug }))} />
+          <MobileMenu categories={primaryCategories.map(({ name, slug }) => ({ name, slug }))} />
         </div>
         <nav className="nav" aria-label="Ana menü">
           <div className="wrap nav-inner">
             <div className="nav-links">
             <a href="/" aria-current={active === "home" ? "page" : undefined}>Ana Sayfa</a>
             <a href="/son-dakika" aria-current={active === "son-dakika" ? "page" : undefined}>Son Dakika</a>
-            {categories.map((category) => (
+            {primaryCategories.map((category) => (
               <a href={`/kategori/${category.slug}`} key={category.id} aria-current={active === `kategori/${category.slug}` ? "page" : undefined}>{category.name}</a>
             ))}
             </div>
