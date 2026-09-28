@@ -1118,9 +1118,11 @@ test("üç manşet alanından düşen eski haberler Son Haberler'in başında d�
   const fixtureDb = new Database(process.env.KOZA_DB_PATH);
   const original = fixtureDb.prepare("SELECT * FROM articles").all();
   const createdIds = [];
+  const createdRedirectPaths = [];
   t.after(() => {
     fixtureDb.pragma("foreign_keys = ON");
     fixtureDb.transaction(() => {
+      for (const path of createdRedirectPaths) fixtureDb.prepare("DELETE FROM redirects WHERE from_path=?").run(path);
       for (const id of createdIds) fixtureDb.prepare("DELETE FROM articles WHERE id=?").run(id);
       const columns = ["homepage_placement", "homepage_order", "is_featured", "edit_version", "updated_at"];
       if (Object.hasOwn(original[0], "homepage_latest_at")) columns.push("homepage_latest_at");
@@ -1170,6 +1172,7 @@ test("üç manşet alanından düşen eski haberler Son Haberler'in başında d�
   }
   const unchanged = (await layout()).layout.latest.map((article) => article.id);
   const edit = (await layout()).layout.latest[2];
+  createdRedirectPaths.push(`/haber/${edit.slug}`);
   const saved = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...edit, title: `${edit.title} düzeltildi` }) });
   assert.equal(saved.status, 200);
   assert.deepEqual((await layout()).layout.latest.map((article) => article.id), unchanged, "Sadece metin düzeltmek haberin giriş sırasını değiştirmemeli");
@@ -1262,6 +1265,85 @@ test("yalnız yönetici Şimdi yayınla ile haberi doğrudan yayına alabilir", 
   ]);
   assert.match(panelSource, /const canPublish = currentUser\.role === "admin";/);
   assert.match(studioSource, /const canPublish = role === "admin";/);
+});
+
+test("haber her kaydedildiğinde URL başlıktan yenilenir ve eski yayın adresi kalıcı yönlendirmeyle korunur", async () => {
+  const temporaryTitle = `Geçici deneme başlığı ${process.pid}`;
+  const finalTitle = `Okullarda güvenlik tedbirleri artırıldı ${process.pid}`;
+  const correctedTitle = `Okullarda yeni güvenlik tedbirleri artırıldı ${process.pid}`;
+  const draftRevisionTitle = `Okullarda güvenlik tedbirleri yeniden değerlendirildi ${process.pid}`;
+  const republishedTitle = `Okullarda güvenlik tedbirleri güncellendi ${process.pid}`;
+  const payload = {
+    slug: "",
+    title: temporaryTitle,
+    spot: "Taslak başlığı değiştikten sonra haber adresinin doğru ve güvenli biçimde güncellendiğini doğrulayan ayrıntılı test spotu.",
+    body: "Bu regresyon haberi, geçici bir başlıkla oluşturulan taslağın son başlığı yazıldığında URL adresinin güncellenmesini doğrular. Yayındaki adres değişirse eski bağlantı ziyaretçileri ve arama motorlarını kaybetmeden yeni adrese yönlendirir.",
+    category: "Gündem",
+    status: "draft",
+    heroImage: "/news/studio.jpg",
+    imageAlt: "Koza TV URL güvenliği testi",
+    videoUrl: "",
+    author: "Koza TV Haber Merkezi",
+    sourceName: "Koza TV",
+    sourceUrl: "",
+    seoTitle: "",
+    seoDescription: "",
+    isBreaking: 0,
+    isFeatured: 0,
+  };
+
+  const created = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+  assert.equal(created.status, 201);
+  const temporaryDraft = (await created.json()).article;
+  assert.equal(temporaryDraft.slug, slugify(temporaryTitle));
+
+  const renamed = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...temporaryDraft, title: finalTitle, status: "draft" }) });
+  assert.equal(renamed.status, 200);
+  const finalDraft = (await renamed.json()).article;
+  assert.equal(finalDraft.slug, slugify(finalTitle), "Taslak URL'si formdan gelen eski slug yerine güncel başlıktan üretilmeli");
+
+  const duplicate = await request("/api/articles", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...payload, title: finalTitle }) });
+  assert.equal(duplicate.status, 201, "Aynı başlıktaki ikinci taslak güvenli bir URL son eki almalı");
+  assert.equal((await duplicate.json()).article.slug, `${slugify(finalTitle)}-2`);
+
+  const published = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...finalDraft, status: "published" }) });
+  assert.equal(published.status, 200);
+  const publishedArticle = (await published.json()).article;
+  assert.equal(publishedArticle.slug, slugify(finalTitle), "İlk yayın adresi son taslak başlığıyla eşleşmeli");
+
+  const titleOnly = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...publishedArticle, title: correctedTitle, status: "published" }) });
+  assert.equal(titleOnly.status, 200);
+  const refreshedArticle = (await titleOnly.json()).article;
+  assert.equal(refreshedArticle.slug, slugify(correctedTitle));
+
+  const withdrawnDraft = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...refreshedArticle, title: draftRevisionTitle, status: "draft" }) });
+  assert.equal(withdrawnDraft.status, 200);
+  const firstDraftRevision = (await withdrawnDraft.json()).article;
+  assert.equal(firstDraftRevision.slug, slugify(draftRevisionTitle));
+
+  const renamedAgain = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...firstDraftRevision, title: republishedTitle, status: "draft" }) });
+  assert.equal(renamedAgain.status, 200);
+  const finalDraftRevision = (await renamedAgain.json()).article;
+  assert.equal(finalDraftRevision.slug, slugify(republishedTitle), "Taslağa çekilen eski yayın her kayıtta güncel başlığa geçmeli");
+
+  const republished = await request("/api/articles", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...finalDraftRevision, status: "published" }) });
+  assert.equal(republished.status, 200);
+  const finalArticle = (await republished.json()).article;
+
+  const oldAddress = await anonymousRequest(`/haber/${publishedArticle.slug}`, { redirect: "manual" });
+  assert.equal(oldAddress.status, 308, "Eski yayın adresi kalıcı yönlendirme vermeli");
+  assert.equal(oldAddress.headers.get("location"), `/haber/${finalArticle.slug}`);
+  const correctedAddress = await anonymousRequest(`/haber/${refreshedArticle.slug}`, { redirect: "manual" });
+  assert.equal(correctedAddress.status, 308);
+  assert.equal(correctedAddress.headers.get("location"), `/haber/${finalArticle.slug}`, "Önceki yayın adresleri ara taslak adresinde kalmamalı");
+  assert.match(await html(`/haber/${finalArticle.slug}`), new RegExp(republishedTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+  const redirects = (await (await request("/api/redirects")).json()).redirects;
+  assert.ok(redirects.some((item) => item.fromPath === `/haber/${publishedArticle.slug}` && item.toPath === `/haber/${finalArticle.slug}` && item.kind === "permanent" && item.active === 1));
+  assert.ok(!redirects.some((item) => item.fromPath === item.toPath), "URL yenileme kendi kendine yönlendirme üretmemeli");
+
+  const panelSource = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(panelSource, /regenerateSlug|regenerate-article-slug|URL.yi güncel başlıktan yeniden oluştur/, "Editörün teknik URL seçeneğiyle uğraşmaması gerekir");
 });
 
 test("profesyonel editoryal akış revizyon, yorum ve işlem geçmişi tutar", async () => {

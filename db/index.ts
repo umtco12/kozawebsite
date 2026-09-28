@@ -411,14 +411,30 @@ export function listPreviousCategoryArticles(article: Pick<ArticleRecord, "id" |
   return rows.map(mapArticle);
 }
 
+/* Haber her kaydedildiğinde istemciden geri gelen eski slug yerine güncel başlık kullanılır.
+   Aynı başlıktaki haberler numaralı son ek alır; daha önce yönlendirme kaynağı olmuş adresler
+   yeniden kullanılmaz. Böylece eski bağlantıların anlamı sonradan başka bir habere kaymaz. */
+function allocateArticleSlug(db: InstanceType<typeof Database>, title: string, articleId?: number, currentSlug = "") {
+  const base = slugify(title) || "haber";
+  for (let suffix = 1; suffix < 10_000; suffix += 1) {
+    const candidate = suffix === 1 ? base : `${base}-${suffix}`;
+    const article = db.prepare("SELECT id FROM articles WHERE slug=? AND id<>?").get(candidate, articleId ?? 0);
+    const reservedPath = `/haber/${candidate}`;
+    const redirect = candidate === currentSlug ? undefined : db.prepare("SELECT id FROM redirects WHERE from_path=? AND active=1").get(reservedPath);
+    if (!article && !redirect) return candidate;
+  }
+  throw new Error("ARTICLE_SLUG_UNAVAILABLE");
+}
+
 export function saveArticle(input: ArticleInput, actor: AdminUser | string = "Yayın Yönetmeni") {
-  const db = getDb(); const now = Date.now(); const actorName = typeof actor === "string" ? actor : actor.fullName; const actorId = typeof actor === "string" ? null : actor.id; const slug = input.slug || slugify(input.title); const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt).getTime() : null; const publishedAt = input.status === "published" ? (input.publishedAt ? new Date(input.publishedAt).getTime() : now) : null;
+  const db = getDb(); const now = Date.now(); const actorName = typeof actor === "string" ? actor : actor.fullName; const actorId = typeof actor === "string" ? null : actor.id; const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt).getTime() : null; const publishedAt = input.status === "published" ? (input.publishedAt ? new Date(input.publishedAt).getTime() : now) : null;
   const blocks = Array.isArray(input.blocks) && input.blocks.length
     ? input.blocks
     : plainBodyToBlocks(input.body, () => randomBytes(6).toString("hex")) as ContentBlock[];
   const agencySourceId = Number.isInteger(Number(input.agencySourceId)) && Number(input.agencySourceId) > 0 ? Number(input.agencySourceId) : null;
   if (agencySourceId && !getNewsSource(agencySourceId)) throw new Error("AGENCY_SOURCE_NOT_FOUND");
-  const existingWorkflow = input.id ? db.prepare("SELECT workflow_state AS workflowState,status,homepage_placement AS homepagePlacement FROM articles WHERE id=?").get(input.id) as { workflowState: WorkflowState; status: ArticleStatus; homepagePlacement: HomepagePlacement } | undefined : undefined;
+  const existingWorkflow = input.id ? db.prepare("SELECT workflow_state AS workflowState,status,homepage_placement AS homepagePlacement,slug,published_at AS publishedAt FROM articles WHERE id=?").get(input.id) as { workflowState: WorkflowState; status: ArticleStatus; homepagePlacement: HomepagePlacement; slug: string; publishedAt: number | null } | undefined : undefined;
+  const slug = allocateArticleSlug(db, input.title, input.id, existingWorkflow?.slug);
   const currentWorkflowState = existingWorkflow?.workflowState ?? "reporter_draft";
   const isAdmin = typeof actor !== "string" && actor.role === "admin";
   if (["published", "scheduled"].includes(input.status) && !isAdmin) throw new Error("WORKFLOW_APPROVAL_REQUIRED");
@@ -426,7 +442,45 @@ export function saveArticle(input: ArticleInput, actor: AdminUser | string = "Ya
   const homepagePlacement = mapHomepagePlacement(input.homepagePlacement, input.isFeatured);
   const entersHomepage = homepagePlacement !== "latest" && isVisibleHomepageStatus(input.status) && (!existingWorkflow || !isVisibleHomepageStatus(existingWorkflow.status) || existingWorkflow.homepagePlacement !== homepagePlacement);
   const values = { ...input, slug, scheduledAt, publishedAt, workflowState, actorName, bodyHtml: normalizeArticleHtml(input.bodyHtml), contentBlocks: JSON.stringify(blocks), heroImage: input.heroImage || "/news/gundem.jpg", imageAlt: input.imageAlt || input.title, videoUrl: input.videoUrl || "", author: input.author || "Koza TV Haber Merkezi", sourceName: input.sourceName == null ? "Koza TV" : String(input.sourceName).trim().slice(0, 160), sourceUrl: input.sourceUrl || "", seoTitle: input.seoTitle || input.title, seoDescription: input.seoDescription || input.spot, isBreaking: input.isBreaking ? 1 : 0, isFeatured: homepagePlacement === "slider" ? 1 : 0, isHomepageGallery: input.isHomepageGallery ? 1 : 0, homepageOrder: entersHomepage ? 1 : Math.min(Math.max(Number(input.homepageOrder ?? 100), 1), 999), homepagePlacement, headlinePosition: mapHeadlinePosition(input.headlinePosition), assignedTo: Number.isInteger(Number(input.assignedTo)) && Number(input.assignedTo) > 0 ? Number(input.assignedTo) : null, agencySourceId, agencyExternalId: String(input.agencyExternalId || "").trim().slice(0, 300), agencyCredit: String(input.agencyCredit || "").trim().slice(0, 300), agencyEditorialLock: input.agencyEditorialLock ? 1 : 0, now };
-  const transaction = db.transaction(() => { let id = input.id; if (id) { if (entersHomepage) promoteHomepageArticle(db, id, homepagePlacement); const expectedVersion = Number(input.editVersion || 1); const result = db.prepare(`UPDATE articles SET slug=@slug,title=@title,spot=@spot,body=@body,body_html=@bodyHtml,content_blocks=@contentBlocks,category=@category,status=@status,workflow_state=@workflowState,assigned_to=@assignedTo,hero_image=@heroImage,image_alt=@imageAlt,video_url=@videoUrl,author=@author,source_name=@sourceName,source_url=@sourceUrl,seo_title=@seoTitle,seo_description=@seoDescription,is_breaking=@isBreaking,is_featured=@isFeatured,is_homepage_gallery=@isHomepageGallery,homepage_order=@homepageOrder,homepage_placement=@homepagePlacement,headline_position=@headlinePosition,published_at=@publishedAt,scheduled_at=@scheduledAt,agency_source_id=@agencySourceId,agency_external_id=@agencyExternalId,agency_credit=@agencyCredit,agency_received_at=CASE WHEN CAST(@agencySourceId AS INTEGER) IS NULL THEN NULL WHEN agency_source_id=@agencySourceId THEN agency_received_at ELSE CAST(@now AS BIGINT) END,agency_editorial_lock=@agencyEditorialLock,updated_by=@actorName,edit_version=edit_version+1,updated_at=@now WHERE id=@id AND edit_version=@expectedVersion`).run({ ...values, expectedVersion }); if (!result.changes) throw new Error("EDIT_CONFLICT"); } else { const result = db.prepare(`INSERT INTO articles (slug,title,spot,body,body_html,content_blocks,created_by,updated_by,category,status,workflow_state,assigned_to,hero_image,image_alt,video_url,author,source_name,source_url,seo_title,seo_description,is_breaking,is_featured,is_homepage_gallery,homepage_order,homepage_placement,headline_position,published_at,scheduled_at,agency_source_id,agency_external_id,agency_credit,agency_received_at,agency_editorial_lock,created_at,updated_at) VALUES (@slug,@title,@spot,@body,@bodyHtml,@contentBlocks,@actorName,@actorName,@category,@status,@workflowState,@assignedTo,@heroImage,@imageAlt,@videoUrl,@author,@sourceName,@sourceUrl,@seoTitle,@seoDescription,@isBreaking,@isFeatured,@isHomepageGallery,@homepageOrder,@homepagePlacement,@headlinePosition,@publishedAt,@scheduledAt,@agencySourceId,@agencyExternalId,@agencyCredit,CASE WHEN CAST(@agencySourceId AS INTEGER) IS NULL THEN NULL ELSE CAST(@now AS BIGINT) END,@agencyEditorialLock,@now,@now)`).run(values); id = Number(result.lastInsertRowid); if (entersHomepage) promoteHomepageArticle(db, id, homepagePlacement); } if (input.status === "published" && homepagePlacement === "latest" && (!existingWorkflow || existingWorkflow.status !== "published" || existingWorkflow.homepagePlacement !== "latest")) recordHomepageLatestEntries(db, [id!], now); normalizeHomepagePlacementLimits(db, now); const article = mapArticle(db.prepare("SELECT * FROM articles WHERE id=?").get(id) as Record<string, unknown>); if (actorId && workflowState !== currentWorkflowState) { const workflowAction = input.status === "published" ? "publish" : input.status === "scheduled" ? "schedule" : "submit_review"; const workflowNote = input.status === "published" ? "Yönetici doğrudan yayına aldı." : input.status === "scheduled" ? "Yönetici yayını planladı." : "Haber editör incelemesine gönderildi."; db.prepare("INSERT INTO workflow_events (article_id,action,from_state,to_state,actor_id,actor_name,note,created_at) VALUES (?,?,?,?,?,?,?,?)").run(id, workflowAction, currentWorkflowState, workflowState, actorId, actorName, workflowNote, now); } db.prepare("INSERT INTO article_revisions (article_id,version,snapshot,actor_id,actor_name,reason,created_at) VALUES (?,?,?,?,?,'save',?)").run(id, article.editVersion, JSON.stringify(article), actorId, actorName, now); db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,?,?,?,?)").run(id, input.status === "published" ? "publish" : "save", actorName, JSON.stringify({ status: input.status, title: input.title, version: article.editVersion, homepagePlacement: article.homepagePlacement, isHomepageGallery: article.isHomepageGallery, agencySourceId, agencyExternalId: values.agencyExternalId }), now); db.prepare("UPDATE agency_items SET status='editorial_override',pending_hash='' WHERE article_id=? AND status='pending_update'").run(id); return id!; });
+  const transaction = db.transaction(() => {
+    let id = input.id;
+    if (id) {
+      if (entersHomepage) promoteHomepageArticle(db, id, homepagePlacement);
+      const expectedVersion = Number(input.editVersion || 1);
+      const result = db.prepare(`UPDATE articles SET slug=@slug,title=@title,spot=@spot,body=@body,body_html=@bodyHtml,content_blocks=@contentBlocks,category=@category,status=@status,workflow_state=@workflowState,assigned_to=@assignedTo,hero_image=@heroImage,image_alt=@imageAlt,video_url=@videoUrl,author=@author,source_name=@sourceName,source_url=@sourceUrl,seo_title=@seoTitle,seo_description=@seoDescription,is_breaking=@isBreaking,is_featured=@isFeatured,is_homepage_gallery=@isHomepageGallery,homepage_order=@homepageOrder,homepage_placement=@homepagePlacement,headline_position=@headlinePosition,published_at=@publishedAt,scheduled_at=@scheduledAt,agency_source_id=@agencySourceId,agency_external_id=@agencyExternalId,agency_credit=@agencyCredit,agency_received_at=CASE WHEN CAST(@agencySourceId AS INTEGER) IS NULL THEN NULL WHEN agency_source_id=@agencySourceId THEN agency_received_at ELSE CAST(@now AS BIGINT) END,agency_editorial_lock=@agencyEditorialLock,updated_by=@actorName,edit_version=edit_version+1,updated_at=@now WHERE id=@id AND edit_version=@expectedVersion`).run({ ...values, expectedVersion });
+      if (!result.changes) throw new Error("EDIT_CONFLICT");
+    } else {
+      const result = db.prepare(`INSERT INTO articles (slug,title,spot,body,body_html,content_blocks,created_by,updated_by,category,status,workflow_state,assigned_to,hero_image,image_alt,video_url,author,source_name,source_url,seo_title,seo_description,is_breaking,is_featured,is_homepage_gallery,homepage_order,homepage_placement,headline_position,published_at,scheduled_at,agency_source_id,agency_external_id,agency_credit,agency_received_at,agency_editorial_lock,created_at,updated_at) VALUES (@slug,@title,@spot,@body,@bodyHtml,@contentBlocks,@actorName,@actorName,@category,@status,@workflowState,@assignedTo,@heroImage,@imageAlt,@videoUrl,@author,@sourceName,@sourceUrl,@seoTitle,@seoDescription,@isBreaking,@isFeatured,@isHomepageGallery,@homepageOrder,@homepagePlacement,@headlinePosition,@publishedAt,@scheduledAt,@agencySourceId,@agencyExternalId,@agencyCredit,CASE WHEN CAST(@agencySourceId AS INTEGER) IS NULL THEN NULL ELSE CAST(@now AS BIGINT) END,@agencyEditorialLock,@now,@now)`).run(values);
+      id = Number(result.lastInsertRowid);
+      if (entersHomepage) promoteHomepageArticle(db, id, homepagePlacement);
+    }
+    if (input.status === "published" && homepagePlacement === "latest" && (!existingWorkflow || existingWorkflow.status !== "published" || existingWorkflow.homepagePlacement !== "latest")) recordHomepageLatestEntries(db, [id!], now);
+    normalizeHomepagePlacementLimits(db, now);
+
+    const previousSlug = existingWorkflow?.slug ?? "";
+    if (previousSlug && previousSlug !== slug) {
+      const oldPath = `/haber/${previousSlug}`;
+      const newPath = `/haber/${slug}`;
+      /* Daha eski adresler eski slug'a gidiyorsa zincir üretmeden doğrudan yeni adrese taşınır. */
+      db.prepare("UPDATE redirects SET to_path=?,updated_at=? WHERE to_path=? AND from_path<>?").run(newPath, now, oldPath, oldPath);
+      if (existingWorkflow?.publishedAt != null) {
+        db.prepare("INSERT INTO redirects (from_path,to_path,kind,note,active,hits,created_at,updated_at) VALUES (?,?,'permanent','Haber başlığı sonrası otomatik URL koruması',1,0,?,?) ON CONFLICT(from_path) DO UPDATE SET to_path=excluded.to_path,kind='permanent',note=excluded.note,active=1,updated_at=excluded.updated_at").run(oldPath, newPath, now, now);
+        const redirect = db.prepare("SELECT id FROM redirects WHERE from_path=?").get(oldPath) as { id: number };
+        db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('redirect',?,?,?,?,?)").run(redirect.id, "article_slug_refresh", actorName, JSON.stringify({ articleId: id, from: oldPath, to: newPath, kind: "permanent" }), now);
+      }
+    }
+
+    const article = mapArticle(db.prepare("SELECT * FROM articles WHERE id=?").get(id) as Record<string, unknown>);
+    if (actorId && workflowState !== currentWorkflowState) {
+      const workflowAction = input.status === "published" ? "publish" : input.status === "scheduled" ? "schedule" : "submit_review";
+      const workflowNote = input.status === "published" ? "Yönetici doğrudan yayına aldı." : input.status === "scheduled" ? "Yönetici yayını planladı." : "Haber editör incelemesine gönderildi.";
+      db.prepare("INSERT INTO workflow_events (article_id,action,from_state,to_state,actor_id,actor_name,note,created_at) VALUES (?,?,?,?,?,?,?,?)").run(id, workflowAction, currentWorkflowState, workflowState, actorId, actorName, workflowNote, now);
+    }
+    db.prepare("INSERT INTO article_revisions (article_id,version,snapshot,actor_id,actor_name,reason,created_at) VALUES (?,?,?,?,?,'save',?)").run(id, article.editVersion, JSON.stringify(article), actorId, actorName, now);
+    db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,?,?,?,?)").run(id, input.status === "published" ? "publish" : "save", actorName, JSON.stringify({ status: input.status, title: input.title, version: article.editVersion, homepagePlacement: article.homepagePlacement, isHomepageGallery: article.isHomepageGallery, agencySourceId, agencyExternalId: values.agencyExternalId, previousSlug, slug: article.slug, slugRegenerated: previousSlug !== article.slug }), now);
+    db.prepare("UPDATE agency_items SET status='editorial_override',pending_hash='' WHERE article_id=? AND status='pending_update'").run(id);
+    return id!;
+  });
   const id = transaction(); return getAdminArticle(id)!;
 }
 
