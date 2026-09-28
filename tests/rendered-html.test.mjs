@@ -33,7 +33,7 @@ import { homepageLayoutSignature, moveHomepageLayoutCard } from "../app/admin/ho
 import { extractGalleryImages, selectHomepagePhotoGalleries, selectPhotoGalleries } from "../db/photo-gallery-model.mjs";
 import { createBreakingRefresh, BREAKING_REFRESH_MS, BREAKING_ROTATION_MS } from "../app/breaking-news-refresh.mjs";
 import { nextBreakingId, reconcileBreakingId } from "../app/breaking-ticker-model.mjs";
-import { isBreakingItems, toBreakingItems } from "../db/breaking-feed-model.mjs";
+import { BREAKING_LABEL_TTL_MS, isActiveBreaking, isBreakingItems, toBreakingItems } from "../db/breaking-feed-model.mjs";
 import { createYouTubeFeedLoader, KOZA_YOUTUBE_FEED_URL, parseYouTubeFeed, YOUTUBE_REFRESH_MS, YOUTUBE_STALE_MS } from "../db/youtube-feed.mjs";
 import { evaluateSystemStatus } from "../db/system-status.mjs";
 import { responsiveImageAttributes } from "../app/responsive-image-model.mjs";
@@ -3947,6 +3947,44 @@ test("üst son dakika şeridi yalnız işaretli yayındaki beş haberi döndür�
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(css, /@keyframes breaking-ticker-in/);
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)\{\.breaking-inner\{animation:none!important\}\}/);
+});
+
+test("son dakika görsel yazısı yayın saatinden dört saat sonra otomatik kalkar", async (t) => {
+  assert.equal(BREAKING_LABEL_TTL_MS, 4 * 60 * 60_000);
+  const now = Date.now();
+  assert.equal(isActiveBreaking({ isBreaking: 1, publishedAt: now - BREAKING_LABEL_TTL_MS + 1 }, now), true);
+  assert.equal(isActiveBreaking({ isBreaking: 1, publishedAt: now - BREAKING_LABEL_TTL_MS }, now), false, "Tam dört saat dolduğunda vurgu kalkmalı");
+  assert.equal(isActiveBreaking({ isBreaking: 0, publishedAt: now }, now), false);
+  assert.equal(isActiveBreaking({ isBreaking: 1, publishedAt: null }, now), false);
+  const adminPanel = await readFile(new URL("../app/admin/panel.tsx", import.meta.url), "utf8");
+  const workflowStudio = await readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8");
+  assert.match(adminPanel, /Son dakika olarak öne çıkar \(4 saat\)/);
+  assert.match(workflowStudio, /Son dakika olarak öne çıkar \(4 saat\)/);
+
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const slugs = [`dort-saat-yeni-${process.pid}`, `dort-saat-eski-${process.pid}`];
+  t.after(() => {
+    db.prepare(`DELETE FROM articles WHERE slug IN (?,?)`).run(...slugs);
+    db.close();
+  });
+  const insert = (slug, title, publishedAt) => db.prepare("INSERT INTO articles(slug,title,spot,body,category,status,is_breaking,hero_image,image_alt,published_at,created_at,updated_at) VALUES (?,?, 'Dört saat kuralını doğrulayan test spotu','Haber yayında kalırken yalnız son dakika vurgusu zamanında kaldırılır.','Gündem','published',1,'/news/gundem.jpg','Son dakika testi',?,?,?)")
+    .run(slug, title, publishedAt, publishedAt, publishedAt);
+  insert(slugs[0], "Dört saat dolmamış son dakika haberi", now - BREAKING_LABEL_TTL_MS + 60_000);
+  insert(slugs[1], "Dört saati dolmuş normal haber", now - BREAKING_LABEL_TTL_MS - 60_000);
+
+  const ticker = await (await fetch(`${baseUrl}/api/breaking-ticker`)).json();
+  assert.ok(ticker.items.some((item) => item.slug === slugs[0]), "Dört saati dolmayan haber üst şeritte kalmalı");
+  assert.ok(!ticker.items.some((item) => item.slug === slugs[1]), "Dört saati dolan haber üst şeritten çıkmalı");
+
+  const recent = await html(`/haber/${slugs[0]}`);
+  assert.match(recent, /class="breaking-ribbon"/);
+  assert.match(recent, /class="article-breaking"/);
+
+  const expiredResponse = await fetch(`${baseUrl}/haber/${slugs[1]}`);
+  assert.equal(expiredResponse.status, 200, "Süre dolunca haber yayından kaldırılmamalı");
+  const expired = await expiredResponse.text();
+  assert.match(expired, /Dört saati dolmuş normal haber/);
+  assert.doesNotMatch(expired, /class="breaking-ribbon"|class="article-breaking"|#SonDakika/);
 });
 
 test("medya boyutu sınırları ve kaydedilen duyarlı genişlik", async () => {

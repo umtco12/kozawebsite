@@ -16,6 +16,7 @@ import { ensureAdvertisementSchema } from "./ad-schema.mjs";
 import { ensureHomepageLatestSchema, homepageLatestOrderSql, moveHomepageArticlesToLatest, recordHomepageLatestEntries } from "./homepage-latest.mjs";
 import { isVisibleHomepageStatus, normalizeHomepagePlacementLimits, promoteHomepageArticle, repairUnrankedSliderArticles, syncLegacyHomepagePlacements } from "./homepage-order.mjs";
 import { extractGalleryImages, selectHomepagePhotoGalleries, selectPhotoGalleries } from "./photo-gallery-model.mjs";
+import { BREAKING_LABEL_TTL_MS } from "./breaking-feed-model.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
@@ -611,7 +612,8 @@ export function searchArticles(query: string, limit = 40) {
 export function listBreakingArticles(limit = 40, onlyBreaking = false) {
   publishDueArticles();
   const safeLimit = Math.min(Math.max(limit, 1), 100);
-  return (getDb().prepare("SELECT * FROM articles WHERE status='published' AND (?=0 OR is_breaking=1) ORDER BY is_breaking DESC, published_at DESC, id DESC LIMIT ?").all(onlyBreaking ? 1 : 0, safeLimit) as Record<string, unknown>[]).map(mapArticle);
+  const activeAfter = Date.now() - BREAKING_LABEL_TTL_MS;
+  return (getDb().prepare("SELECT * FROM articles WHERE status='published' AND (?=0 OR (is_breaking=1 AND published_at>?)) ORDER BY CASE WHEN is_breaking=1 AND published_at>? THEN 1 ELSE 0 END DESC, published_at DESC, id DESC LIMIT ?").all(onlyBreaking ? 1 : 0, activeAfter, activeAfter, safeLimit) as Record<string, unknown>[]).map(mapArticle);
 }
 
 export function listVideoArticles(limit = 30) {

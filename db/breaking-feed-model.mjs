@@ -1,3 +1,12 @@
+export const BREAKING_LABEL_TTL_MS = 4 * 60 * 60_000;
+
+/** Son dakika seçimi veride korunur; ziyaretçi vurgusu yayından dört saat sonra sona erer. */
+export function isActiveBreaking(article, now = Date.now()) {
+  return Boolean(article?.isBreaking)
+    && Number.isFinite(article?.publishedAt)
+    && article.publishedAt > now - BREAKING_LABEL_TTL_MS;
+}
+
 /** Yalnız ziyaretçiye açık liste alanları; haber gövdesi ve editoryal veriler gönderilmez. */
 export function toBreakingItems(articles) {
   return articles.slice(0, 5).map(({ id, slug, title, publishedAt }) => ({ id, slug, title, publishedAt }));

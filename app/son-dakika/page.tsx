@@ -3,6 +3,7 @@ import { listBreakingArticles, listCategories } from "../../db";
 import { SiteFooter, SiteHeader, navCategories } from "../site-chrome";
 import { displaySpot, displayTitle } from "../../db/title-model.mjs";
 import { AdSlot } from "../ad-slot";
+import { isActiveBreaking } from "../../db/breaking-feed-model.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ function dayLabel(value: number | null) {
 export default async function BreakingPage() {
   const categories = navCategories();
   const articles = listBreakingArticles(40);
-  const flagged = articles.filter((article) => article.isBreaking);
+  const flagged = articles.filter((article) => isActiveBreaking(article));
   const lead = flagged[0] ?? articles[0];
   const rest = articles.filter((article) => article.id !== lead?.id);
   const highlights = rest.slice(0, 3);
@@ -69,10 +70,10 @@ export default async function BreakingPage() {
               <a className="section-lead" href={`/haber/${lead.slug}`}>
                 <div className="section-lead-thumb">
                   <img src={lead.heroImage} alt={lead.imageAlt} />
-                  {lead.isBreaking && <b className="breaking-ribbon">SON DAKİKA</b>}
+                  {isActiveBreaking(lead) && <b className="breaking-ribbon">SON DAKİKA</b>}
                 </div>
                 <div>
-                  <span style={{ background: "var(--red)" }}>{lead.isBreaking ? "SON DAKİKA" : lead.category}</span>
+                  <span style={{ background: "var(--red)" }}>{isActiveBreaking(lead) ? "SON DAKİKA" : lead.category}</span>
                   <h2>{displayTitle(lead.title)}</h2>
                   {displaySpot(lead.spot, lead.title) && <p>{displaySpot(lead.spot, lead.title)}</p>}
                   <time>{stamp(lead.publishedAt)}</time>
@@ -86,7 +87,7 @@ export default async function BreakingPage() {
                   <a className="section-card" href={`/haber/${article.slug}`} key={article.id}>
                     <div className="section-card-thumb">
                       <img src={article.heroImage} alt={article.imageAlt} loading="lazy" />
-                      {article.isBreaking && <b className="breaking-ribbon">SON DAKİKA</b>}
+                      {isActiveBreaking(article) && <b className="breaking-ribbon">SON DAKİKA</b>}
                     </div>
                     <span>{article.category}</span>
                     <h3>{displayTitle(article.title)}</h3>
@@ -105,10 +106,10 @@ export default async function BreakingPage() {
                   <section key={group.day}>
                     <h2 className="feed-day">{group.day}</h2>
                     {group.items.map((article) => (
-                      <a className={article.isBreaking ? "feed-row urgent" : "feed-row"} href={`/haber/${article.slug}`} key={article.id}>
+                      <a className={isActiveBreaking(article) ? "feed-row urgent" : "feed-row"} href={`/haber/${article.slug}`} key={article.id}>
                         <time>{clock(article.publishedAt)}</time>
                         <div>
-                          <span>{article.isBreaking ? "SON DAKİKA" : article.category}</span>
+                          <span>{isActiveBreaking(article) ? "SON DAKİKA" : article.category}</span>
                           <h3>{displayTitle(article.title)}</h3>
                         </div>
                         <img src={article.heroImage} alt="" loading="lazy" />
