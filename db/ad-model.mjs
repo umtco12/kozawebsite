@@ -16,7 +16,7 @@ export const adKinds = ["house", "direct", "programmatic"];
 export const houseAdSeeds = [
   {
     placement: "site_top", advertiser: "Koza TV", campaignName: "Şimdi Konuşma Zamanı", title: "Gündemin nabzı Koza TV’de",
-    description: "Son dakika, canlı yayın ve güçlü yorum tek ekranda.", imageUrl: "/koza-logo.png", targetUrl: "/canli", ctaLabel: "Canlı yayını izle", theme: "dark", kind: "house", priority: 100,
+    description: "Son dakika, canlı yayın ve güçlü yorum tek ekranda.", imageUrl: "/koza-logo-temiz.svg", targetUrl: "/canli", ctaLabel: "Canlı yayını izle", theme: "dark", kind: "house", priority: 100,
   },
   {
     placement: "site_left_rail", advertiser: "Koza TV", campaignName: "Koza TV Sol Duvar", title: "KOZA TV REKLAM ALANI",
@@ -28,15 +28,15 @@ export const houseAdSeeds = [
   },
   {
     placement: "home_billboard", advertiser: "Koza TV", campaignName: "Koza TV Dijital", title: "Haberin merkezinde, hayatın içinde",
-    description: "Türkiye ve dünyadan doğrulanmış gelişmeleri Koza TV’nin dijital yayınlarında takip edin.", imageUrl: "/koza-logo.png", targetUrl: "/kurumsal/hakkimizda", ctaLabel: "Koza TV’yi keşfet", theme: "red", kind: "house", priority: 100,
+    description: "Türkiye ve dünyadan doğrulanmış gelişmeleri Koza TV’nin dijital yayınlarında takip edin.", imageUrl: "/koza-logo-temiz.svg", targetUrl: "/kurumsal/hakkimizda", ctaLabel: "Koza TV’yi keşfet", theme: "red", kind: "house", priority: 100,
   },
   {
     placement: "section_inline", advertiser: "Koza TV", campaignName: "Koza TV Haber Merkezi", title: "Doğru haber. Şimdi konuşma zamanı.",
-    description: "Günün gelişmeleri, özel yayınlar ve kesintisiz canlı akış Koza TV’de.", imageUrl: "/koza-logo.png", targetUrl: "/son-dakika", ctaLabel: "Gelişmeleri takip et", theme: "light", kind: "house", priority: 100,
+    description: "Günün gelişmeleri, özel yayınlar ve kesintisiz canlı akış Koza TV’de.", imageUrl: "/koza-logo-temiz.svg", targetUrl: "/son-dakika", ctaLabel: "Gelişmeleri takip et", theme: "light", kind: "house", priority: 100,
   },
   {
     placement: "article_sidebar", advertiser: "Koza TV", campaignName: "Koza TV Canlı", title: "Yayın her an yanınızda",
-    description: "Koza TV canlı yayınını web’den kesintisiz izleyin.", imageUrl: "/koza-logo.png", targetUrl: "/canli", ctaLabel: "Şimdi izle", theme: "dark", kind: "house", priority: 100,
+    description: "Koza TV canlı yayınını web’den kesintisiz izleyin.", imageUrl: "/koza-logo-temiz.svg", targetUrl: "/canli", ctaLabel: "Şimdi izle", theme: "dark", kind: "house", priority: 100,
   },
 ];
 

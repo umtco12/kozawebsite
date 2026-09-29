@@ -5,7 +5,7 @@ export default function NotFound() {
   return (
     <main className="error-page">
       <div className="wrap">
-        <a className="brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo.png" alt="Koza TV" /></a>
+        <a className="brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo-temiz.svg" alt="Koza TV" /></a>
         <span>HATA 404</span>
         <h1>Aradığınız sayfa bulunamadı</h1>
         <p>Sayfa kaldırılmış, adresi değişmiş veya hiç var olmamış olabilir. Aşağıdaki bağlantılardan yayına devam edebilirsiniz.</p>

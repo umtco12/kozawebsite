@@ -84,7 +84,7 @@ export function SiteHeader({ categories, active = "" }: { categories: NavCategor
           {/* Logo görselinin içinde marka mottosu zaten yazılı; başlıkta ikinci kez tekrarlanmaz.
               Canlı yayın düğmesi logonun altında durur; kalan genişliğin tamamı yayın akışına kalır. */}
           <div className="masthead-brand">
-            <a className="brand" href="/" aria-label={`Koza TV ana sayfa — ${settings.siteMotto}`}><img src="/koza-logo.png" alt="Koza TV — Konuşma Zamanı" /></a>
+            <a className="brand" href="/" aria-label={`Koza TV ana sayfa — ${settings.siteMotto}`}><img src="/koza-logo-temiz.svg" alt="Koza TV — Konuşma Zamanı" /></a>
             <a className="live-button" href="/canli"><i /> CANLI YAYIN</a>
           </div>
           <BroadcastFlow schedule={getBroadcastSchedule()} initialNow={broadcastNow} />
@@ -136,7 +136,7 @@ export function SiteFooter({ categories }: { categories: NavCategory[] }) {
         <div className="footer-grid">
           <section className="footer-identity" aria-labelledby="footer-brand-title">
             <h2 id="footer-brand-title" className="visually-hidden">Koza TV</h2>
-            <a className="brand footer-brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo.png" alt="Koza TV" /></a>
+            <a className="brand footer-brand" href="/" aria-label="Koza TV ana sayfa"><img src="/koza-logo-temiz.svg" alt="Koza TV" /></a>
             <p>Türkiye&apos;nin gündemi, güvenilir haber ve güçlü yorumla Koza TV&apos;de.</p>
             <SocialCluster labeled />
           </section>

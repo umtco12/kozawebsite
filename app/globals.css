@@ -1258,7 +1258,7 @@ footer .social-link{background:#111a23;border-color:#2a3540;color:#aeb7c1}
 .masthead{height:auto;min-height:118px;padding-block:13px;gap:18px}
 .masthead-brand{flex:none;width:var(--marka-en,240px);display:flex;flex-direction:column;gap:9px}
 .masthead-brand .brand{display:block;width:100%}
-.masthead .brand>img{width:100%;height:calc(var(--marka-en,240px)/2.39)}
+.masthead .brand>img{width:100%;height:auto;aspect-ratio:411/164}
 .masthead .live-button{width:100%;justify-content:center;border-radius:3px}
 .site-header{position:relative}
 .flow-rail{flex:1;min-width:0;display:flex;align-items:stretch;gap:7px}
