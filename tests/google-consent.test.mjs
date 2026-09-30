@@ -9,61 +9,59 @@ test('Google kimlikleri gerçek hesaba bağlıdır ve script metni kabul edilmez
   assert.equal(googleConfig({ googleTagManagerId: '<script>alert(1)</script>', googleAdSenseId: 'pub-1' }).gtmId, '');
 });
 
-test('İzin yoksa veya yönetim sayfasındaysa Google istekleri başlamaz; izin tek yükleme yapar', async () => {
-  const { createGoogleConsent, CONSENT_KEY, CONSENT_MAX_AGE } = await import('../app/google-consent.mjs');
+
+function environment({ path = '/', host = 'www.kozatv.com.tr', legacy = null } = {}) {
+  const scripts = [], removedCookies = [], stored = new Map(legacy ? [['koza_cookie_consent_v1', legacy]] : []);
+  const window = { location: { pathname: path, hostname: host }, dataLayer: [], localStorage: { getItem: k => stored.get(k), removeItem: k => stored.delete(k) } };
+  const document = { createElement: () => ({}), getElementById: id => scripts.find(s => s.id === id), head: { appendChild: s => scripts.push(s) }, get cookie() { return '_ga=one; _ga_Q5S8DTCR9N=two; koza_admin_session=private'; }, set cookie(value) { removedCookies.push(value); } };
+  return { window, document, scripts, removedCookies, stored };
+}
+
+test('Panel olmadan Google çerezsiz modda bir kez yüklenir; yönetim ve yerel hostlar hariçtir', async () => {
+  const { startGoogleServices } = await import('../app/google-consent.mjs');
   const { googleConfig, googleDefaults } = await import('../db/google-model.mjs');
-  const scripts = [], removedCookies = [], saved = new Map();
-  const window = { location: { pathname: '/', hostname: 'www.kozatv.com.tr', reload() {} }, localStorage: { getItem: k => saved.get(k), setItem: (k,v) => saved.set(k,v) }, dataLayer: [] };
-  const document = { createElement: () => ({}), head: { appendChild: s => scripts.push(s) }, get cookie() { return '_ga=one; _ga_Q5S8DTCR9N=two; koza_admin_session=private'; }, set cookie(value) { removedCookies.push(value); } };
-  const consent = createGoogleConsent({ window, document, config: googleConfig(googleDefaults) });
-  assert.equal(consent.restore(), null);
-  assert.equal(scripts.length, 0);
-  consent.apply({ analytics: false, advertising: false });
-  assert.equal(scripts.length, 0);
-  consent.apply({ analytics: true, advertising: false });
-  consent.apply({ analytics: true, advertising: false });
-  assert.equal(scripts.length, 1);
-  assert.match(scripts[0].src, /gtm.js\?id=GTM-5D3KDTPX$/);
-  assert.equal(window.dataLayer[0][0], 'consent');
-  assert.equal(window.dataLayer[0][1], 'default');
-  assert.equal(window.dataLayer[0][2].ad_storage, 'denied');
-  assert.ok(window.dataLayer.some(v => v[1] === 'update' && v[2]?.analytics_storage === 'granted'));
-  consent.apply({ analytics: false, advertising: false });
-  assert.ok(removedCookies.some(v => v.startsWith('_ga=')));
-  assert.ok(removedCookies.every(v => !v.startsWith('koza_admin_session')));
-  window.location.pathname = '/admin/giris';
-  createGoogleConsent({ window, document, config: googleConfig(googleDefaults) }).apply({ analytics: true, advertising: true });
-  assert.equal(scripts.length, 1);
-  saved.set(CONSENT_KEY, '{bozuk');
-  assert.equal(consent.restore(), null);
-  saved.set(CONSENT_KEY, JSON.stringify({ version: 1, analytics: true, advertising: true, savedAt: Date.now() - CONSENT_MAX_AGE - 1 }));
-  assert.equal(consent.restore(), null);
-  window.localStorage = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } };
-  assert.equal(consent.restore(), null);
-  assert.doesNotThrow(() => consent.apply({ analytics: false, advertising: false }));
-  window.location.pathname = '/';
-  window.location.hostname = '127.0.0.1';
-  createGoogleConsent({ window, document, config: googleConfig(googleDefaults) }).apply({ analytics: true, advertising: true });
-  assert.equal(scripts.length, 1, 'Yerel test ziyaretleri üretim Google hesabını kirletmemeli');
+  const env = environment({ legacy: '{eski-panel}' }), config = googleConfig(googleDefaults);
+  startGoogleServices({ ...env, config });
+  startGoogleServices({ ...env, config });
+  assert.equal(env.scripts.length, 2);
+  assert.equal(env.window.dataLayer[0][0], 'consent');
+  assert.equal(env.window.dataLayer[0][1], 'default');
+  assert.deepEqual(env.window.dataLayer[0][2], { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+  assert.equal(env.window.dataLayer.filter(v => v[0] === 'consent').length, 1);
+  assert.ok(env.window.dataLayer.some(v => v[1] === 'allow_google_signals' && v[2] === false));
+  assert.ok(env.window.dataLayer.some(v => v[1] === 'allow_ad_personalization_signals' && v[2] === false));
+  assert.equal(env.stored.size, 0);
+  assert.ok(env.removedCookies.some(v => v.startsWith('_ga=')));
+  assert.ok(env.removedCookies.every(v => !v.startsWith('koza_admin_session')));
+  for (const path of ['/admin', '/admin/giris', '/api/content', '/media/example.webp', '/_next/static/test.js']) {
+    const excluded = environment({ path });
+    startGoogleServices({ ...excluded, config });
+    assert.equal(excluded.scripts.length, 0);
+    assert.equal(excluded.window.dataLayer.length, 0);
+  }
+  const local = environment({ host: '127.0.0.1' });
+  startGoogleServices({ ...local, config });
+  assert.equal(local.scripts.length, 0);
 });
 
-test('Reklam scripti yalnız ziyaretçi izni ve sertifikalı Google mesajı hazırken yüklenir', async () => {
-  const { createGoogleConsent } = await import('../app/google-consent.mjs');
+test('AdSense kişiselleştirme istemez; kapalı veya boş kimlik yükleme yapmaz ve izin kendiliğinden verilmez', async () => {
+  const { startGoogleServices } = await import('../app/google-consent.mjs');
   const { googleConfig, googleDefaults } = await import('../db/google-model.mjs');
-  const scripts = [];
-  const window = { location: { pathname: '/', hostname: 'www.kozatv.com.tr' }, localStorage: { getItem: () => null, setItem() {} }, dataLayer: [] };
-  const document = { createElement: () => ({}), head: { appendChild: s => scripts.push(s) }, cookie: '' };
-  createGoogleConsent({ window, document, config: googleConfig({ ...googleDefaults, googleAdSenseEnabled: '0' }) }).apply({ analytics: false, advertising: true });
-  assert.equal(scripts.length, 0);
-  const consent = createGoogleConsent({ window, document, config: googleConfig({ ...googleDefaults, googleAdSenseEnabled: '1' }) });
-  consent.apply({ analytics: false, advertising: true });
-  consent.apply({ analytics: false, advertising: true });
-  assert.equal(scripts.length, 1);
-  assert.equal(scripts[0].src, 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7808964787779354');
-  assert.ok(window.dataLayer.every(v => !v[2] || v[2].ad_storage !== 'granted'), 'Reklam onayını sertifikalı CMP yönetir');
-  let reopened = 0;
-  window.googlefc = { showRevocationMessage() { reopened++; } };
-  assert.equal(consent.manageAdvertising(), true);
-  window.googlefc.callbackQueue[0].CONSENT_API_READY();
-  assert.equal(reopened, 1);
+  const env = environment();
+  startGoogleServices({ ...env, config: googleConfig({ ...googleDefaults, googleAdSenseEnabled: '0' }) });
+  assert.equal(env.scripts.length, 1);
+  assert.match(env.scripts[0].src, /gtm.js\?id=GTM-5D3KDTPX$/);
+  startGoogleServices({ ...env, config: googleConfig(googleDefaults) });
+  assert.equal(env.scripts.length, 2);
+  assert.equal(env.scripts[1].src, 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7808964787779354');
+  assert.equal(env.scripts[1].crossOrigin, 'anonymous');
+  assert.equal(env.window.adsbygoogle.requestNonPersonalizedAds, 1);
+  assert.ok(env.window.dataLayer.every(v => !v[2] || (v[2].analytics_storage !== 'granted' && v[2].ad_storage !== 'granted')));
+  const empty = environment();
+  startGoogleServices({ ...empty, config: googleConfig({}) });
+  assert.equal(empty.scripts.length, 0);
+  const blocked = environment();
+  blocked.window.localStorage = { getItem() { throw Error('blocked'); } };
+  assert.doesNotThrow(() => startGoogleServices({ ...blocked, config: googleConfig(googleDefaults) }));
+  assert.equal(blocked.scripts.length, 2);
 });

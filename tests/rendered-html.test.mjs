@@ -4047,6 +4047,16 @@ test("medya boyutu sınırları ve kaydedilen duyarlı genişlik", async () => {
   assert.deepEqual(mediaWidthAttributes(320), { width: "320", style: "width:320px;max-width:100%;height:auto" });
 });
 
+test("ziyaretçiye özel çerez paneli, sabit düğme veya tercih formu gösterilmez", async () => {
+  for (const path of ['/', '/kurumsal/cerez-politikasi', '/admin/giris']) {
+    const body = await html(path);
+    assert.doesNotMatch(body, /koza-cookie-panel|koza-cookie-reopen|koza-cookie-preferences|Seçimlerimi kaydet/);
+  }
+  const source = await readFile(new URL('../app/google-services.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /koza-cookie-reopen|setOpen|koza-cookie-panel|CookiePreferences/);
+  assert.match(source, /return null/);
+});
+
 test("haber sorumlusu geçişi yalnız kanıtlı ilk kayıt ve en son işlemi kullanır", async () => {
   const { backfillArticleActors } = await import("../db/article-archive-model.mjs");
   const db = new Database(":memory:");
