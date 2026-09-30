@@ -76,9 +76,9 @@ export function SiteSettingsPanel({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="settings-layout">
       <form className="settings-form" onSubmit={submit}>
-        {groups.map((group) => (
+        {groups.map((group, groupIndex) => (
           <section className="editor-section" key={group.id}>
-            <div className="editor-section-head"><span>{group.id === "yayin" ? "01" : group.id === "sosyal" ? "02" : "03"}</span><div><h2>{group.label}</h2><p>{group.description}</p></div></div>
+            <div className="editor-section-head"><span>{String(groupIndex + 1).padStart(2, '0')}</span><div><h2>{group.label}</h2><p>{group.description}</p></div></div>
             <div className="form-grid">
               {fields.filter((field) => field.group === group.id).map((field) => (
                 field.type === "bool" ? (
@@ -103,7 +103,7 @@ export function SiteSettingsPanel({ canEdit }: { canEdit: boolean }) {
         ))}
 
         <section className="editor-section">
-          <div className="editor-section-head"><span>04</span><div><h2>Yayın akışı</h2><p>Site başlığındaki şerit ve canlı yayın sayfası bu akışı kullanır. Saatler Türkiye saatidir. Bitiş boş bırakılırsa program bir sonraki başlangıca kadar sürer; sunucu fotoğrafı medya kütüphanesinden seçilir.</p></div></div>
+          <div className="editor-section-head"><span>05</span><div><h2>Yayın akışı</h2><p>Site başlığındaki şerit ve canlı yayın sayfası bu akışı kullanır. Saatler Türkiye saatidir. Bitiş boş bırakılırsa program bir sonraki başlangıca kadar sürer; sunucu fotoğrafı medya kütüphanesinden seçilir.</p></div></div>
           <div className="schedule-editor">
             {schedule.map((row, index) => (
               <div className="schedule-row" key={index}>
@@ -154,6 +154,7 @@ export function SiteSettingsPanel({ canEdit }: { canEdit: boolean }) {
           <li><b>Yedek yayın adresi</b> → ana kaynak açılmazsa devreye girer.</li>
           <li><b>Sosyal hesaplar</b> → üst bant ve alt bölüm simgeleri. Boş hesap bağlantı olarak gösterilmez.</li>
           <li><b>Künye alanları</b> → <code>/kurumsal/kunye</code> ve <code>/kurumsal/iletisim</code>.</li>
+          <li><b>Google ve ölçüm</b> → Search Console sahiplik etiketi, GTM/Analytics ve AdSense bağlantısı. Kodlar ziyaretçi izniyle çalışır; yönetim paneli ölçülmez. AdSense reklam yayını için Google’ın site incelemesi gerekir.</li>
           <li><b>Piyasa göstergesi</b> → BIST 100, gram altın, Dolar ve Euro değişimleri otomatik okunur; ana akış kesilirse TCMB döviz verisi güvenli yedektir.</li>
           <li><b>Yayın akışı</b> → Site başlığındaki sunucu fotoğraflı şerit ve <code>/canli</code> sayfasındaki program listesi. Şeritte o an yayında olan program işaretlenir; hafta içi seçilen programlar hafta sonu gösterilmez.</li>
         </ul>

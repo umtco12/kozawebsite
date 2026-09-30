@@ -114,6 +114,32 @@ function request(path, init = {}) {
 
 function anonymousRequest(path, init = {}) { return fetch(`${baseUrl}${path}`, init); }
 
+test('Google sahiplik meta etiketleri, gerçek ads.txt ve güvenli yönetim ayarları', async (t) => {
+  const original = (await (await request('/api/settings')).json()).settings;
+  const keys = ['googleTagManagerId', 'googleAnalyticsId', 'googleSearchConsoleToken', 'googleAdSenseId', 'googleAdSenseEnabled'];
+  t.after(async () => { await request('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(keys.map(key => [key, original[key]]))) }); });
+  const html = await (await anonymousRequest('/')).text();
+  assert.match(html, /<meta name="google-site-verification" content="SZkV7s3VUP_26-a4os2Jn5i9bXNoDGnjmDI_i40iAJ8"/);
+  assert.match(html, /<meta name="google-adsense-account" content="ca-pub-7808964787779354"/);
+  assert.doesNotMatch(html, /<script[^>]+src="https:\/\/(www\.googletagmanager\.com|pagead2\.googlesyndication\.com)/, 'Google scriptleri SSR sırasında rıza dışında indirilmemeli');
+  assert.doesNotMatch(html, /<iframe[^>]+googletagmanager/, 'Noscript iframe rıza sınırını aşmamalı');
+  const ads = await anonymousRequest('/ads.txt');
+  assert.equal(ads.status, 200);
+  assert.match(ads.headers.get('content-type'), /text\/plain/);
+  assert.equal(await ads.text(), 'google.com, pub-7808964787779354, DIRECT, f08c47fec0942fa0\n');
+  const patch = { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ googleTagManagerId: '<script>bad</script>', googleAdSenseId: 'ca-pub-1' }) };
+  assert.equal((await anonymousRequest('/api/settings', patch)).status, 401);
+  const invalid = await request('/api/settings', patch);
+  assert.equal(invalid.status, 400);
+  assert.ok((await invalid.json()).fields.googleAdSenseId);
+  const viewer = await createRoleSession('viewer', 'GoogleReadOnly');
+  assert.equal((await anonymousRequest('/api/settings', { ...patch, headers: { ...patch.headers, cookie: viewer.cookie } })).status, 403);
+  const changed = await request('/api/settings', { ...patch, body: JSON.stringify({ googleSearchConsoleToken: 'test_verified_123456789012345', googleAdSenseId: '', googleTagManagerId: '' }) });
+  assert.equal(changed.status, 200);
+  assert.match(await (await anonymousRequest('/')).text(), /name="google-site-verification" content="test_verified_123456789012345"/);
+  assert.equal((await anonymousRequest('/ads.txt')).status, 404);
+});
+
 async function createRoleSession(role, label) {
   const email = `${label}-${process.pid}@koza.test`;
   const temporaryPassword = `Koza!${label}2026Temp`;
@@ -1756,6 +1782,30 @@ test("haber detay, kategori, sitemap, robots ve RSS keşfedilebilirlik yüzeyler
   assert.match(await robots.text(), /Disallow: \/admin/);
   const rss = await request("/rss.xml");
   assert.match(await rss.text(), /<rss version="2.0">/);
+});
+
+test("sitemap yayımdaki tüm haberleri içerir, taslakları dışarıda bırakır", async () => {
+  const prefix = `seo-sitemap-${process.pid}-`;
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const insert = db.prepare("INSERT INTO articles (slug,title,spot,body,category,status,published_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)");
+  const now = Date.now();
+  try {
+    db.transaction(() => {
+      for (let index = 0; index < 105; index += 1) {
+        insert.run(`${prefix}${index}`, `Sitemap test haberi ${index}`, "Test spotu", "Test gövdesi", "Gündem", "published", now - index * 1000, now, now);
+      }
+      insert.run(`${prefix}taslak`, "Sitemap taslak", "Test spotu", "Test gövdesi", "Gündem", "draft", null, now, now);
+    })();
+    const response = await request("/sitemap.xml");
+    assert.equal(response.status, 200);
+    const sitemap = await response.text();
+    assert.match(sitemap, new RegExp(`/haber/${prefix}0<`));
+    assert.match(sitemap, new RegExp(`/haber/${prefix}104<`), "100 haber sınırının gerisindeki yayın da bulunmalı");
+    assert.doesNotMatch(sitemap, new RegExp(`/haber/${prefix}taslak<`));
+  } finally {
+    db.prepare("DELETE FROM articles WHERE slug LIKE ?").run(`${prefix}%`);
+    db.close();
+  }
 });
 
 test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve aralarda ince reklam görünür", async () => {

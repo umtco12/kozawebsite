@@ -1,10 +1,12 @@
 /* Site ayarlarının tek kaynağı. Alan tanımı, doğrulama ve varsayılanlar burada durur;
    yönetim paneli formu da ziyaretçi sitesi de aynı tanımı kullanır. */
 
+import { googleDefaults, googlePatterns } from './google-model.mjs';
 export const settingGroups = [
   { id: "yayin", label: "Yayın ve canlı akış", description: "Canlı yayın kaynağı, yedek kaynak ve yayın bilgileri." },
   { id: "sosyal", label: "Sosyal medya hesapları", description: "Boş bırakılan hesap sitede bağlantı olarak gösterilmez." },
   { id: "kunye", label: "Künye ve iletişim", description: "Künye, iletişim ve KVKK sayfalarında yayımlanan resmî bilgiler." },
+  { id: "google", label: "Google ve ölçüm", description: "Search Console doğrulaması, GTM üzerinden Analytics ve AdSense yayıncı bağlantısı." },
 ];
 
 export const officialSocialAccounts = {
@@ -52,6 +54,11 @@ export const settingFields = [
   { key: "hostingProviderInfo", group: "kunye", type: "textarea", label: "Yer sağlayıcı ticaret unvanı ve adresi", hint: "Şimdilik boş bırakılabilir; bilgi girildiğinde Künye sayfasında yayımlanır.", maxLength: 500, default: officialImprintSettings.hostingProviderInfo },
   { key: "newsEmail", group: "kunye", type: "email", label: "Haber merkezi e-postası", placeholder: "haber@kozatv.com.tr", default: "" },
   { key: "adsEmail", group: "kunye", type: "email", label: "Reklam e-postası", placeholder: "reklam@kozatv.com.tr", default: "" },
+  { key: 'googleTagManagerId', group: 'google', type: 'text', label: 'Google Tag Manager kimliği', hint: 'İstatistik izni verilince yüklenir. Boş bırakılırsa kapanır.', maxLength: 24, default: googleDefaults.googleTagManagerId },
+  { key: 'googleAnalyticsId', group: 'google', type: 'text', label: 'Google Analytics ölçüm kimliği', hint: 'GTM içindeki Google etiketiyle aynı olmalıdır. Etiket GTM üzerinden yayımlanır.', maxLength: 22, default: googleDefaults.googleAnalyticsId },
+  { key: 'googleSearchConsoleToken', group: 'google', type: 'text', label: 'Search Console HTML doğrulama kodu', hint: 'Yalnız meta etiketinin content değeri. Doğrulama sonrasında da korunmalıdır.', maxLength: 200, default: googleDefaults.googleSearchConsoleToken },
+  { key: 'googleAdSenseId', group: 'google', type: 'text', label: 'AdSense yayıncı kimliği', hint: 'Sahiplik meta etiketi ve /ads.txt otomatik oluşturulur.', maxLength: 23, default: googleDefaults.googleAdSenseId },
+  { key: 'googleAdSenseEnabled', group: 'google', type: 'bool', label: 'AdSense reklam kodunu etkinleştir', hint: 'Google Privacy & messaging rıza mesajı yayımlandıktan sonra açılır. Google site incelemesi ayrıca tamamlanmalıdır.', default: googleDefaults.googleAdSenseEnabled },
 ];
 
 /* Yayın günü kapsamı: program hafta içi, hafta sonu veya her gün ekranda olabilir. */
@@ -138,6 +145,12 @@ export function validateSettings(payload) {
   for (const field of settingFields) {
     if (!(field.key in input)) continue;
     const raw = input[field.key];
+    if (googlePatterns[field.key]) {
+      const value = String(raw ?? '').trim();
+      if (value && !googlePatterns[field.key].test(value)) errors[field.key] = 'Google panelindeki geçerli kimlik veya doğrulama kodunu girin; HTML/script kabul edilmez.';
+      else values[field.key] = value;
+      continue;
+    }
 
     if (field.type === "bool") {
       values[field.key] = raw === true || raw === 1 || raw === "1" ? "1" : "0";

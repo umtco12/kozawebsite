@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { getSiteSettings } from '../db';
+import { googleConfig } from '../db/google-model.mjs';
+import { GoogleServices } from './google-services';
 
-export const metadata: Metadata = {
+const baseMetadata: Metadata = {
   metadataBase: new URL("https://www.kozatv.com.tr"),
   title: {
     default: "Koza TV | Konuşma Zamanı",
@@ -27,4 +30,11 @@ export const metadata: Metadata = {
     images: ["/og-v2.png"],
   },
 };
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="tr"><body>{children}</body></html>}
+export function generateMetadata(): Metadata {
+  const config = googleConfig(getSiteSettings());
+  return { ...baseMetadata, verification: config.verification ? { google: config.verification } : {}, other: config.publisherId ? { 'google-adsense-account': config.publisherId } : {} };
+}
+export default function RootLayout({children}:{children:React.ReactNode}) {
+  const config = googleConfig(getSiteSettings());
+  return <html lang="tr"><body>{children}<GoogleServices config={config} /></body></html>;
+}

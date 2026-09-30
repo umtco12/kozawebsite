@@ -333,6 +333,11 @@ function publishDueArticles() {
   })();
 }
 export function listPublishedArticles(limit = 30) { publishDueArticles(); const safeLimit = Math.min(Math.max(limit, 1), 100); return (getDb().prepare("SELECT * FROM articles WHERE status='published' ORDER BY is_featured DESC,homepage_order ASC,published_at DESC LIMIT ?").all(safeLimit) as Record<string, unknown>[]).map(mapArticle); }
+export function listPublishedArticleSitemapEntries() {
+  publishDueArticles();
+  return (getDb().prepare("SELECT slug,updated_at,is_featured FROM articles WHERE status='published' ORDER BY published_at DESC,id DESC").all() as { slug: string; updated_at: number; is_featured: number }[])
+    .map((row) => ({ slug: row.slug, updatedAt: Number(row.updated_at), isFeatured: Number(row.is_featured) === 1 }));
+}
 export function listHomepageArticles(placement: HomepagePlacement, limit = 10) {
   publishDueArticles();
   const safeLimit = Math.min(Math.max(limit, 1), 60);
