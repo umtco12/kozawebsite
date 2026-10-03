@@ -1,7 +1,7 @@
 export function isGoogleVisitorPath(path) { return !/^\/(admin|api|_next|media)(\/|$)/i.test(path); }
 
-/* Özel panel yoktur. Analytics çerezsiz consent mode ile başlar;
-   varsa izin güncellemesini sertifikalı Google CMP yönetir. */
+/* Site sahibinin ölçüm yapılandırması: Analytics açık başlar.
+   Reklam izinlerinin güncellenmesini sertifikalı Google CMP yönetir. */
 export function startGoogleServices({ window, document, config }) {
   if (!isGoogleVisitorPath(window.location.pathname) || !/^(www\.)?kozatv\.com\.tr$/.test(window.location.hostname)) return;
   if (!config.gtmId && !(config.advertisingEnabled && config.publisherId)) return;
@@ -9,7 +9,7 @@ export function startGoogleServices({ window, document, config }) {
   function command() { window.dataLayer.push(arguments); }
   window.gtag = window.gtag || command;
   if (!window.kozaGoogleConsentInitialized) {
-    command('consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+    command('consent', 'default', { analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
     command('set', 'ads_data_redaction', true);
     command('set', 'allow_google_signals', false);
     command('set', 'allow_ad_personalization_signals', false);
@@ -24,7 +24,7 @@ export function startGoogleServices({ window, document, config }) {
           for (const domain of ['', window.location.hostname, '.kozatv.com.tr']) document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax${domain ? `; Domain=${domain}` : ''}`;
         }
       }
-    } catch { /* Depolama engellense de çerezsiz mod çalışır. */ }
+    } catch { /* Eski tercih temizliği engellense de ölçüm yüklenir. */ }
   }
   function load(id, src) {
     if (document.getElementById(id)) return;

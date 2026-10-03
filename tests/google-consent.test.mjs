@@ -17,7 +17,7 @@ function environment({ path = '/', host = 'www.kozatv.com.tr', legacy = null } =
   return { window, document, scripts, removedCookies, stored };
 }
 
-test('Panel olmadan Google çerezsiz modda bir kez yüklenir; yönetim ve yerel hostlar hariçtir', async () => {
+test('Panel olmadan Analytics ölçümü açık ve reklam izinleri kapalı başlar; scriptler bir kez yüklenir', async () => {
   const { startGoogleServices } = await import('../app/google-consent.mjs');
   const { googleConfig, googleDefaults } = await import('../db/google-model.mjs');
   const env = environment({ legacy: '{eski-panel}' }), config = googleConfig(googleDefaults);
@@ -26,7 +26,7 @@ test('Panel olmadan Google çerezsiz modda bir kez yüklenir; yönetim ve yerel 
   assert.equal(env.scripts.length, 2);
   assert.equal(env.window.dataLayer[0][0], 'consent');
   assert.equal(env.window.dataLayer[0][1], 'default');
-  assert.deepEqual(env.window.dataLayer[0][2], { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+  assert.deepEqual(env.window.dataLayer[0][2], { analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
   assert.equal(env.window.dataLayer.filter(v => v[0] === 'consent').length, 1);
   assert.ok(env.window.dataLayer.some(v => v[1] === 'allow_google_signals' && v[2] === false));
   assert.ok(env.window.dataLayer.some(v => v[1] === 'allow_ad_personalization_signals' && v[2] === false));
@@ -44,7 +44,7 @@ test('Panel olmadan Google çerezsiz modda bir kez yüklenir; yönetim ve yerel 
   assert.equal(local.scripts.length, 0);
 });
 
-test('AdSense kişiselleştirme istemez; kapalı veya boş kimlik yükleme yapmaz ve izin kendiliğinden verilmez', async () => {
+test('AdSense kişiselleştirme istemez; kapalı veya boş kimlik yükleme yapmaz ve reklam izni verilmez', async () => {
   const { startGoogleServices } = await import('../app/google-consent.mjs');
   const { googleConfig, googleDefaults } = await import('../db/google-model.mjs');
   const env = environment();
@@ -56,7 +56,7 @@ test('AdSense kişiselleştirme istemez; kapalı veya boş kimlik yükleme yapma
   assert.equal(env.scripts[1].src, 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7808964787779354');
   assert.equal(env.scripts[1].crossOrigin, 'anonymous');
   assert.equal(env.window.adsbygoogle.requestNonPersonalizedAds, 1);
-  assert.ok(env.window.dataLayer.every(v => !v[2] || (v[2].analytics_storage !== 'granted' && v[2].ad_storage !== 'granted')));
+  assert.ok(env.window.dataLayer.every(v => !v[2] || (v[2].ad_storage !== 'granted' && v[2].ad_user_data !== 'granted' && v[2].ad_personalization !== 'granted')));
   const empty = environment();
   startGoogleServices({ ...empty, config: googleConfig({}) });
   assert.equal(empty.scripts.length, 0);
@@ -64,4 +64,24 @@ test('AdSense kişiselleştirme istemez; kapalı veya boş kimlik yükleme yapma
   blocked.window.localStorage = { getItem() { throw Error('blocked'); } };
   assert.doesNotThrow(() => startGoogleServices({ ...blocked, config: googleConfig(googleDefaults) }));
   assert.equal(blocked.scripts.length, 2);
+});
+
+test('Analytics yapılandırması GTM başlamadan önce uygulanır ve görsel bir öğe oluşturmaz', async () => {
+  const { startGoogleServices } = await import('../app/google-consent.mjs');
+  const { googleConfig, googleDefaults } = await import('../db/google-model.mjs');
+  for (const path of ['/', '/haber/ornek', '/kategori/gundem', '/canli']) {
+    const env = environment({ path });
+    const createdElements = [];
+    env.document.createElement = tag => { createdElements.push(tag); return {}; };
+    const consentAtLoad = [];
+    env.document.head.appendChild = script => {
+      consentAtLoad.push(Array.from(env.window.dataLayer[0]));
+      env.scripts.push(script);
+    };
+    startGoogleServices({ ...env, config: googleConfig(googleDefaults) });
+    assert.ok(consentAtLoad.length > 0);
+    assert.ok(consentAtLoad.every(command => command[0] === 'consent' && command[1] === 'default' && command[2].analytics_storage === 'granted'));
+    assert.deepEqual(createdElements, ['script', 'script']);
+    assert.ok(env.window.dataLayer.findIndex(message => message.event === 'gtm.js') > 0);
+  }
 });
