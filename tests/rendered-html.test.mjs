@@ -1808,6 +1808,93 @@ test("sitemap yayımdaki tüm haberleri içerir, taslakları dışarıda bırak�
   }
 });
 
+test("Google News haritası yalnız son 48 saatin yayındaki haberlerini içerir ve yayın durumunu izler", async () => {
+  const prefix = `news-sitemap-${process.pid}-`;
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const insert = db.prepare("INSERT INTO articles (slug,title,spot,body,category,status,published_at,scheduled_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)");
+  const now = Date.now();
+  try {
+    const fixtures = [
+      ["yeni", "published", now - 60_000],
+      ["eski", "published", now - 49 * 60 * 60_000],
+      ["gelecek", "published", now + 60 * 60_000],
+      ["taslak", "draft", now - 60_000],
+      ["inceleme", "review", now - 60_000],
+      ["planli", "scheduled", now + 60 * 60_000],
+      ["tarihsiz", "published", null],
+    ];
+    db.transaction(() => {
+      for (const [suffix, status, publishedAt] of fixtures) {
+        insert.run(`${prefix}${suffix}`, suffix === "yeni" ? 'Koza & haber <test> "özel"' : `News ${suffix}`, "Gizli spot", "Gizli gövde", "Gündem", status, publishedAt, status === "scheduled" ? publishedAt : null, now, now);
+      }
+    })();
+    const response = await anonymousRequest("/googlenews.xml");
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /application\/xml/);
+    assert.match(response.headers.get("cache-control"), /no-store/);
+    const xml = await response.text();
+    assert.match(xml, /xmlns:news="http:\/\/www\.google\.com\/schemas\/sitemap-news\/0\.9"/);
+    assert.match(xml, /<news:name>Koza TV<\/news:name><news:language>tr<\/news:language>/);
+    assert.ok(xml.includes(`/haber/${prefix}yeni</loc>`));
+    assert.ok(xml.includes(`<news:publication_date>${new Date(now - 60_000).toISOString()}</news:publication_date>`));
+    assert.match(xml, /Koza &amp; haber &lt;test&gt; &quot;özel&quot;/);
+    for (const suffix of fixtures.slice(1).map(([suffix]) => suffix)) assert.ok(!xml.includes(`/haber/${prefix}${suffix}</loc>`), suffix);
+    assert.doesNotMatch(xml, /Gizli spot|Gizli gövde/);
+    insert.run(`${prefix}sonradan`, "Yeni yayın", "Spot", "Gövde", "Gündem", "published", now, null, now, now);
+    assert.ok((await (await anonymousRequest("/googlenews.xml")).text()).includes(`/haber/${prefix}sonradan</loc>`));
+    db.prepare("UPDATE articles SET status='draft' WHERE slug=?").run(`${prefix}yeni`);
+    assert.ok(!(await (await anonymousRequest("/googlenews.xml")).text()).includes(`/haber/${prefix}yeni</loc>`));
+    assert.equal((await anonymousRequest("/googlenews.xml", { method: "POST" })).status, 405);
+    const robots = await (await anonymousRequest("/robots.txt")).text();
+    assert.match(robots, /Sitemap: https:\/\/www\.kozatv\.com\.tr\/sitemap\.xml/);
+    assert.match(robots, /Sitemap: https:\/\/www\.kozatv\.com\.tr\/googlenews\.xml/);
+  } finally {
+    db.prepare("DELETE FROM articles WHERE slug LIKE ?").run(`${prefix}%`);
+    db.close();
+  }
+});
+
+test("Google News haritası 1000 haber sınırında bölünür ve hiçbir güncel haber kaybolmaz", async () => {
+  const prefix = `news-volume-${process.pid}-`;
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const insert = db.prepare("INSERT INTO articles (slug,title,spot,body,category,status,published_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)");
+  const now = Date.now();
+  try {
+    db.transaction(() => {
+      for (let index = 0; index < 1001; index += 1) insert.run(`${prefix}${index}`, `News hacim ${index}`, "Spot", "Gövde", "Gündem", "published", now - index * 1000, now, now);
+    })();
+    const root = await (await anonymousRequest("/googlenews.xml")).text();
+    assert.match(root, /<sitemapindex /);
+    const links = [...root.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1]).pathname);
+    assert.equal(links.length, 2);
+    const seen = [];
+    for (const link of links) {
+      const response = await anonymousRequest(link);
+      assert.equal(response.status, 200);
+      const xml = await response.text();
+      assert.ok([...xml.matchAll(/<news:news>/g)].length <= 1000);
+      seen.push(...[...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]));
+    }
+    const own = seen.filter((url) => url.includes(`/haber/${prefix}`));
+    assert.equal(own.length, 1001);
+    assert.equal(new Set(own).size, 1001);
+    for (const invalid of ["0.xml", "3.xml", "01.xml", "invalid.xml"]) assert.equal((await anonymousRequest(`/googlenews/${invalid}`)).status, 404);
+  } finally {
+    db.prepare("DELETE FROM articles WHERE slug LIKE ?").run(`${prefix}%`);
+    db.close();
+  }
+});
+
+test("site adı WebSite şeması ana sayfada Koza TV kanonik kimliğini tanımlar", async () => {
+  const home = await html("/");
+  const schemas = [...home.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>(.*?)<\/script>/gs)].map((match) => JSON.parse(match[1]));
+  const websites = schemas.filter((schema) => schema["@type"] === "WebSite");
+  assert.equal(websites.length, 1);
+  assert.equal(websites[0]["@context"], "https://schema.org");
+  assert.equal(websites[0].name, "Koza TV");
+  assert.equal(websites[0].url, "https://www.kozatv.com.tr/");
+});
+
 test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve aralarda ince reklam görünür", async () => {
   const category = "Kesintisiz Okuma";
   const baseTime = Date.UTC(2030, 0, 10, 12, 0, 0);

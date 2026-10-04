@@ -17,6 +17,7 @@ import { ensureHomepageLatestSchema, homepageLatestOrderSql, moveHomepageArticle
 import { isVisibleHomepageStatus, normalizeHomepagePlacementLimits, promoteHomepageArticle, repairUnrankedSliderArticles, syncLegacyHomepagePlacements } from "./homepage-order.mjs";
 import { extractGalleryImages, selectHomepagePhotoGalleries, selectPhotoGalleries } from "./photo-gallery-model.mjs";
 import { BREAKING_LABEL_TTL_MS } from "./breaking-feed-model.mjs";
+import { NEWS_SITEMAP_WINDOW_MS } from "./news-sitemap-model.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
@@ -333,6 +334,12 @@ function publishDueArticles() {
   })();
 }
 export function listPublishedArticles(limit = 30) { publishDueArticles(); const safeLimit = Math.min(Math.max(limit, 1), 100); return (getDb().prepare("SELECT * FROM articles WHERE status='published' ORDER BY is_featured DESC,homepage_order ASC,published_at DESC LIMIT ?").all(safeLimit) as Record<string, unknown>[]).map(mapArticle); }
+export function listRecentPublishedNewsSitemapEntries() {
+  publishDueArticles();
+  const now = Date.now();
+  return (getDb().prepare("SELECT slug,title,published_at FROM articles WHERE status='published' AND published_at>=? AND published_at<=? ORDER BY published_at DESC,id DESC").all(now - NEWS_SITEMAP_WINDOW_MS, now) as { slug: string; title: string; published_at: number }[])
+    .map((row) => ({ slug: row.slug, title: row.title, publishedAt: Number(row.published_at) }));
+}
 export function listPublishedArticleSitemapEntries() {
   publishDueArticles();
   return (getDb().prepare("SELECT slug,updated_at,is_featured FROM articles WHERE status='published' ORDER BY published_at DESC,id DESC").all() as { slug: string; updated_at: number; is_featured: number }[])

@@ -41,6 +41,7 @@ export default async function Home() {
 
   return (
     <main className="home">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "WebSite", name: "Koza TV", url: "https://www.kozatv.com.tr/" }).replace(/</g, "\\u003c") }} />
       <SiteHeader categories={categories} active="home" />
 
       <BreakingTicker initialItems={toBreakingItems(breakingPool)} />
