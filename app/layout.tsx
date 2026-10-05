@@ -12,7 +12,16 @@ const baseMetadata: Metadata = {
   },
   description:
     "Türkiye ve dünyadan son dakika haberleri, canlı yayın, ekonomi, spor, kültür-sanat ve güçlü köşe yazıları.",
-  icons: { icon: "/favicon.svg" },
+  manifest: "/site-manifest.json",
+  icons: {
+    icon: [
+      { url: "/koza-favicon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/koza-favicon-48.png", type: "image/png", sizes: "48x48" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
+    shortcut: "/favicon.ico",
+  },
   openGraph: {
     title: "Koza TV | Konuşma Zamanı",
     description:

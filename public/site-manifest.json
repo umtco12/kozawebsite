@@ -1,0 +1,29 @@
+{
+  "name": "Koza TV",
+  "short_name": "Koza TV",
+  "description": "Şimdi konuşma zamanı",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1724",
+  "theme_color": "#0c1724",
+  "icons": [
+    {
+      "src": "/koza-favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/koza-favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/koza-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
