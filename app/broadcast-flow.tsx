@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { selectDailySchedule } from "../db/broadcast-schedule.mjs";
+import { ResponsiveImage } from "./responsive-image";
 
 export type ScheduleRow = { time: string; end: string; title: string; host: string; image: string; days: string };
 export type FlowItem = ScheduleRow & { state: "past" | "live" | "next" | "upcoming"; progress: number };
@@ -74,7 +75,7 @@ export function BroadcastFlow({ schedule, initialNow }: { schedule: ScheduleRow[
                 {/* Şerit her sayfanın en üstünde durur; fotoğraflar sonradan belirmesin diye
                     tembel yüklenmez. Altı görsel toplam 180 KB'dir. */}
                 {item.image
-                  ? <img className="flow-card-photo" src={item.image} alt="" loading="eager" decoding="async" width={480} height={640} />
+                  ? <ResponsiveImage className="flow-card-photo" src={item.image} alt="" sizes="240px" preferredWidth={480} loading="eager" width={480} height={345} />
                   : <span className="flow-card-photo-empty" aria-hidden="true">KOZA TV</span>}
               </span>
               <span className="flow-card-foot">

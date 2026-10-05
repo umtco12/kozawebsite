@@ -1,4 +1,5 @@
-import { listHomepageArticles, listBreakingArticles, listLatestArticles } from "../db";
+import type { Metadata } from "next";
+import { getSiteSettings, listHomepageArticles, listBreakingArticles, listLatestArticles } from "../db";
 import { displaySpot, displayTitle } from "../db/title-model.mjs";
 import { LeadSlider } from "./site-client";
 import { SiteFooter, SiteHeader, navCategories } from "./site-chrome";
@@ -8,12 +9,39 @@ import { HomeBreakingNews } from "./home-breaking-news";
 import { BreakingTicker } from "./breaking-ticker";
 import { ResponsiveImage } from "./responsive-image";
 import { isActiveBreaking, toBreakingItems } from "../db/breaking-feed-model.mjs";
+import { socialLinks } from "./site-config";
 import "./home-breaking-news.css";
 
 export const dynamic = "force-dynamic";
 
+const homeTitle = "Koza TV | Son Dakika Haberleri ve Canlı Yayın";
+const homeDescription = "Türkiye ve dünyadan son dakika haberleri, güncel gelişmeler, ekonomi, siyaset, spor ve canlı yayın; güvenilir haber ve güçlü yorum Koza TV’de.";
+
+export const metadata: Metadata = {
+  title: { absolute: homeTitle },
+  description: null,
+  openGraph: {
+    title: homeTitle,
+    description: homeDescription,
+    url: "/",
+    images: [{ url: "/og-v2.png", width: 1200, height: 630, alt: "Koza TV" }],
+    locale: "tr_TR",
+    siteName: "Koza TV",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: homeTitle,
+    description: homeDescription,
+    images: ["/og-v2.png"],
+  },
+};
+
 export default async function Home() {
   const categories = navCategories();
+  const settings = getSiteSettings();
+  const sameAs = socialLinks(settings).map((item) => item.href).filter(Boolean);
+  const organizationId = "https://www.kozatv.com.tr/#organization";
 
   /* Haber yalnız editörün yayın sırasında seçtiği ana sayfa bölgesine gider.
      Konum seçilmeyen kayıtlar slidera taşınmaz; Son Haberler havuzunda kalır. */
@@ -41,7 +69,12 @@ export default async function Home() {
 
   return (
     <main className="home">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "WebSite", name: "Koza TV", url: "https://www.kozatv.com.tr/" }).replace(/</g, "\\u003c") }} />
+      {/* vinext beta kök canonical değerini atlıyor ve sayfa açıklamasını akışın sonunda
+          üretiyor. React bu iki etiketi doğrudan belge başlığına taşır. */}
+      <link rel="canonical" href="https://www.kozatv.com.tr/" />
+      <meta name="description" content={homeDescription} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "WebSite", name: "Koza TV", alternateName: "Koza TV Haber", url: "https://www.kozatv.com.tr/", inLanguage: "tr-TR", publisher: { "@id": organizationId }, potentialAction: { "@type": "SearchAction", target: { "@type": "EntryPoint", urlTemplate: "https://www.kozatv.com.tr/arama?q={search_term_string}" }, "query-input": "required name=search_term_string" } }).replace(/</g, "\\u003c") }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "NewsMediaOrganization", "@id": organizationId, name: "Koza TV", alternateName: "Koza TV Haber", url: "https://www.kozatv.com.tr/", logo: { "@type": "ImageObject", url: "https://www.kozatv.com.tr/koza-favicon-512.png", width: 512, height: 512 }, publishingPrinciples: "https://www.kozatv.com.tr/kurumsal/yayin-ilkeleri", sameAs }).replace(/</g, "\\u003c") }} />
       <SiteHeader categories={categories} active="home" />
 
       <BreakingTicker initialItems={toBreakingItems(breakingPool)} />

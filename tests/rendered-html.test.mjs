@@ -183,7 +183,7 @@ test("ana sayfa Koza TV haber deneyimini sunar", async () => {
   const body = await html("/");
 
   assert.match(body, /<html lang="tr">/i);
-  assert.match(body, /<title>Koza TV \| Konuşma Zamanı<\/title>/i);
+  assert.match(body, /<title>Koza TV \| Son Dakika Haberleri ve Canlı Yayın<\/title>/i);
   assert.match(body, /SON DAKİKA/);
   assert.match(body, /Öne Çıkanlar/);
   assert.match(body, /Gündem/);
@@ -210,12 +210,17 @@ test("ana sayfa Koza TV haber deneyimini sunar", async () => {
 test("ana sayfanın SEO ve sosyal paylaşım etiketleri doğrudur", async () => {
   const body = await html("/");
 
-  assert.match(
-    body,
-    /<meta name="description" content="Türkiye ve dünyadan son dakika haberleri[^>]+>/i,
-  );
+  const description = body.match(/<meta name="description" content="([^"]+)"/i)?.[1] ?? "";
+  assert.ok(description.length >= 120 && description.length <= 160, `Ana sayfa açıklaması 120–160 karakter olmalı; bulunan: ${description.length}`);
+  assert.match(description, /son dakika haberleri/i);
+  assert.match(body, /<link rel="canonical" href="https:\/\/www\.kozatv\.com\.tr\/"/i);
+  assert.equal((body.match(/<link rel="canonical"/gi) ?? []).length, 1, "Ana sayfada tek kanonik adres bulunmalı");
+  assert.match(body, /property="og:url" content="https:\/\/www\.kozatv\.com\.tr\/?"/i);
+  assert.equal((body.match(/property="og:url"/gi) ?? []).length, 1, "Ana sayfada tek Open Graph URL bulunmalı");
   assert.match(body, /property="og:site_name" content="Koza TV"/i);
   assert.match(body, /property="og:locale" content="tr_TR"/i);
+  assert.match(body, /<img src="\/koza-logo-temiz\.svg" alt="Koza TV — Konuşma Zamanı" width="411" height="164"/i, "Üst logo sayfa yerleşimini koruyacak doğal ölçüleri taşımalı");
+  assert.match(body, /<img src="\/koza-logo-temiz\.svg" alt="Koza TV" width="411" height="164"/i, "Footer logosu sayfa yerleşimini koruyacak doğal ölçüleri taşımalı");
   assert.match(
     body,
     /property="og:image" content="https:\/\/www\.kozatv\.com\.tr\/og-v2\.png"/i,
@@ -1889,10 +1894,19 @@ test("site adı WebSite şeması ana sayfada Koza TV kanonik kimliğini tanımla
   const home = await html("/");
   const schemas = [...home.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>(.*?)<\/script>/gs)].map((match) => JSON.parse(match[1]));
   const websites = schemas.filter((schema) => schema["@type"] === "WebSite");
+  const organizations = schemas.filter((schema) => schema["@type"] === "NewsMediaOrganization");
   assert.equal(websites.length, 1);
+  assert.equal(organizations.length, 1);
   assert.equal(websites[0]["@context"], "https://schema.org");
   assert.equal(websites[0].name, "Koza TV");
   assert.equal(websites[0].url, "https://www.kozatv.com.tr/");
+  assert.equal(websites[0].inLanguage, "tr-TR");
+  assert.equal(websites[0].publisher["@id"], "https://www.kozatv.com.tr/#organization");
+  assert.match(websites[0].potentialAction.target.urlTemplate, /arama\?q=\{search_term_string\}$/);
+  assert.equal(organizations[0]["@id"], "https://www.kozatv.com.tr/#organization");
+  assert.equal(organizations[0].logo.url, "https://www.kozatv.com.tr/koza-favicon-512.png");
+  assert.equal(organizations[0].publishingPrinciples, "https://www.kozatv.com.tr/kurumsal/yayin-ilkeleri");
+  assert.ok(organizations[0].sameAs.includes("https://www.youtube.com/@KozaTv"));
 });
 
 test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve aralarda ince reklam görünür", async () => {
@@ -2683,6 +2697,9 @@ test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz
   assert.match(rail, /<small>Ayşe Yılmaz-Demir<\/small>/, "Bir sunucunun çift soyadı iki kişi gibi bölünmemeli");
   assert.match(rail, /\/yayin-akisi\/sinem-gundem\.webp/, "Sunucu fotoğrafı şeritte gösterilmeli");
   assert.doesNotMatch(rail, /loading="lazy"/, "Sayfanın en üstündeki şerit fotoğrafları tembel yüklenmemeli");
+  const flowSource = await readFile(new URL("../app/broadcast-flow.tsx", import.meta.url), "utf8");
+  assert.match(flowSource, /<ResponsiveImage className="flow-card-photo"/, "Yayın akışı fotoğrafları duyarlı görsel hattını kullanmalı");
+  assert.match(flowSource, /sizes="240px" preferredWidth=\{480\}/, "Yayın akışı kartı gereğinden büyük kaynak görsel indirmemeli");
   assert.doesNotMatch(rail, /<script>test<\/script>/, "Program metni HTML olarak çalıştırılmamalı");
   assert.doesNotMatch(rail, /<b>Ekibi<\/b>/, "Sunucu adı HTML olarak çalıştırılmamalı");
   assert.equal((rail.match(/aria-current="time"/g) || []).length, 1, "Aynı anda yalnız bir program yayında işaretlenmeli");

@@ -261,7 +261,7 @@ export function LeadSlider({ items }: { items: Lead[] }) {
               aria-pressed={index === active}
               className={index === active ? "active" : ""}
               onClick={() => setActive(index)}
-              aria-label={`${index + 1}. manşeti göster`}
+              aria-label={`${index + 1}. manşeti göster (${String(index + 1).padStart(2, "0")})`}
             >{String(index + 1).padStart(2, "0")}</button>
           ))}
           </div>

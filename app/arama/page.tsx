@@ -6,7 +6,7 @@ import { displaySpot, displayTitle } from "../../db/title-model.mjs";
 export const dynamic = "force-dynamic";
 type Props = { searchParams: Promise<{ q?: string | string[] }> };
 
-export const metadata: Metadata = { title: "Haber arama", description: "Koza TV haber arşivinde başlık, spot, metin, kategori ve yazar üzerinden arama yapın.", robots: { index: false } };
+export const metadata: Metadata = { title: "Haber arama", description: "Koza TV haber arşivinde başlık, spot, metin, kategori ve yazar üzerinden arama yapın.", alternates: { canonical: "/arama" }, robots: { index: false } };
 
 function readQuery(value?: string | string[]) { return (Array.isArray(value) ? value[0] : value ?? "").trim().slice(0, 120); }
 
