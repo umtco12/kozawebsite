@@ -2613,6 +2613,52 @@ test("yayın akışı satırı sunucu fotoğrafını, bitişi ve gün kapsamın�
   assert.equal(normalizeSchedule([{ time: "08:00", title: "Program", image: `/media/${"a".repeat(320)}.webp` }])[0].image, "", "Aşırı uzun adres kabul edilmemeli");
 });
 
+test("Gün İzi fotoğrafı diğer sunucularla aynı saydam zemin üzerinde sunulur", async () => {
+  const image = "/yayin-akisi/gun-izi-saydam.webp";
+  assert.equal(normalizeSchedule([{ time: "15:00", title: "Gün İzi", host: "Evren Özalkuş-Sorel Dağıstanlı", image }])[0].image, image);
+  const response = await anonymousRequest(image);
+  assert.equal(response.status, 200, "Yeni portre ziyaretçilere açılmalı");
+  assert.match(response.headers.get("content-type") ?? "", /image\/webp/);
+  const { data, info } = await sharp(Buffer.from(await response.arrayBuffer())).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.ok(info.width >= 600 && info.height >= 550, "İki sunuculu fotoğraf net kalmalı");
+  for (const x of [5, info.width - 6]) {
+    const alpha = data[(5 * info.width + x) * info.channels + 3];
+    assert.ok(alpha <= 5, "Üst arka plan opak renk yerine saydam olmalı");
+  }
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.flow-card-frame\{[^}]*background:linear-gradient\(168deg,#22303f,#121a24 72%\)/, "Saydam portreler aynı kart zeminini kullanmalı");
+});
+
+test("Gün İzi canlı yayın akışındaki eski fotoğraf yalnız bir kez ve denetim kaydıyla değiştirilir", async () => {
+  const { migrateGunIziPhoto, GUN_IZI_NEW_IMAGE, GUN_IZI_OLD_IMAGE } = await import("../db/broadcast-photo-migration.mjs");
+  const createDb = () => {
+    const db = new Database(":memory:");
+    db.exec("CREATE TABLE site_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL,updated_by TEXT NOT NULL); CREATE TABLE audit_logs (id INTEGER PRIMARY KEY,entity_type TEXT NOT NULL,entity_id INTEGER NOT NULL,action TEXT NOT NULL,actor TEXT NOT NULL,detail TEXT NOT NULL,created_at INTEGER NOT NULL)");
+    return db;
+  };
+  const db = createDb();
+  const schedule = [
+    { time: "14:40", title: "Spor Vakti", host: "Derya Oruçoğlu", image: "/yayin-akisi/derya.webp", days: "hafta-ici" },
+    { time: "15:00", end: "17:00", title: "Gün İzi", host: "Evren Özalkuş-Sorel Dağıstanlı", image: GUN_IZI_OLD_IMAGE, days: "hafta-ici" },
+    { time: "17:00", title: "Dünyanın İşi", host: "Enver Kaptanoğlu", image: "/yayin-akisi/enver.webp", days: "hafta-ici" },
+  ];
+  db.prepare("INSERT INTO site_settings(key,value,updated_at,updated_by) VALUES('broadcastSchedule',?,0,'Yönetici')").run(JSON.stringify(schedule));
+  assert.equal(migrateGunIziPhoto(db), true);
+  const saved = JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='broadcastSchedule'").get().value);
+  assert.deepEqual(saved, [schedule[0], { ...schedule[1], image: GUN_IZI_NEW_IMAGE }, schedule[2]], "Diğer programlar ve alanlar değişmemeli");
+  assert.equal(db.prepare("SELECT COUNT(*) AS total FROM audit_logs WHERE entity_type='site_settings'").get().total, 1);
+  assert.equal(migrateGunIziPhoto(db), false, "Tekrar çalıştığında veri ve denetim kaydı çoğalmamalı");
+  assert.equal(db.prepare("SELECT COUNT(*) AS total FROM audit_logs").get().total, 1);
+  db.close();
+
+  const custom = createDb();
+  custom.prepare("INSERT INTO site_settings(key,value,updated_at,updated_by) VALUES('broadcastSchedule',?,0,'Yönetici')").run(JSON.stringify([{ ...schedule[1], image: "/media/editor-secimi.webp" }]));
+  assert.equal(migrateGunIziPhoto(custom), false, "Yönetici görseli ezilmemeli");
+  const current = JSON.parse(custom.prepare("SELECT value FROM site_settings WHERE key='broadcastSchedule'").get().value);
+  assert.equal(current[0].image, "/media/editor-secimi.webp");
+  custom.close();
+});
+
 test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz değiştirilemez", async (t) => {
   const original = (await (await request("/api/settings")).json()).settings.broadcastSchedule;
   t.after(async () => {
@@ -2621,8 +2667,9 @@ test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz
   /* Bitişsiz ve boşluksuz akış: testin çalıştığı saat ne olursa olsun tam bir program yayında olur. */
   const broadcastSchedule = [
     { time: "08:00", title: "Koza Sabah Akışı", host: "Sabah Ekibi", image: "/yayin-akisi/sinem-gundem.webp", days: "her-gun" },
-    { time: "12:00", title: "Kent, kültür ve gündem üzerine çok uzun Türkçe program başlığı", host: "Yayın Merkezi", image: "", days: "her-gun" },
+    { time: "12:00", title: "Kent, kültür ve gündem üzerine çok uzun Türkçe program başlığı", host: "Evren Özalkuş-Sorel Dağıstanlı", image: "", days: "her-gun" },
     { time: "18:00", title: "Ana Haber <script>test</script>", host: "Akşam <b>Ekibi</b>", image: "", days: "her-gun" },
+    { time: "20:00", title: "Gece", host: "Ayşe Yılmaz-Demir", image: "", days: "her-gun" },
   ];
   const payload = { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastSchedule }) };
   assert.equal((await request("/api/settings", payload)).status, 200);
@@ -2632,7 +2679,8 @@ test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz
   assert.ok(rail, "Site başlığında yayın akışı şeridi bulunmalı");
   assert.match(rail, /Koza Sabah Akışı/);
   assert.match(rail, /çok uzun Türkçe program başlığı/);
-  assert.match(rail, /Yayın Merkezi/);
+  assert.match(rail, /<small class="flow-card-host-pair"><span>Evren Özalkuş<\/span><span>Sorel Dağıstanlı<\/span><\/small>/, "İki sunucu kartta ayrı satırlarda tam görünmeli");
+  assert.match(rail, /<small>Ayşe Yılmaz-Demir<\/small>/, "Bir sunucunun çift soyadı iki kişi gibi bölünmemeli");
   assert.match(rail, /\/yayin-akisi\/sinem-gundem\.webp/, "Sunucu fotoğrafı şeritte gösterilmeli");
   assert.doesNotMatch(rail, /loading="lazy"/, "Sayfanın en üstündeki şerit fotoğrafları tembel yüklenmemeli");
   assert.doesNotMatch(rail, /<script>test<\/script>/, "Program metni HTML olarak çalıştırılmamalı");
@@ -2681,6 +2729,9 @@ test("site başlığındaki yayın akışı panel verisini gösterir ve yetkisiz
   assert.match(css, /\.flow-card-live>a\{[^}]*border-color:var\(--red\)/, "Yayındaki kart kırmızı çerçeveyle ayrılmalı");
   assert.doesNotMatch(css, /\.flow-card-past/, "Biten programın üzerine gri perde çekilmemeli");
   assert.match(css, /\.flow-card-foot\{[^}]*justify-content:flex-end/, "Program adı ile sunucu adı arasında boşluk kalmamalı");
+  const hostStyle = css.match(/\.flow-card-foot>small\{([^}]*)\}/)?.[1] ?? "";
+  assert.doesNotMatch(hostStyle, /white-space:nowrap|text-overflow:ellipsis/, "İki sunuculu programda ikinci isim üç noktayla gizlenmemeli");
+  assert.match(hostStyle, /white-space:normal/, "Uzun sunucu adı ikinci satıra geçebilmeli");
   /* Şerit yalnız menünün gizlendiği mobil düzende kendi satırına iner; masaüstünde marka sütununun yanında kalır. */
   const railWrap = css.match(/@media\(max-width:(\d+)px\)\{[^@]*?\.flow-rail\{order:3/);
   assert.ok(railWrap, "Şeridin alt satıra inme kuralı bir mobil kırılma noktasında tanımlı olmalı");

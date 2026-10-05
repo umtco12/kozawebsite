@@ -10,6 +10,15 @@ export type DailyFlow = { dayLabel: string; dayOffset: number; items: FlowItem[]
 /* Yalnız o an yayında olan program etiketlenir; biten ve sıradaki programlar sade kalır. */
 const stateLabels: Record<string, string> = { live: "YAYINDA" };
 
+/* İki tam ad tireyle girildiyse her sunucuyu kendi satırında göster; çift soyadını bölme. */
+function HostLabel({ host }: { host: string }) {
+  const parts = host.split(/\s*-\s*/).map((part) => part.trim());
+  const pair = parts.length === 2 && parts.every((part) => part.split(/\s+/).length >= 2);
+  return pair
+    ? <small className="flow-card-host-pair"><span>{parts[0]}</span><span>{parts[1]}</span></small>
+    : <small>{host || "Koza TV"}</small>;
+}
+
 /* Başlıktaki yayın akışı şeridi. Panelde tanımlı günlük akışı sunucu fotoğraflarıyla gösterir;
    yayındaki program dakika başında ve sekmeye dönüşte kendiliğinden güncellenir. */
 export function BroadcastFlow({ schedule, initialNow }: { schedule: ScheduleRow[]; initialNow: number }) {
@@ -70,7 +79,7 @@ export function BroadcastFlow({ schedule, initialNow }: { schedule: ScheduleRow[
               </span>
               <span className="flow-card-foot">
                 <strong>{item.title}</strong>
-                <small>{item.host || "Koza TV"}</small>
+                <HostLabel host={item.host} />
                 {/* Kartta yalnız başlangıç saati durur; tam aralık ipucu metninde ve /canli listesindedir. */}
                 <span className="flow-card-clock">
                   <time dateTime={item.time}>{item.time}</time>

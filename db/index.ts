@@ -8,6 +8,7 @@ import { plainBodyToBlocks, slugify } from "./article-model.mjs";
 import { hashPassword, verifyPassword } from "./auth-model.mjs";
 import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "./demo-content-model.mjs";
 import { defaultSettings, legacyScheduleDefault, normalizePath, normalizeSchedule, officialImprintSettings, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
+import { migrateGunIziPhoto } from "./broadcast-photo-migration.mjs";
 import { normalizeArticleHtml } from "./rich-text.mjs";
 import { legacyPath } from "./import-model.mjs";
 import { agencyUpdateDecision } from "./agency-model.mjs";
@@ -735,6 +736,7 @@ export function saveAdvertisement(input: AdvertisementInput, actor: Advertisemen
 /* Site ayarları: yönetim panelinden düzenlenir, ziyaretçi sitesi ve kurumsal sayfalar buradan okur. */
 export type SiteSettings = Record<string, string> & { broadcastSchedule: string };
 export type ScheduleRow = { time: string; end: string; title: string; host: string; image: string; days: string };
+let gunIziPhotoMigrationChecked = false;
 
 export function getSiteSettings(): SiteSettings {
   const stored = getDb().prepare("SELECT key, value FROM site_settings").all() as { key: string; value: string }[];
@@ -744,6 +746,10 @@ export function getSiteSettings(): SiteSettings {
 }
 
 export function getBroadcastSchedule(): ScheduleRow[] {
+  if (!gunIziPhotoMigrationChecked) {
+    migrateGunIziPhoto(getDb());
+    gunIziPhotoMigrationChecked = true;
+  }
   try {
     const parsed = JSON.parse(getSiteSettings().broadcastSchedule);
     const rows = normalizeSchedule(parsed);
