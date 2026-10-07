@@ -10,6 +10,7 @@ import { displaySpot, displayTitle } from "../../../db/title-model.mjs";
 import { renderAgencyDisclaimer } from "../../../db/agency-model.mjs";
 import { AdSlot } from "../../ad-slot";
 import { isActiveBreaking } from "../../../db/breaking-feed-model.mjs";
+import { ArticleUrlSync } from "./article-url-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ function ContinuousArticle({ article, index, total }: { article: ArticleRecord; 
   const agencyNotice = article.agencySourceId ? renderAgencyDisclaimer(article.agencyDisclaimer, article.sourceName) : "";
   const showBreaking = isActiveBreaking(article);
   return <div className="continuous-entry">
-    <article className="continuous-article" aria-posinset={index + 1} aria-setsize={total}>
+    <article className="continuous-article" data-article-path={articleHref} data-article-title={displayTitle(article.seoTitle || article.title)} aria-posinset={index + 1} aria-setsize={total}>
       <header>
         <div className="continuous-kicker"><span>SIRADAKİ HABER</span><small>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</small></div>
         <a className="continuous-category" href={categoryHref}>{article.category}</a>
@@ -69,7 +70,7 @@ export default async function ArticlePage({ params }: Props) {
   return <main className="article-page">
     <SiteHeader categories={navItems} active={`kategori/${slugify(article.category)}`} />
     {showBreaking ? <div className="article-breaking"><div className="wrap"><b>SON DAKİKA</b><a href="/son-dakika">Koza TV Haber Merkezi gelişmeleri anlık olarak doğruluyor ve aktarıyor.</a></div></div> : null}
-    <article className="article-container">
+    <article className="article-container" data-article-path={`/haber/${article.slug}`} data-article-title={displayTitle(article.seoTitle || article.title)}>
       <div className="article-breadcrumb"><a href="/">Koza TV</a><span>›</span><a href={categoryHref}>{article.category}</a></div>
       <span className="article-category">{article.category}</span><h1>{displayTitle(article.title)}</h1>{displaySpot(article.spot, article.title) && <p className="article-spot">{displaySpot(article.spot, article.title)}</p>}
       <div className="article-meta"><div className="author-badge">{article.author.split(" ").map((word) => word[0]).join("").slice(0, 2)}</div><div><a className="article-author" href={authorHref}>{article.author}</a><time>{published}</time></div><ShareButtons url={shareUrl} title={article.title} variant="inline" /></div>
@@ -84,6 +85,7 @@ export default async function ArticlePage({ params }: Props) {
         <a className="continuous-category-more" href={categoryHref}>{article.category} kategorisindeki tüm haberler <span aria-hidden="true">→</span></a>
       </div>
     </section>
+    <ArticleUrlSync />
     <SiteFooter categories={navItems} />
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd).replace(/</g, "\\u003c") }} />

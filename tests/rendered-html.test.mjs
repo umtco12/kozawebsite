@@ -1973,6 +1973,8 @@ test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve a
   const page = await html(`/haber/${currentArticle.slug}`);
 
   assert.equal((page.match(/class="continuous-article"/g) ?? []).length, 5, "Tam beş önceki haber tam metin akışına eklenmeli");
+  assert.equal((page.match(/data-article-path="\/haber\//g) ?? []).length, 6, "Ana haber ve beş ek haber kendi adresini taşımalı");
+  assert.match(page, new RegExp(`data-article-path="/haber/${currentArticle.slug}"`));
   assert.match(page, /id="kesintisiz-okuma"/, "Kesintisiz akış doğrudan paylaşılabilir bir sayfa bölümüne sahip olmalı");
   assert.doesNotMatch(page, /Bu haberden önce yayınlanan[^<]*haberi sayfadan ayrılmadan okumaya devam edin\./, "Kesintisiz okuma açıklaması ziyaretçiye gösterilmemeli");
   assert.equal((page.match(/data-ad-placement="section_inline"/g) ?? []).length, 6, "Ana haber ve takip eden her haber bittikten sonra ince reklam görünmeli");
@@ -1990,6 +1992,7 @@ test("haber bitince aynı kategorideki önceki beş haber kesintisiz okunur ve a
     readFile(new URL("../app/admin/workflow-studio.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(pageSource, /listPreviousCategoryArticles\(article, 5\)/);
+  assert.match(pageSource, /<ArticleUrlSync \/>/, "Haber sayfası görünür habere göre URL eşitlemesini başlatmalı");
   assert.match(studioSource, /<RichEditor/, "Yayın Stüdyosu haber gövdesini zengin editörle düzenlemeli");
 });
 
