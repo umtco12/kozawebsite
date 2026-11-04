@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { headers } from 'next/headers';
 import "./globals.css";
 import { getSiteSettings } from '../db';
 import { googleConfig } from '../db/google-model.mjs';
 import { GoogleServices } from './google-services';
+import { GoogleAdSenseHead } from './google-head';
+import { googleBootstrapSource } from './google-consent.mjs';
 
 const baseMetadata: Metadata = {
   metadataBase: new URL("https://www.kozatv.com.tr"),
@@ -41,9 +44,11 @@ const baseMetadata: Metadata = {
 };
 export function generateMetadata(): Metadata {
   const config = googleConfig(getSiteSettings());
-  return { ...baseMetadata, verification: config.verification ? { google: config.verification } : {}, other: config.publisherId ? { 'google-adsense-account': config.publisherId } : {} };
+  return { ...baseMetadata, verification: config.verification ? { google: config.verification } : {} };
 }
-export default function RootLayout({children}:{children:React.ReactNode}) {
+export default async function RootLayout({children}:{children:React.ReactNode}) {
   const config = googleConfig(getSiteSettings());
-  return <html lang="tr"><body>{children}<GoogleServices config={config} /></body></html>;
+  const requestHeaders = await headers();
+  const hostname = (requestHeaders.get('x-forwarded-host') || requestHeaders.get('host') || '').split(',')[0].trim().split(':')[0];
+  return <html lang="tr"><head><GoogleAdSenseHead config={config} hostname={hostname} bootstrap={googleBootstrapSource()} /></head><body>{children}<GoogleServices config={config} /></body></html>;
 }

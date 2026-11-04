@@ -1,10 +1,9 @@
 export function isGoogleVisitorPath(path) { return !/^\/(admin|api|_next|media)(\/|$)/i.test(path); }
+export function isGoogleVisitorHost(host) { return /^(www\.)?kozatv\.com\.tr$/.test(host); }
 
 /* Site sahibinin ölçüm yapılandırması: Analytics açık başlar.
    Reklam izinlerinin güncellenmesini sertifikalı Google CMP yönetir. */
-export function startGoogleServices({ window, document, config }) {
-  if (!isGoogleVisitorPath(window.location.pathname) || !/^(www\.)?kozatv\.com\.tr$/.test(window.location.hostname)) return;
-  if (!config.gtmId && !(config.advertisingEnabled && config.publisherId)) return;
+export function initializeGoogleConsent({ window, document }) {
   window.dataLayer = window.dataLayer || [];
   function command() { window.dataLayer.push(arguments); }
   window.gtag = window.gtag || command;
@@ -26,6 +25,17 @@ export function startGoogleServices({ window, document, config }) {
       }
     } catch { /* Eski tercih temizliği engellense de ölçüm yüklenir. */ }
   }
+}
+
+// Sunucudan gelen bu başlangıç kodu, dış AdSense scriptinden önce çalışır.
+export function googleBootstrapSource() {
+  return `(${initializeGoogleConsent.toString()})({window,document});window.adsbygoogle=window.adsbygoogle||[];window.adsbygoogle.requestNonPersonalizedAds=1;`;
+}
+
+export function startGoogleServices({ window, document, config }) {
+  if (!isGoogleVisitorPath(window.location.pathname) || !isGoogleVisitorHost(window.location.hostname)) return;
+  if (!config.gtmId && !(config.advertisingEnabled && config.publisherId)) return;
+  initializeGoogleConsent({ window, document });
   function load(id, src) {
     if (document.getElementById(id)) return;
     const script = document.createElement('script');

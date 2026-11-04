@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 
 test('Google kimlikleri gerçek hesaba bağlıdır ve script metni kabul edilmez', async () => {
   const { googleDefaults, googleConfig } = await import('../db/google-model.mjs');
@@ -85,4 +86,23 @@ test('Analytics yapılandırması GTM başlamadan önce uygulanır ve görsel bi
     assert.deepEqual(createdElements, ['script', 'script']);
     assert.ok(env.window.dataLayer.findIndex(message => message.event === 'gtm.js') > 0);
   }
+});
+
+test('head başlangıcı izinleri önce kurar; istemci mevcut AdSense scriptini tekrar eklemez', async () => {
+  const { googleBootstrapSource, startGoogleServices } = await import('../app/google-consent.mjs');
+  const { googleConfig, googleDefaults } = await import('../db/google-model.mjs');
+  const env = environment({ legacy: '{eski-panel}' });
+  runInNewContext(googleBootstrapSource(), { window: env.window, document: env.document });
+  assert.equal(env.window.dataLayer[0][0], 'consent');
+  assert.equal(env.window.dataLayer[0][2].ad_storage, 'denied');
+  assert.equal(env.window.dataLayer[0][2].analytics_storage, 'granted');
+  assert.equal(env.window.adsbygoogle.requestNonPersonalizedAds, 1);
+  assert.equal(env.stored.size, 0);
+  const existing = { id: 'koza-adsense', src: 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8257810988134211' };
+  env.scripts.push(existing);
+  startGoogleServices({ ...env, config: googleConfig(googleDefaults) });
+  startGoogleServices({ ...env, config: googleConfig(googleDefaults) });
+  assert.equal(env.scripts.filter(script => script.id === 'koza-adsense').length, 1);
+  assert.equal(env.window.dataLayer.filter(command => command[0] === 'consent').length, 1);
+  assert.equal(env.scripts.filter(script => script.id === 'koza-gtm').length, 1);
 });

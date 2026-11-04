@@ -146,6 +146,37 @@ test('Google sahiplik meta etiketleri, gerçek ads.txt ve güvenli yönetim ayar
   assert.equal((await anonymousRequest('/ads.txt')).status, 404);
 });
 
+test('AdSense doğrulama kodu Google tarayıcısına ilk HTML head içinde tek kez sunulur', async (t) => {
+  const original = (await (await request('/api/settings')).json()).settings;
+  t.after(async () => { await request('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ googleAdSenseEnabled: original.googleAdSenseEnabled }) }); });
+  for (const agent of ['Mozilla/5.0', 'Mediapartners-Google', 'Google-Display-Ads-Bot']) {
+    const response = await anonymousRequest('/', { headers: { 'x-forwarded-host': 'www.kozatv.com.tr', 'user-agent': agent } });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const head = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1] ?? '';
+    assert.match(head, /<meta name="google-adsense-account" content="ca-pub-8257810988134211"/);
+    const scripts = head.match(/<script\b[^>]*src="https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-8257810988134211"[^>]*><\/script>/g) ?? [];
+    assert.equal(scripts.length, 1, agent);
+    assert.match(scripts[0], /\basync(?:="")?/);
+    assert.match(scripts[0], /crossorigin="anonymous"/i);
+    assert.ok(head.indexOf('id="koza-google-bootstrap"') < head.indexOf('src="https://pagead2.googlesyndication.com/'), 'İzin başlangıcı reklam scriptinden önce olmalı');
+    const bootstrap = head.match(/<script id="koza-google-bootstrap">([\s\S]*?)<\/script>/)?.[1];
+    assert.ok(bootstrap);
+    const { runInNewContext } = await import('node:vm');
+    const window = { localStorage: { getItem: () => null } }, document = { cookie: '' };
+    runInNewContext(bootstrap, { window, document });
+    assert.equal(window.dataLayer[0][2].ad_storage, 'denied');
+    assert.equal(window.adsbygoogle.requestNonPersonalizedAds, 1);
+  }
+  for (const path of ['/admin/giris', '/']) {
+    const html = await (await anonymousRequest(path, { headers: { 'x-forwarded-host': path.startsWith('/admin') ? 'www.kozatv.com.tr' : '127.0.0.1' } })).text();
+    assert.doesNotMatch(html, /<script[^>]+src="https:\/\/pagead2\.googlesyndication\.com/);
+  }
+  await request('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ googleAdSenseEnabled: '0' }) });
+  const disabled = await (await anonymousRequest('/', { headers: { 'x-forwarded-host': 'www.kozatv.com.tr' } })).text();
+  assert.doesNotMatch(disabled, /<script[^>]+src="https:\/\/pagead2\.googlesyndication\.com/);
+});
+
 async function createRoleSession(role, label) {
   const email = `${label}-${process.pid}@koza.test`;
   const temporaryPassword = `Koza!${label}2026Temp`;
