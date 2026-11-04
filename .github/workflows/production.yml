@@ -67,7 +67,7 @@ jobs:
             ./ "koza-deploy@${{ vars.KOZA_HOST || '46.45.185.67' }}:/srv/kozatv/incoming/${GITHUB_SHA}/"
 
       - name: Atomik Radore dağıtımını çalıştır
-        run: ssh koza-deploy@${{ vars.KOZA_HOST || '46.45.185.67' }} "sudo /usr/local/sbin/kozatv-deploy ${GITHUB_SHA}"
+        run: ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=6 koza-deploy@${{ vars.KOZA_HOST || '46.45.185.67' }} "sudo /usr/local/sbin/kozatv-deploy ${GITHUB_SHA}"
 
       - name: Dışarıdan smoke test
         run: |

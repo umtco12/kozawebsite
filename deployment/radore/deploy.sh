@@ -27,6 +27,8 @@ mv "$incoming_dir" "$release_dir"
 chown -R kozatv:kozatv "$release_dir"
 
 rollback() {
+  local exit_code=$?
+  trap - ERR
   set +e
   if [[ -n "$previous_release" && -d "$previous_release" ]]; then
     ln -sfn "$previous_release" "$current_link.rollback"
@@ -38,6 +40,7 @@ rollback() {
     install -d -o kozatv -g kozatv -m 0750 "$quarantine_root"
     mv "$release_dir" "$quarantine_root/${release_id}-failed-$(date -u +%Y%m%dT%H%M%SZ)"
   fi
+  exit "$exit_code"
 }
 trap rollback ERR
 
