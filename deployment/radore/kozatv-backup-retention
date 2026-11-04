@@ -24,7 +24,7 @@ prune_bucket() {
 
   find "$bucket_dir" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -print \
     | sort \
-    | head -n "$remove_count" \
+    | sed -n "1,${remove_count}p" \
     | while IFS= read -r target; do
         name="${target##*/}"
         [[ "$name" =~ ^20[0-9]{6}T[0-9]{6}Z$ ]]

@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword } from "./auth-model.mjs";
 import { DEMO_ARTICLE_SLUGS, shouldSeedDemoContent } from "./demo-content-model.mjs";
 import { defaultSettings, legacyScheduleDefault, normalizePath, normalizeSchedule, officialImprintSettings, officialSocialAccounts, scheduleDefault } from "./settings-model.mjs";
 import { migrateGunIziPhoto } from "./broadcast-photo-migration.mjs";
+import { migrateAdSensePublisher } from "./google-publisher-migration.mjs";
 import { normalizeArticleHtml } from "./rich-text.mjs";
 import { legacyPath } from "./import-model.mjs";
 import { agencyUpdateDecision } from "./agency-model.mjs";
@@ -737,9 +738,15 @@ export function saveAdvertisement(input: AdvertisementInput, actor: Advertisemen
 export type SiteSettings = Record<string, string> & { broadcastSchedule: string };
 export type ScheduleRow = { time: string; end: string; title: string; host: string; image: string; days: string };
 let gunIziPhotoMigrationChecked = false;
+let adSensePublisherMigrationChecked = false;
 
 export function getSiteSettings(): SiteSettings {
-  const stored = getDb().prepare("SELECT key, value FROM site_settings").all() as { key: string; value: string }[];
+  const db = getDb();
+  if (!adSensePublisherMigrationChecked) {
+    migrateAdSensePublisher(db);
+    adSensePublisherMigrationChecked = true;
+  }
+  const stored = db.prepare("SELECT key, value FROM site_settings").all() as { key: string; value: string }[];
   const values = defaultSettings() as SiteSettings;
   for (const row of stored) if (row.key in values) values[row.key] = row.value;
   return values;

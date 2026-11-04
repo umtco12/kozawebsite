@@ -5,7 +5,7 @@ test('Google kimlikleri gerçek hesaba bağlıdır ve script metni kabul edilmez
   const { googleDefaults, googleConfig } = await import('../db/google-model.mjs');
   assert.equal(googleDefaults.googleTagManagerId, 'GTM-5D3KDTPX');
   assert.equal(googleDefaults.googleAnalyticsId, 'G-Q5S8DTCR9N');
-  assert.equal(googleConfig(googleDefaults).publisherId, 'ca-pub-7808964787779354');
+  assert.equal(googleConfig(googleDefaults).publisherId, 'ca-pub-8257810988134211');
   assert.equal(googleConfig({ googleTagManagerId: '<script>alert(1)</script>', googleAdSenseId: 'pub-1' }).gtmId, '');
 });
 
@@ -53,8 +53,9 @@ test('AdSense kişiselleştirme istemez; kapalı veya boş kimlik yükleme yapma
   assert.match(env.scripts[0].src, /gtm.js\?id=GTM-5D3KDTPX$/);
   startGoogleServices({ ...env, config: googleConfig(googleDefaults) });
   assert.equal(env.scripts.length, 2);
-  assert.equal(env.scripts[1].src, 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7808964787779354');
+  assert.equal(env.scripts[1].src, 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8257810988134211');
   assert.equal(env.scripts[1].crossOrigin, 'anonymous');
+  assert.equal(env.scripts[1].async, true);
   assert.equal(env.window.adsbygoogle.requestNonPersonalizedAds, 1);
   assert.ok(env.window.dataLayer.every(v => !v[2] || (v[2].ad_storage !== 'granted' && v[2].ad_user_data !== 'granted' && v[2].ad_personalization !== 'granted')));
   const empty = environment();

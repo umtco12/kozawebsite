@@ -68,6 +68,11 @@ let testAgencyArticleId = 0;
 let testAgencyArticleSlug = "";
 
 before(async () => {
+  // Mevcut kurulumda panelden saklanmış eski kimlik de yeni sürümle taşınmalı.
+  const previousSettings = new Database(process.env.KOZA_DB_PATH);
+  previousSettings.exec("CREATE TABLE site_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '')");
+  previousSettings.prepare("INSERT INTO site_settings(key,value,updated_at,updated_by) VALUES('googleAdSenseId',?,1,'Yönetici')").run('ca-pub-7808964787779354');
+  previousSettings.close();
   productionServer = spawn(
     process.execPath,
     ["--import", new URL("./fixtures/youtube-fetch.mjs", import.meta.url).href, new URL("../dist/standalone/server.js", import.meta.url).pathname],
@@ -120,13 +125,14 @@ test('Google sahiplik meta etiketleri, gerçek ads.txt ve güvenli yönetim ayar
   t.after(async () => { await request('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(keys.map(key => [key, original[key]]))) }); });
   const html = await (await anonymousRequest('/')).text();
   assert.match(html, /<meta name="google-site-verification" content="SZkV7s3VUP_26-a4os2Jn5i9bXNoDGnjmDI_i40iAJ8"/);
-  assert.match(html, /<meta name="google-adsense-account" content="ca-pub-7808964787779354"/);
+  assert.match(html, /<meta name="google-adsense-account" content="ca-pub-8257810988134211"/);
+  assert.doesNotMatch(html, /ca-pub-7808964787779354/);
   assert.doesNotMatch(html, /<script[^>]+src="https:\/\/(www\.googletagmanager\.com|pagead2\.googlesyndication\.com)/, 'Google scriptleri SSR sırasında rıza dışında indirilmemeli');
   assert.doesNotMatch(html, /<iframe[^>]+googletagmanager/, 'Noscript iframe rıza sınırını aşmamalı');
   const ads = await anonymousRequest('/ads.txt');
   assert.equal(ads.status, 200);
   assert.match(ads.headers.get('content-type'), /text\/plain/);
-  assert.equal(await ads.text(), 'google.com, pub-7808964787779354, DIRECT, f08c47fec0942fa0\n');
+  assert.equal(await ads.text(), 'google.com, pub-8257810988134211, DIRECT, f08c47fec0942fa0\n');
   const patch = { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ googleTagManagerId: '<script>bad</script>', googleAdSenseId: 'ca-pub-1' }) };
   assert.equal((await anonymousRequest('/api/settings', patch)).status, 401);
   const invalid = await request('/api/settings', patch);

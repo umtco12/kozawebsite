@@ -3,7 +3,7 @@ export const googleDefaults = {
   googleTagManagerId: 'GTM-5D3KDTPX',
   googleAnalyticsId: 'G-Q5S8DTCR9N',
   googleSearchConsoleToken: 'SZkV7s3VUP_26-a4os2Jn5i9bXNoDGnjmDI_i40iAJ8',
-  googleAdSenseId: 'ca-pub-7808964787779354',
+  googleAdSenseId: 'ca-pub-8257810988134211',
   googleAdSenseEnabled: '1',
 };
 export const googlePatterns = {
