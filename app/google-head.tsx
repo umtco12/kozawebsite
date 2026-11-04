@@ -17,8 +17,8 @@ export function GoogleAdSenseHead({ config, hostname, bootstrap }: Props) {
     {config.publisherId && <meta name="google-adsense-account" content={config.publisherId} />}
     {enabled && <>
       <script id="koza-google-bootstrap" dangerouslySetInnerHTML={{ __html: bootstrap }} />
-      {/* onLoad, React'in async scripti izin başlangıcının önüne taşımasını önler. */}
-      <script id="koza-adsense" async src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${config.publisherId}`} crossOrigin="anonymous" onLoad={() => undefined} />
+      {/* Sunucuda izin sırası korunur; tarayıcıda React mevcut src'yi tekilleştirir. */}
+      <script id="koza-adsense" async src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${config.publisherId}`} crossOrigin="anonymous" onLoad={typeof window === 'undefined' ? () => undefined : undefined} />
     </>}
   </>;
 }
