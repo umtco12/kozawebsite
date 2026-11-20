@@ -66,33 +66,21 @@ export function corporatePages(settings: Settings): CorporatePage[] {
       slug: "hakkimizda",
       title: corporateTitles.hakkimizda,
       kicker: "KOZA TV",
-      description: "2010 yılında Adana'da yayın hayatına başlayan Koza TV; tarafsız, güvenilir ve renkli yayınlarıyla izleyicilerine ulaşır.",
+      description: "2010 yılında Adana'da kurulan Koza TV, bugün İstanbul'dan Türkiye genelinde yayın yapan bir haber kanalı ve dijital medya markasıdır.",
       sections: [
         {
           heading: "Koza TV",
           paragraphs: [
-            "Akdeniz'in bir numarası sloganıyla yayın akışına devam eden Koza TV, büyük bir ilgi ve beğeniyle izlenmektedir. 2010 yılında yayın hayatına başlayan Adana merkezli televizyon kanalı; Adana, Antalya ve İstanbul'daki modern stüdyolarıyla kendini geliştirirken gündemi ve basın dünyasındaki yenilikleri yakından takip etmektedir.",
-            "Habercilik alanındaki tarafsız ve güvenilir yayınları, özellikle ana haber bültenleriyle dikkat çeken Koza TV; izleyicilerinin beklentileri doğrultusunda yarışma ve eğlence programlarına da yer verir.",
-          ],
-        },
-        {
-          heading: "Güncel ve Renkli Programlar Koza TV'de",
-          paragraphs: [
-            "Koza TV, zengin program içeriğiyle her yaş grubundan izleyicisini ekranlara çağırır. Eğlence, yarışma, haber, sabah programları ve film kuşağından oluşan yayın seçkisi yeni programlarla sürekli gelişir.",
-            "Adana'da kurulan kanal yalnız Akdeniz Bölgesi'ni değil, Türkiye ve dünya gündemini de yakından takip eder; önemli gelişmeleri izleyicilerine hızla aktarır.",
-          ],
-        },
-        {
-          heading: "Kültür, sanat ve spor",
-          paragraphs: [
-            "Koza TV programlarında spor önemli bir yere sahiptir. Ata sporlarına ayrı bir değer verilir; özellikle yağlı güreş karşılaşmaları izleyiciyle buluşturulur.",
-            "Akdeniz Bölgesi'ne özgü kültürel ve sanatsal etkinlikler ile festivaller ekranlardan tanıtılır. Koza TV, ulusal yayın kalitesini yerel değerlerle birleştirerek bölgenin kültürünü ve yöresel etkinliklerini görünür kılmayı görev edinir.",
+            "2010 yılında Adana'da yayın hayatına başlayan Koza TV, tarafsız, güvenilir ve dinamik yayıncılık anlayışıyla bugün ulusal ölçekte izleyicilerine ulaşan güçlü bir haber kanalı ve dijital medya markasıdır.",
+            "Yerelden ulusala uzanan yayın yolculuğunda ilk günkü yayıncılık ilkelerinden ödün vermeden büyüyen Koza TV, artık İstanbul'dan yayın yaparak Türkiye'nin dört bir yanındaki izleyicilere hitap etmektedir. Gündemi, siyaseti, ekonomiyi ve toplumsal gelişmeleri takip eden Koza TV, Türkiye ve dünya gündemindeki sıcak gelişmeleri izleyicilerine hızlı, doğru ve anlaşılır biçimde aktarır.",
+            "Yayın akışında spora da geniş yer veren Koza TV, Türkiye'nin farklı bölgelerinden kültürel ve sanatsal etkinlikleri, festivalleri ve yerel değerleri ekranlara taşıyarak bölgesel zenginlikleri ulusal izleyicilerle buluşturur.",
           ],
         },
         {
           heading: "Koza TV Yayın Bilgileri",
           paragraphs: [
-            `Koza TV'nin güncel uydu bilgisi ${settings.satelliteInfo || "yayın ayarlarında"}; platform bilgisi ise ${settings.platformInfo || "platform duyurularında"} yer almaktadır. Yayın, Koza TV'nin resmî YouTube kanalı ve dijital yayın kanalları üzerinden de takip edilebilir.`,
+            "Koza TV, Türksat 6A uydusunda 12111 MHz frekans, dikey (V) polarizasyon ve 27500 sembol oranıyla yayın yapmaktadır (FEC: 3/4).",
+            "Koza TV, Digitürk 614 • D-Smart 108 • S Sport+ 65 • Filbox 27 üzerinden izlenebilir. Yayın, Koza TV'nin resmî YouTube kanalı ve dijital yayın kanalları üzerinden de takip edilebilir.",
           ],
         },
       ],

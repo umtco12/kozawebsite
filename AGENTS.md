@@ -1586,3 +1586,19 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/google-head.tsx`, `tests/google-head-hydration.test.mjs`, `package.json`, `package-lock.json`, `AGENTS.md`.
 - Doğrulama: Gerçek React SSR/hydration ve istemcide yeniden oluşturma işlemlerini DOM içinde çalıştıran yeni regresyon eski kodda **2 != 1** ile başarısız, düzeltme sonrası başarılı oldu. Google'ın etikete eklediği işaret, ilk DOM nesnesinin korunması ve tekrar render senaryoları kapsandı. Node 23 ile `npm test` üretim derlemesi ve ana çalışma ağacında **172 geçti, 0 başarısız, 0 atlandı**. Typecheck başarılı, lint **0 hata / 38 mevcut görsel uyarısı**, production bağımlılık denetimi **0 açık**. Önceki sürümün Mozilla, Mediapartners-Google ve Google-Display-Ads-Bot istekleri HTTP 200 döndürdü; yeni kimlik gerçek `head` içinde bulundu ve izin kodu dış scriptin önündeydi. İlgisiz kullanıcı değişikliklerinin dışarıda tutulduğu izole yayın paketinde **171/171** test geçti; bağımsız `npm run build` başarılı oldu. Gerçek Chrome motorunda üretim host başlığıyla çalışan yerel ön izlemede `count=1`, doğru yeni yayıncı adresi, `HEAD` konumu ve kapalı reklam izinleri doğrulandı. Son canlı tek kopya kontrolü sonraki yayın kaydında tamamlanacak.
 - Kalan karar veya risk: Google panelindeki sahiplik doğrulaması ve inceleme sonucu ayrıca görülmeden Google onayı verildiği söylenmez. Önceden bulunan bağımsız PostgreSQL/servis/günlük değişiklikleri korunmuştur ve yayın kapsamı dışındadır.
+
+### 2026-11-20 — Hakkımızda metninin yerel önizlemesi
+
+- İstek: Yeni Koza TV tanıtım metnini ve yayın bilgilerini yerelde uygulamak, onay için ekran görüntüsü paylaşmak ve ancak onay sonrasında gece yarısı yayınını planlamak.
+- Yapılanlar: `/kurumsal/hakkimizda` metni ve sayfa açıklaması güncellendi. Gönderilen metindeki yazım hataları düzeltildi ve uydu/platform bilgileri okunabilir iki paragrafa ayrıldı. Yeni yayın bilgileri bu sayfanın metnine eklendi. Ortak site ayarlarına ve diğer sayfalara müdahale edilmedi.
+- Değişen ana dosyalar: `app/site-config.ts`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: Hakkımızda regresyon testi eski metinde beklenen içerik bulunmadığı için önce başarısız oldu. Uygulama sonrası testte HTML kesme işareti kodlaması dikkate alındı. Node 23 ile `npm test` **176 geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build`, değişen kaynak dosyalarının lint kontrolü ve `git diff --check` başarılı. Geçici yerel veritabanıyla `/kurumsal/hakkimizda` HTTP 200 ve doğru canonical adres döndürdü. Chrome'da 1440, 1280, 900 ve 390 px ölçülerinde metnin tamamı okunabildi, yatay taşma ve yakalanan JavaScript istisnası yoktu. Masaüstü ve mobil ekran görüntüleri repo dışında kaydedildi.
+- Kalan karar veya risk: Canlı dağıtım ve gece yarısı zamanlaması kullanıcı onayını bekliyor. Commit veya push yapılmadı.
+
+### 2026-11-20 — Hakkımızda üretim sürümünün hazırlanması
+
+- İstek: Onaylanan Hakkımızda sürümünün 21 Kasım 2026 saat 03.00 İstanbul saatinde dağıtımının başlatılması.
+- Yapılanlar: Yalnız Hakkımızda metni, regresyon testi ve bu işe ait çalışma günlüğü GitHub `main` tabanlı izole yayın dalına alındı. Var olan Radore üretim iş akışı kullanılacak.
+- Değişen ana dosyalar: `app/site-config.ts`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: Temiz `npm ci` sonrası izole pakette `npm test` **172 geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build` ve `git diff --check` başarılı. `npm run lint` **0 hata, 38 mevcut görsel uyarısı** verdi. `npm audit --omit=dev` **0 açık** bildirdi. Üretim Hakkımızda sayfası HTTPS 200 ile mevcut metni gösterdi. Yeni metin önceki yerel Chrome önizlemesinde masaüstü, tablet ve mobilde doğrulandı.
+- Kalan karar veya risk: Dağıtım sonucu ve canlı içerik kontrolü üretim iş akışı çalıştıktan sonra doğrulanacak.

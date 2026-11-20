@@ -2383,7 +2383,7 @@ test("video merkezi ve kurumsal sayfalar yayına hazır biçimde açılır", asy
   assert.match(videos, /Video Merkezi/);
   assert.match(videos, /video içerik/);
 
-  for (const [slug, expected] of [["hakkimizda", /Güncel ve Renkli Programlar/], ["kunye", /Koza TV Künye Bilgileri/], ["yayin-ilkeleri", /Düzeltme ve yanıt hakkı/], ["iletisim", /İletişim kanalları/], ["kvkk", /Kişisel verilerinize yönelik haklarınıza ilişkin/], ["gizlilik", /Kullanım Şartları/], ["cerez-politikasi", /Çerezler \(Cookie\)/]]) {
+  for (const [slug, expected] of [["hakkimizda", /Koza TV Yayın Bilgileri/], ["kunye", /Koza TV Künye Bilgileri/], ["yayin-ilkeleri", /Düzeltme ve yanıt hakkı/], ["iletisim", /İletişim kanalları/], ["kvkk", /Kişisel verilerinize yönelik haklarınıza ilişkin/], ["gizlilik", /Kullanım Şartları/], ["cerez-politikasi", /Çerezler \(Cookie\)/]]) {
     const body = await html(`/kurumsal/${slug}`);
     assert.match(body, expected, `/kurumsal/${slug} içeriği eksik`);
     assert.match(body, /href="\/kurumsal\/kvkk"/);
@@ -2395,11 +2395,21 @@ test("video merkezi ve kurumsal sayfalar yayına hazır biçimde açılır", asy
   assert.match(missing, /name="robots" content="noindex"/i, "Bulunamayan sayfa indekslenmemeli");
 });
 
+test("Hakkımızda yeni kurumsal metni ve yayın bilgilerini gösterir", async () => {
+  const about = await html("/kurumsal/hakkimizda");
+  const article = about.match(/<article class="static-body">([\s\S]*?)<\/article>/)?.[1].replaceAll("&#x27;", "'") ?? "";
+  assert.match(article, /<p>2010 yılında Adana'da yayın hayatına başlayan Koza TV[^<]+ulusal ölçekte[^<]+dijital medya markasıdır\.<\/p>/);
+  assert.match(article, /<p>Yerelden ulusala[^<]+İstanbul'dan yayın yaparak[^<]+toplumsal gelişmeleri takip eden[^<]+aktarır\.<\/p>/);
+  assert.match(article, /<p>Yayın akışında spora[^<]+kültürel ve sanatsal etkinlikleri, festivalleri ve yerel değerleri[^<]+buluşturur\.<\/p>/);
+  assert.match(article, /<h2>Koza TV Yayın Bilgileri<\/h2>/);
+  assert.match(article, /Türksat 6A[^<]+12111[^<]+dikey \(V\)[^<]+27500[^<]+FEC: 3\/4/);
+  assert.match(article, /Digitürk 614 • D-Smart 108 • S Sport\+ 65 • Filbox 27/);
+  assert.match(article, /resmî YouTube kanalı ve dijital yayın kanalları/);
+  assert.doesNotMatch(article, /Akdeniz'in bir numarası|Güncel ve Renkli Programlar|12685 V/);
+});
+
 test("gizlilik belgesindeki kurumsal içerikler doğru sayfalara taşınır ve şablon artıkları yayımlanmaz", async () => {
   const about = await html("/kurumsal/hakkimizda");
-  assert.match(about, /Akdeniz'in bir numarası/);
-  assert.match(about, /Güncel ve Renkli Programlar Koza TV'de/);
-  assert.match(about, /Koza TV Yayın Bilgileri/);
   assert.doesNotMatch(about, /class="static-live"/, "Kurumsal yan menüde canlı yayın çağrısı kalmamalı");
   const corporateAside = about.match(/<aside class="static-aside">([\s\S]*?)<\/aside>/)?.[1] ?? "";
   const corporateLinks = [...corporateAside.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
