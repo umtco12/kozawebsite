@@ -1602,3 +1602,58 @@ Her yeni işte aşağıdaki biçimi kullan:
 - Değişen ana dosyalar: `app/site-config.ts`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
 - Doğrulama: Temiz `npm ci` sonrası izole pakette `npm test` **172 geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build` ve `git diff --check` başarılı. `npm run lint` **0 hata, 38 mevcut görsel uyarısı** verdi. `npm audit --omit=dev` **0 açık** bildirdi. Üretim Hakkımızda sayfası HTTPS 200 ile mevcut metni gösterdi. Yeni metin önceki yerel Chrome önizlemesinde masaüstü, tablet ve mobilde doğrulandı.
 - Kalan karar veya risk: Dağıtım sonucu ve canlı içerik kontrolü üretim iş akışı çalıştıktan sonra doğrulanacak.
+
+### 2026-11-26 — Haber detayında sabit ilk yayın ve son güncelleme saati
+
+- İstek: İlk yayın saatinin korunması, haberin içeriği güncellendiğinde hemen yanında son güncellemenin gösterilmesi ve manşet sırasının bu tarihleri değiştirmediğinin test edilmesi.
+- Yapılanlar: Haber detayında ve kesintisiz okumada İstanbul saatli, makinece okunabilen tarihler eklendi. Yayımlanmış içerik değiştiğinde ayrı bir tarih ve denetim kaydı yazılıyor. Taslağa alma, yeniden yayınlama ve zamanlanmış yayında ilk tarih korunuyor. Eski haberlerin kayıtlı sürümleri ve yayımlanmış düzeltmeleri inceleniyor. Görünür tarihler, haber meta etiketleri, NewsArticle ve haber sitemap kaydı aynı kaynaktan besleniyor.
+- Değişen ana dosyalar: `db/publication-dates.mjs`, `db/index.ts`, `db/postgres-schema.sql`, `app/haber/[slug]/page.tsx`, `app/sitemap.ts`, `app/globals.css`, `tests/publication-dates.test.mjs`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: Yeni haber sayfası testi uygulamadan önce başarısız oldu. Editör API’sinden yayın ve güncelleme, gerçek manşet sıralaması, aynı içerikle yeniden kayıt, taslak, zamanlama, düzeltme, oturumsuz ve çakışan kayıt test edildi. Tam pakette kesintisiz okuma örnekleri ayrı test kategorisine alındı ve sitemap kontrolü XML yanıtını okuyacak biçimde düzeltildi. Son `npm test` sonucu **180 geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build`, `tsc --noEmit` ve `git diff --check` başarılı. `npm run lint` sıfır hata ve mevcut 38 görsel uyarısıyla tamamlandı. Geçici PostgreSQL 17.12 üzerinde eski şemadan geçiş, doğrulanabilir eski sürüm geçmişi, yeni haber yayını, içerik değişikliği, manşete taşıma ve haber sayfasındaki tarihler doğrulandı. Chrome’da 1440, 900 ve 390 px genişliklerde iki tarih yan yana okundu, yatay taşma görülmedi.
+- Kalan karar veya risk: Tarihçesinde içerik değişikliğinin zamanı doğrulanamayan arşiv haberlerinde yalnız ilk yayın gösterilir. Yerel uygulama doğrulandı. Canlıya dağıtım yapılmadı.
+
+### 2026-11-26 — Haber tarihlerinin adlandırılması ve mobil ekran görüntüleri
+
+- İstek: Haber detayında “Yayın tarihi” ve “Güncelleme tarihi” ifadelerinin yan yana gösterilmesi ve mobil ekran görüntülerinin paylaşılması.
+- Yapılanlar: Haber detayının ve kesintisiz okumanın ortak tarih bileşenindeki etiketler güncellendi. Mobilde her iki görünümde de iki tarih yan yana yer alıyor. Güncellenmemiş haberde yalnız yayın tarihi gösteriliyor. Yerel örnek haberden 360 ve 430 px genişlikte ekran görüntüleri alındı.
+- Değişen ana dosyalar: `app/haber/[slug]/page.tsx`, `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: Yeni etiket beklentisi eski sürümde başarısız oldu. Değişiklik sonrası `npm test` ile **180 test geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build` ve `tsc --noEmit` başarılı. `npm run lint` sıfır hata ve mevcut 38 görsel uyarısıyla tamamlandı. Gerçek Chrome’da 360, 430, 768 ve 1440 px genişliklerde haber rotası, güncellenmemiş örnek ve kesintisiz okuma kontrol edildi. Her genişlikte etiket sırası, saat değerleri, yan yana hizalama ve yatay taşma denetimleri geçti. İki mobil PNG görsel olarak incelendi.
+- Kalan karar veya risk: Değişiklik yerelde doğrulandı, canlıya dağıtılmadı.
+
+### 2026-11-26 — İkinci haber tarihi için “Son güncelleme” etiketi
+
+- İstek: Yayın tarihinin yanındaki ikinci etiketin “Son güncelleme” olması.
+- Yapılanlar: Haber detayında ve kesintisiz okumada kullanılan ortak etiket değiştirildi. İki mobil ve bir masaüstü önizleme yeniden alındı.
+- Değişen ana dosyalar: `app/haber/[slug]/page.tsx`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- Doğrulama: Yeni etiket beklentisi eski ifadeyle başarısız oldu. Sonrasında `npm test` ile **180 geçti, 0 başarısız, 0 atlandı**. `npm run build`, `tsc --noEmit` ve `git diff --check` başarılı. `npm run lint` sıfır hata ve mevcut 38 görsel uyarısıyla tamamlandı. Chrome’da 360, 430, 768 ve 1440 px genişlikte iki tarih yan yana doğrulandı. Güncellenmemiş haberde yalnız yayın tarihi gösterildi.
+- Kalan karar veya risk: Yerelde doğrulandı, canlıya dağıtılmadı.
+
+### 2026-11-26 — Haber editöründe isteğe bağlı yazar veya servis imzası
+
+- **İstek** — Editörün kaynak adını tek başına girebilmesi ve önceki iki ekonomi haberi üzerinde imza ile tarihlerin birlikte incelenmesi.
+- **Yapılanlar** — Yeni Haber formundaki Yazar / servis alanı boş açılıyor. Editör kayıtlı imzayı silebiliyor. Kayıt isteğinde alan gönderilmediğinde mevcut imza korunuyor. İmzasız haberde üst bilgi ve kesintisiz okuma tarihleri göstermeye devam ediyor. Yazar rozeti, profil bağlantısı, etiketi ve yazar metadatası yalnız imza girildiğinde oluşturuluyor. Kaynak adı haberin altında gösteriliyor.
+- **Değişen ana dosyalar** — `app/admin/panel.tsx`, `db/article-model.mjs`, `db/index.ts`, `app/haber/[slug]/page.tsx`, `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- **Doğrulama** — Yeni regresyon testi önce boş imzanın otomatik doldurulduğunu yakaladı. Oluşturma, imza ekleme, silme, boşluk girişi, mevcut imzayı koruma, hatalı veri ve oturumsuz istek denendi. `npm test` ile **181 test geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build` ve `npx tsc --noEmit` başarılı. `npm run lint` sıfır hata ve mevcut 38 görsel uyarısıyla tamamlandı. Chrome’da 360, 430, 768 ve 1440 px genişliklerde güncellenmiş ekonomi haberinde 09:09 ve 14:35 yan yana, altta AA doğrulandı. Akşam bülteninde kayıtlı imza ve yalnız 19:09 yayın saati görüldü. Masaüstü ve mobil ekran görüntüleri iki örnek için alındı. Yeni Haber formundaki boş alan, isteğe bağlı etiketi ve klavye odağı 360, 768 ve 1440 px genişliklerde kontrol edildi.
+- **Yayın durumu** — Doğrulama yerel örnek haberlerle yapıldı. Canlıya dağıtım yapılmadı.
+
+### 2026-11-26 — Haber detayında masaüstü tarih ve paylaşım boyutları
+
+- **İstek** — Onaylanan üçüncü görünümü masaüstüne uygulamak ve aynı ekonomi haberinin iki tarihini ekran görüntüsünde yan yana göstermek.
+- **Yapılanlar** — 1024 px ve üzerindeki haber üst bilgisinde tarih yazısı 16 px, saat ve tarih değerlerinin yazı kalınlığı 600, paylaşım simgeleri 18 px ve düğmeler 44 × 44 px olarak ayarlandı. İki tarih grubu arasında 22 px boşluk kullanıldı.
+- **Değişen ana dosyalar** — `app/globals.css`, `tests/rendered-html.test.mjs`, `AGENTS.md`.
+- **Doğrulama** — Yeni test ilk çalışmada masaüstü kuralının eksikliğini yakaladı. Düzenlemeden sonra `npm test` ile **182 geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build` ve `npx tsc --noEmit` başarılı. `npm run lint` sıfır hata ve mevcut 38 görsel uyarısıyla tamamlandı. Yerel haber rotası HTTP 200 döndürdü. Chrome’da 360, 768, 1023, 1024 ve 1440 px genişliklerinde yayın ve güncelleme saatleri yan yana doğrulandı. İlk üç genişlikte tarih 12 px ve düğmeler 34 × 34 px, son ikisinde tarih 16 px ve düğmeler 44 × 44 px ölçüldü. Yatay taşma görülmedi. “Koza TV’de ekonomi gündemi” haberinin 09:09 yayın ve 14:35 son güncelleme saatlerini içeren 1440 × 900 px ekran görüntüsü yerel derlemeden alındı.
+- **Yayın durumu** — Yerelde uygulandı ve doğrulandı.
+
+### 2026-11-26 — Haber paylaşım düğmelerinde sosyal medya renkleri
+
+- **İstek** — Mobil ve masaüstünde haber paylaşım düğmelerini platformların renkleriyle göstermek.
+- **Yapılanlar** — Haber üst bilgisinde ve metnin yanındaki paylaşım alanında Facebook için mavi, X için siyah ve WhatsApp için yeşil zemin kullanıldı. Paylaşım düğmeleri SVG logo gösteriyor. Sitenin mevcut Facebook ve X logoları ortak bileşene taşındı. Klavye odağı ve fareyle üzerine gelme durumları için görünür çerçeve tanımlandı.
+- **Değişen ana dosyalar** — `app/social-icon.tsx`, `app/site-chrome.tsx`, `app/haber/[slug]/share-buttons.tsx`, `app/globals.css`, `tests/rendered-html.test.mjs` ve `AGENTS.md`.
+- **Doğrulama** — Regresyon testi önce eksik logoyu yakaladı. Ardından iki paylaşım alanındaki renkler, logo, erişilebilir ad ve her platforma gönderilen haber adresi doğrulandı. `npm test` ile **183 geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build` ve `npx tsc --noEmit` başarılı. `npm run lint` sıfır hata ve bilinen 38 görsel uyarısıyla tamamlandı. Chrome’da aynı ekonomi haberi 360, 430, 768, 1024 ve 1440 px genişliklerde kontrol edildi. Tarihler yan yana, mobil düğmeler 34 × 34 px, masaüstü üst satırdaki düğmeler 44 × 44 px ölçüldü. Klavyeyle paylaşım düğmeleri arasında geçiş, görünür odak ve doğru haber adresinin panoya kopyalanması denendi.
+- **Yayın durumu** — Ekran görüntüleri yerel sürümden alındı.
+
+### 2026-11-26 — Haber tarihleri, isteğe bağlı imza ve paylaşım düğmelerinin üretim sürümü
+
+- **İstek** — Onaylanan haber değişikliklerini canlıya almak ve aynı üretim haberini mobil ile masaüstünde kontrol etmek.
+- **Yapılanlar** — Sürüm güncel `origin/main` üzerinden hazırlandı. Sabit ilk yayın ve içerik güncelleme saati, isteğe bağlı imza, masaüstü boyutları, renkli paylaşım logoları ve bunların testleri seçildi.
+- **Doğrulama** — Üretime gönderilecek dosyalarla `npm test` sonucunda **179 test geçti, 0 başarısız, 0 atlandı**. Bağımsız `npm run build`, `npx tsc --noEmit` ve `git diff --check` başarılı. `npm run lint` 0 hata ve 38 mevcut görsel uyarısı verdi. `npm audit --omit=dev` 0 bulgu verdi. PostgreSQL 17.12 üzerinde eski şemadan geçiş, içerik güncelleme, ilk yayın saatini koruma, manşet sıralama ve haber sayfası yeniden doğrulandı.
+- **Canlı kontrol hedefi** — İlk ekran görüntüsündeki Sarıgül haberinin güncel adresi açıldı. Yerel ekonomi örneğinin üretim adresi HTTP 404 döndürüyor.

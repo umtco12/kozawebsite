@@ -53,6 +53,7 @@ export function validateArticleInput(payload) {
   if (String(payload.body ?? "").trim().length < 1) errors.body = "Haber metni en az 1 karakter olmalı";
   if (!String(payload.category ?? "").trim()) errors.category = "Kategori seçilmeli";
   if (!String(payload.heroImage ?? "").trim()) errors.heroImage = "Kapak fotoğrafı seçmeden haber kaydedilemez";
+  if (payload.author != null && typeof payload.author !== "string") errors.author = "Yazar / servis metin olmalı";
   if (!articleStatuses.includes(payload.status)) errors.status = "Geçerli bir yayın durumu seçilmeli";
   if (payload.homepagePlacement != null && !homepagePlacements.includes(payload.homepagePlacement)) errors.homepagePlacement = "Geçerli bir ana sayfa konumu seçilmeli";
   if (payload.headlinePosition != null && !headlinePositions.includes(payload.headlinePosition)) errors.headlinePosition = "Geçerli bir manşet yazısı konumu seçilmeli";

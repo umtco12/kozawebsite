@@ -4454,6 +4454,55 @@ test("haber gövdesi masaüstü, tablet ve mobilde rahat okuma ölçeğini korur
     "Okuma ölçeği yardımcı metinlerin boyutunu değiştirmemeli");
 });
 
+test("haber paylaşımında her platformun renkli logosu ve doğru paylaşım bağlantısı görünür", async () => {
+  const { JSDOM } = await import("jsdom");
+  const path = "/haber/turkiyenin-gundemi-koza-tv-haber-merkezinde";
+  const { window } = new JSDOM(await html(path), { url: baseUrl + path });
+  const doc = window.document;
+  const css = doc.createElement("style");
+  css.textContent = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  doc.head.append(css);
+  for (const selector of [".share-buttons", ".article-share"]) {
+    const group = doc.querySelector(selector);
+    const links = [...group.querySelectorAll("a")];
+    assert.equal(links.length, 3);
+    for (const [label, host, color] of [
+      ["Facebook'ta paylaş", "www.facebook.com", "#0866ff"],
+      ["X'te paylaş", "twitter.com", "#000000"],
+      ["WhatsApp'ta paylaş", "api.whatsapp.com", "#25d366"],
+    ]) {
+      const link = links.find(item => item.getAttribute("aria-label") === label);
+      assert.ok(link?.querySelector('svg[aria-hidden="true"][focusable="false"] path'), label);
+      assert.equal(window.getComputedStyle(link).getPropertyValue("--share-brand").trim(), color);
+      const target = new URL(link.href);
+      assert.equal(target.hostname, host);
+      assert.ok([...target.searchParams.values()].some(value => value.includes("https://www.kozatv.com.tr" + path)));
+      assert.equal(link.target, "_blank");
+    }
+    assert.ok(group.querySelector('button[aria-label="Haber bağlantısını kopyala"]'));
+  }
+});
+
+test("masaüstü haber başlığında tarih ve paylaşım düğmeleri onaylanan boyutları kullanır", async () => {
+  const { JSDOM } = await import("jsdom");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const { document } = new JSDOM(`<style>${css}</style>`, { url: baseUrl }).window;
+  const rules = Array.from(document.styleSheets[0].cssRules)
+    .filter(rule => rule.media?.mediaText.replace(/\s/g, "") === "(min-width:1024px)")
+    .flatMap(rule => Array.from(rule.cssRules));
+  function styleFor(selector) {
+    const rule = rules.find(rule => rule.selectorText?.split(",").some(part => part.trim() === selector));
+    assert.ok(rule, `Masaüstü kuralı eksik: ${selector}`);
+    return rule.style;
+  }
+  assert.equal(styleFor(".article-meta .article-dates").getPropertyValue("font-size"), "16px");
+  assert.equal(styleFor(".article-meta .article-dates time").getPropertyValue("font-weight"), "600");
+  for (const tag of ["a", "button"]) {
+    const style = styleFor(`.article-meta .share-buttons ${tag}`);
+    assert.deepEqual(["font-size", "width", "height"].map(key => style.getPropertyValue(key)), ["18px", "44px", "44px"]);
+  }
+});
+
 test("ana navbar bütün ziyaretçi sayfalarında aynı bağlantıları gösterir", async () => {
   function navSignature(page) {
     const nav = page.match(/<nav class="nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
@@ -4478,4 +4527,170 @@ test("ana navbar bütün ziyaretçi sayfalarında aynı bağlantıları gösteri
   assert.ok(expected.includes("/kategori/teknoloji:Teknoloji"));
   assert.ok(!expected.some((item) => item.endsWith(":Video") || item.endsWith(":Videolar")),
     "Video bağlantısı sayfa değiştirince navbar içinde belirmemeli");
+});
+
+test("haber içeriğinin güncelleme saati manşet sırasından bağımsızdır", async (t) => {
+  const { JSDOM } = await import("jsdom");
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const ids = [];
+  t.after(() => {
+    for (const id of ids) db.prepare("DELETE FROM articles WHERE id=?").run(id);
+    db.close();
+  });
+  const json = (method, data) => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
+  const input = { title: "Haber güncelleme saati denemesi", spot: "İlk yayın ve sonraki değişiklikleri doğrulayan haber.", body: "İlk bilgiler.", category: "Yayın saati testi", status: "published", heroImage: "/news/studio.jpg", homepagePlacement: "slider", publishedAt: Date.now() - 3600000 };
+  async function create(data) {
+    const response = await request("/api/articles", json("POST", data));
+    assert.equal(response.status, 201);
+    const { article } = await response.json();
+    ids.push(article.id);
+    return article;
+  }
+  async function checkPage(article, modified) {
+    const document = new JSDOM(await html("/haber/" + article.slug)).window.document;
+    const times = [...document.querySelectorAll(".article-meta time")];
+    const dates = [article.publishedAt, ...(modified == null ? [] : [modified])];
+    assert.deepEqual(times.map(time => time.dateTime), dates.map(value => new Date(value).toISOString()));
+    const labels = ["Yayın tarihi", "Son güncelleme"];
+    dates.forEach((value, i) => {
+      const formatted = new Intl.DateTimeFormat("tr-TR", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Istanbul" }).format(value);
+      assert.equal(times[i].parentElement.textContent, labels[i] + " " + formatted);
+      assert.equal(times[i].textContent, formatted);
+    });
+    const expected = new Date(modified ?? article.publishedAt).toISOString();
+    assert.equal(document.querySelector('meta[name="datePublished"]').content, times[0].dateTime);
+    assert.equal(document.querySelector('meta[name="dateModified"]').content, expected);
+    assert.equal(document.querySelector('meta[property="article:modified_time"]').content, expected);
+    assert.equal(JSON.parse(document.querySelector('script[type="application/ld+json"]').textContent).dateModified, expected);
+  }
+  const article = await create(input);
+  await checkPage(article, null);
+  async function patch(data) {
+    const response = await request("/api/articles", json("PATCH", data));
+    assert.equal(response.status, 200);
+    return (await response.json()).article;
+  }
+  const updated = await patch({ ...article, publishedAt: null, body: "Yeni bilgiler doğrulandı.", blocks: [] });
+  assert.equal(updated.publishedAt, article.publishedAt);
+  assert.ok(updated.contentModifiedAt > article.publishedAt);
+  await checkPage(article, updated.contentModifiedAt);
+  const same = await patch({ ...updated, publishedAt: Date.now(), blocks: [], homepageOrder: 4 });
+  assert.equal(same.publishedAt, article.publishedAt);
+  assert.equal(same.contentModifiedAt, updated.contentModifiedAt);
+  assert.equal((await anonymousRequest("/api/articles", json("PATCH", same))).status, 401);
+  assert.equal((await request("/api/articles", json("PATCH", updated))).status, 409);
+
+  const next = await create({ ...input, title: "Saat testi için ikinci manşet haberi", publishedAt: Date.now() });
+  const { revision, layout } = await (await request("/api/homepage-layout")).json();
+  const order = Object.fromEntries(["slider", "side", "below"].map(key => [key, layout[key].map(item => item.id)]));
+  order.slider = [article.id, next.id, ...order.slider.filter(id => id !== article.id && id !== next.id)];
+  const moved = await request("/api/homepage-layout", json("PATCH", { revision, layout: order }));
+  assert.equal(moved.status, 200);
+  assert.deepEqual((await moved.json()).layout.slider.slice(0, 2).map(item => item.id), [article.id, next.id]);
+  await checkPage(article, updated.contentModifiedAt);
+  await checkPage(next, null);
+  const sitemapResponse = await request("/sitemap.xml");
+  assert.equal(sitemapResponse.status, 200);
+  const sitemap = new JSDOM(await sitemapResponse.text(), { contentType: "text/xml" }).window.document;
+  const entry = [...sitemap.querySelectorAll("url")].find(node => node.querySelector("loc").textContent.endsWith("/haber/" + article.slug));
+  assert.equal(entry.querySelector("lastmod").textContent, new Date(updated.contentModifiedAt).toISOString());
+  const continuous = new JSDOM(await html("/haber/" + next.slug)).window.document.querySelector(`.continuous-article[data-article-path="/haber/${article.slug}"]`);
+  assert.ok(continuous, "Aynı kategorideki önceki haber kesintisiz okumada bulunmalı");
+  assert.deepEqual([...continuous.querySelectorAll("time")].map(time => time.previousSibling.textContent.trim()), ["Yayın tarihi", "Son güncelleme"]);
+  assert.equal(continuous.querySelectorAll("time")[1].dateTime, new Date(updated.contentModifiedAt).toISOString());
+});
+
+test("taslak düzenlemesi, ilk yayın, yeniden yayın ve düzeltme ayrı zamanlar kullanır", async (t) => {
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const send = async (path, method, data, status) => {
+    const response = await request(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
+    assert.equal(response.status, status);
+    return (await response.json()).article;
+  };
+  const input = { title: "Zamanlanmış haberin editoryal saatleri", spot: "Taslak ve yayın zamanları için ayrı bir haber.", body: "İlk metin.", category: "Gündem", status: "draft", heroImage: "/news/studio.jpg" };
+  const draft = await send("/api/articles", "POST", input, 201);
+  t.after(() => { db.prepare("DELETE FROM articles WHERE id=?").run(draft.id); db.close(); });
+  const save = article => send("/api/articles", "PATCH", article, 200);
+  const planned = await save({ ...draft, status: "scheduled", scheduledAt: Date.now()-60000, body: "Yayına hazır.", blocks: [] });
+  assert.equal(planned.publishedAt, null);
+  await html("/haber/" + planned.slug);
+  const first = (await (await request("/api/articles?q=Zamanlanmış%20haberin%20editoryal")).json()).articles[0];
+  assert.equal(first.contentModifiedAt, null);
+  assert.equal(first.publishedAt, planned.scheduledAt);
+  const old = await save({ ...first, status: "draft" });
+  const edited = await save({ ...old, spot: "Taslakta hazırlanan yeni gelişmeler ve ayrıntılar." });
+  assert.equal(edited.contentModifiedAt, null);
+  const published = await save({ ...edited, status: "published", publishedAt: null });
+  assert.equal(published.publishedAt, first.publishedAt);
+  assert.ok(published.contentModifiedAt > first.publishedAt);
+  const correction = { type: "workflow", articleId: first.id, action: "correction", note: "İsim yazımı düzeltildi." };
+  const corrected = await send("/api/editorial", "POST", correction, 200);
+  assert.ok(corrected.contentModifiedAt > published.contentModifiedAt);
+  const same = await send("/api/editorial", "POST", correction, 200);
+  assert.equal(same.contentModifiedAt, corrected.contentModifiedAt);
+  const assign = await send("/api/editorial", "POST", { type: "workflow", articleId: first.id, action: "assign" }, 200);
+  assert.equal(assign.contentModifiedAt, corrected.contentModifiedAt);
+  assert.equal(assign.publishedAt, first.publishedAt);
+  assert.deepEqual(db.prepare("SELECT created_at FROM audit_logs WHERE entity_type='article' AND entity_id=? AND action='content_update' ORDER BY id").all(first.id).map(row => row.created_at), [published.contentModifiedAt, corrected.contentModifiedAt]);
+});
+
+test("isteğe bağlı yazar kaynaktan bağımsız kaydedilir ve haber tarihleri imzasız da görünür", async (t) => {
+  const { JSDOM } = await import("jsdom");
+  const db = new Database(process.env.KOZA_DB_PATH);
+  const ids = [];
+  t.after(() => {
+    for (const id of ids) db.prepare("DELETE FROM articles WHERE id=?").run(id);
+    db.close();
+  });
+  const input = {
+    title: "Koza TV’de ekonomi gündemi", body: "Günün ekonomi haberleri Koza TV bülteninde ele alındı.",
+    spot: "Günün ekonomi haberleri Koza TV bülteninde ele alındı.", category: "İmza denemesi",
+    status: "published", heroImage: "/news/studio.jpg", sourceName: "AA", publishedAt: Date.now() - 3600000,
+  };
+  const json = (method, data) => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
+  async function save(data) {
+    const response = await request("/api/articles", json(data.id ? "PATCH" : "POST", data));
+    assert.equal(response.status, data.id ? 200 : 201);
+    const { article } = await response.json();
+    if (!data.id) ids.push(article.id);
+    return article;
+  }
+  async function page(article) {
+    return new JSDOM(await html("/haber/" + article.slug)).window.document;
+  }
+  function checkUnsigned(doc, dates) {
+    assert.equal(doc.querySelector(".article-author, .author-badge, .article-tags a[href^='/yazar/'], a[href='/yazar/']"), null);
+    assert.equal(doc.querySelector('meta[property="article:author"]'), null);
+    assert.equal(JSON.parse(doc.querySelector('script[type="application/ld+json"]').textContent).author, undefined);
+    assert.deepEqual([...doc.querySelectorAll(".article-meta time")].map(el => el.dateTime), dates.map(ts => new Date(ts).toISOString()));
+    assert.ok(!doc.querySelector(".article-meta").textContent.includes("AA"));
+    assert.equal(doc.querySelector(".article-body .source-box strong").textContent, "AA");
+  }
+  const first = await save(input);
+  assert.equal(first.author, "");
+  checkUnsigned(await page(first), [first.publishedAt]);
+  const signed = await save({ ...first, author: "  Ayşe Yılmaz  " });
+  assert.equal(signed.author, "Ayşe Yılmaz");
+  const signedPage = await page(signed);
+  assert.equal(signedPage.querySelector(".article-author").getAttribute("href"), "/yazar/ayse-yilmaz");
+  assert.equal(signedPage.querySelector(".author-badge").textContent, "AY");
+  assert.equal(signedPage.querySelector(".article-body .source-box strong").textContent, "AA");
+  const { author, ...withoutField } = signed;
+  const kept = await save(withoutField);
+  assert.equal(kept.author, author);
+  assert.equal(kept.contentModifiedAt, signed.contentModifiedAt);
+  const clear = { ...kept, author: "   " };
+  assert.equal((await anonymousRequest("/api/articles", json("PATCH", clear))).status, 401);
+  assert.equal((await request("/api/articles", json("PATCH", { ...kept, author: {} }))).status, 400);
+  const cleared = await save(clear);
+  assert.equal(cleared.author, "");
+  assert.equal(db.prepare("SELECT author FROM articles WHERE id=?").get(first.id).author, "");
+  assert.ok(cleared.contentModifiedAt > first.publishedAt);
+  checkUnsigned(await page(cleared), [first.publishedAt, cleared.contentModifiedAt]);
+  const next = await save({ ...input, title: "Akşam bülteninde ekonomi gündemi", publishedAt: Date.now(), author: "" });
+  const previous = (await page(next)).querySelector(`.continuous-article[data-article-path="/haber/${first.slug}"]`);
+  assert.ok(previous);
+  assert.equal(previous.querySelector(".continuous-meta a"), null);
+  assert.equal(previous.querySelector(".source-box strong").textContent, "AA");
+  assert.deepEqual([...previous.querySelectorAll(".continuous-meta time")].map(el => el.dateTime), [first.publishedAt, cleared.contentModifiedAt].map(ts => new Date(ts).toISOString()));
 });

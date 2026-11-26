@@ -98,6 +98,8 @@ CREATE TABLE articles (
   is_breaking INTEGER NOT NULL DEFAULT 0 CHECK (is_breaking IN (0,1)),
   is_featured INTEGER NOT NULL DEFAULT 0 CHECK (is_featured IN (0,1)),
   published_at BIGINT,
+  content_modified_at BIGINT,
+  published_content_hash TEXT,
   scheduled_at BIGINT,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL,

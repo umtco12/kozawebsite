@@ -20,6 +20,7 @@ import { isVisibleHomepageStatus, normalizeHomepagePlacementLimits, promoteHomep
 import { extractGalleryImages, selectHomepagePhotoGalleries, selectPhotoGalleries } from "./photo-gallery-model.mjs";
 import { BREAKING_LABEL_TTL_MS } from "./breaking-feed-model.mjs";
 import { NEWS_SITEMAP_WINDOW_MS } from "./news-sitemap-model.mjs";
+import { ensurePublicationDates, publishedContentHash } from "./publication-dates.mjs";
 import { seedArticles, seedCategories, seedSources } from "./seed";
 
 export type ContentRow = { key: string; value: string };
@@ -28,9 +29,9 @@ export type HeadlinePosition = "left-top" | "left-bottom" | "right-top" | "right
 export type HomepagePlacement = "latest" | "slider" | "side" | "below";
 export type WorkflowState = "reporter_draft" | "editor_review" | "changes_requested" | "approved" | "rejected" | "published" | "withdrawn";
 export type ContentBlock = { id: string; type: "paragraph" | "heading" | "quote" | "list" | "image" | "video" | "embed"; content: string; caption?: string };
-export type ArticleRecord = { id: number; slug: string; title: string; spot: string; body: string; bodyHtml: string; blocks: ContentBlock[]; category: string; status: ArticleStatus; workflowState: WorkflowState; assignedTo: number | null; editVersion: number; correctionNote: string; withdrawnAt: number | null; heroImage: string; imageAlt: string; videoUrl: string; author: string; sourceName: string; sourceUrl: string; seoTitle: string; seoDescription: string; isBreaking: number; isFeatured: number; isHomepageGallery: number; homepageOrder: number; homepagePlacement: HomepagePlacement; headlinePosition: HeadlinePosition; publishedAt: number | null; scheduledAt: number | null; agencySourceId: number | null; agencyExternalId: string; agencyCredit: string; agencyReceivedAt: number | null; agencyDisclaimer: string; agencyEditorialLock: number; agencyUpdatePending: number; createdBy: string; updatedBy: string; createdAt: number; updatedAt: number };
+export type ArticleRecord = { id: number; slug: string; title: string; spot: string; body: string; bodyHtml: string; blocks: ContentBlock[]; category: string; status: ArticleStatus; workflowState: WorkflowState; assignedTo: number | null; editVersion: number; correctionNote: string; withdrawnAt: number | null; heroImage: string; imageAlt: string; videoUrl: string; author: string; sourceName: string; sourceUrl: string; seoTitle: string; seoDescription: string; isBreaking: number; isFeatured: number; isHomepageGallery: number; homepageOrder: number; homepagePlacement: HomepagePlacement; headlinePosition: HeadlinePosition; publishedAt: number | null; contentModifiedAt: number | null; scheduledAt: number | null; agencySourceId: number | null; agencyExternalId: string; agencyCredit: string; agencyReceivedAt: number | null; agencyDisclaimer: string; agencyEditorialLock: number; agencyUpdatePending: number; createdBy: string; updatedBy: string; createdAt: number; updatedAt: number };
 export type PhotoGalleryRecord = ArticleRecord & { galleryImages: { src: string; caption: string }[] };
-export type ArticleInput = Omit<ArticleRecord, "id" | "createdAt" | "updatedAt" | "publishedAt" | "scheduledAt" | "homepagePlacement" | "headlinePosition" | "createdBy" | "updatedBy"> & { id?: number; publishedAt?: number | string | null; scheduledAt?: number | string | null; homepagePlacement?: HomepagePlacement; headlinePosition?: HeadlinePosition };
+export type ArticleInput = Omit<ArticleRecord, "id" | "createdAt" | "updatedAt" | "contentModifiedAt" | "publishedAt" | "scheduledAt" | "homepagePlacement" | "headlinePosition" | "createdBy" | "updatedBy" | "author"> & { id?: number; author?: string | null; publishedAt?: number | string | null; scheduledAt?: number | string | null; homepagePlacement?: HomepagePlacement; headlinePosition?: HeadlinePosition };
 export type NewsSource = { id: number; name: string; url: string; type: string; provider: string; feedFormat: string; authType: string; secretEnv: string; credentialReady: boolean; pollIntervalMinutes: number; publishMode: string; defaultCategory: string; categoryMap: string; disclaimer: string; active: number; lastCheckedAt: number | null; lastSuccessAt: number | null; lastError: string; nextPollAt: number | null; itemCount: number; createdAt: number; updatedAt: number };
 export type CategoryRecord = { id: number; name: string; slug: string; description: string; seoTitle: string; seoDescription: string; color: string; navOrder: number; isVisible: number; articleCount: number; createdAt: number; updatedAt: number };
 export type CategoryInput = { id?: number; name: string; slug?: string; description?: string; seoTitle?: string; seoDescription?: string; color?: string; navOrder?: number; isVisible?: number | boolean };
@@ -49,7 +50,7 @@ function databasePath() { return resolve(process.env.KOZA_DB_PATH ?? resolve(pro
 function parseBlocks(value: unknown, body: string): ContentBlock[] { try { const blocks = JSON.parse(String(value || "[]")); if (Array.isArray(blocks) && blocks.length) return blocks; } catch { /* Eski veya bozuk blok JSON'u düz metin olarak korunur. */ } return [{ id: "legacy", type: "paragraph", content: body }]; }
 function mapHeadlinePosition(value: unknown): HeadlinePosition { return ["left-top", "left-bottom", "right-top", "right-bottom"].includes(String(value)) ? value as HeadlinePosition : "left-bottom"; }
 function mapHomepagePlacement(value: unknown, legacyFeatured: unknown = 0): HomepagePlacement { return ["latest", "slider", "side", "below"].includes(String(value)) ? value as HomepagePlacement : Number(legacyFeatured) ? "slider" : "latest"; }
-function mapArticle(row: Record<string, unknown>): ArticleRecord { const body = String(row.body); return { id: Number(row.id), slug: String(row.slug), title: String(row.title), spot: String(row.spot), body, bodyHtml: String(row.body_html || ""), blocks: parseBlocks(row.content_blocks, body), category: String(row.category), status: row.status as ArticleStatus, workflowState: (row.workflow_state || (row.status === "published" ? "published" : "reporter_draft")) as WorkflowState, assignedTo: row.assigned_to == null ? null : Number(row.assigned_to), editVersion: Number(row.edit_version || 1), correctionNote: String(row.correction_note || ""), withdrawnAt: row.withdrawn_at == null ? null : Number(row.withdrawn_at), heroImage: String(row.hero_image), imageAlt: String(row.image_alt), videoUrl: String(row.video_url), author: String(row.author), sourceName: String(row.source_name), sourceUrl: String(row.source_url), seoTitle: String(row.seo_title), seoDescription: String(row.seo_description), isBreaking: Number(row.is_breaking), isFeatured: Number(row.is_featured), isHomepageGallery: Number(row.is_homepage_gallery || 0), homepageOrder: Number(row.homepage_order ?? 100), homepagePlacement: mapHomepagePlacement(row.homepage_placement, row.is_featured), headlinePosition: mapHeadlinePosition(row.headline_position), publishedAt: row.published_at == null ? null : Number(row.published_at), scheduledAt: row.scheduled_at == null ? null : Number(row.scheduled_at), agencySourceId: row.agency_source_id == null ? null : Number(row.agency_source_id), agencyExternalId: String(row.agency_external_id || ""), agencyCredit: String(row.agency_credit || ""), agencyReceivedAt: row.agency_received_at == null ? null : Number(row.agency_received_at), agencyDisclaimer: String(row.agency_disclaimer || ""), agencyEditorialLock: Number(row.agency_editorial_lock || 0), agencyUpdatePending: Number(row.agency_update_pending || 0), createdBy: String(row.created_by || ""), updatedBy: String(row.updated_by || ""), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) }; }
+function mapArticle(row: Record<string, unknown>): ArticleRecord { const body = String(row.body); return { id: Number(row.id), slug: String(row.slug), title: String(row.title), spot: String(row.spot), body, bodyHtml: String(row.body_html || ""), blocks: parseBlocks(row.content_blocks, body), category: String(row.category), status: row.status as ArticleStatus, workflowState: (row.workflow_state || (row.status === "published" ? "published" : "reporter_draft")) as WorkflowState, assignedTo: row.assigned_to == null ? null : Number(row.assigned_to), editVersion: Number(row.edit_version || 1), correctionNote: String(row.correction_note || ""), withdrawnAt: row.withdrawn_at == null ? null : Number(row.withdrawn_at), heroImage: String(row.hero_image), imageAlt: String(row.image_alt), videoUrl: String(row.video_url), author: String(row.author ?? "").trim(), sourceName: String(row.source_name), sourceUrl: String(row.source_url), seoTitle: String(row.seo_title), seoDescription: String(row.seo_description), isBreaking: Number(row.is_breaking), isFeatured: Number(row.is_featured), isHomepageGallery: Number(row.is_homepage_gallery || 0), homepageOrder: Number(row.homepage_order ?? 100), homepagePlacement: mapHomepagePlacement(row.homepage_placement, row.is_featured), headlinePosition: mapHeadlinePosition(row.headline_position), contentModifiedAt: row.content_modified_at == null ? null : Number(row.content_modified_at), publishedAt: row.published_at == null ? null : Number(row.published_at), scheduledAt: row.scheduled_at == null ? null : Number(row.scheduled_at), agencySourceId: row.agency_source_id == null ? null : Number(row.agency_source_id), agencyExternalId: String(row.agency_external_id || ""), agencyCredit: String(row.agency_credit || ""), agencyReceivedAt: row.agency_received_at == null ? null : Number(row.agency_received_at), agencyDisclaimer: String(row.agency_disclaimer || ""), agencyEditorialLock: Number(row.agency_editorial_lock || 0), agencyUpdatePending: Number(row.agency_update_pending || 0), createdBy: String(row.created_by || ""), updatedBy: String(row.updated_by || ""), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) }; }
 function mapAdvertisement(row: Record<string, unknown>): AdvertisementRecord { const record = { id: Number(row.id), placement: String(row.placement), advertiser: String(row.advertiser), campaignName: String(row.campaign_name || ""), title: String(row.title), description: String(row.description || ""), imageUrl: String(row.image_url || ""), targetUrl: String(row.target_url || ""), ctaLabel: String(row.cta_label || ""), theme: String(row.theme || "dark"), kind: String(row.kind || "direct"), priority: Number(row.priority || 100), active: Number(row.active), startsAt: row.starts_at == null ? null : Number(row.starts_at), endsAt: row.ends_at == null ? null : Number(row.ends_at), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) }; return { ...record, state: advertisementState(record) }; }
 
 function ensureColumn(db: InstanceType<typeof Database>, table: string, name: string, definition: string) { const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]; if (columns.some((column) => column.name === name)) return false; db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`); return true; }
@@ -267,7 +268,9 @@ function ensureSchema(db: InstanceType<typeof Database>) {
 export function getDb() {
   if (!database) {
     if (process.env.KOZA_DATABASE_URL) {
-      database = createPostgresDatabase(process.env.KOZA_DATABASE_URL) as unknown as InstanceType<typeof Database>;
+      const pg = createPostgresDatabase(process.env.KOZA_DATABASE_URL) as unknown as InstanceType<typeof Database>;
+      try { ensurePublicationDates(pg, true); } catch (error) { pg.close(); throw error; }
+      database = pg;
     } else {
       const path = databasePath();
       mkdirSync(dirname(path), { recursive: true });
@@ -277,6 +280,7 @@ export function getDb() {
       sqlite.pragma("foreign_keys = ON");
       sqlite.pragma("busy_timeout = 8000");
       ensureSchema(sqlite);
+      ensurePublicationDates(sqlite, false);
       database = sqlite;
     }
   }
@@ -326,9 +330,11 @@ function publishDueArticles() {
   const db = getDb();
   db.transaction(() => {
     const due = db.prepare("SELECT id,homepage_placement AS placement FROM articles WHERE status='scheduled' AND scheduled_at IS NOT NULL AND scheduled_at<=? ORDER BY scheduled_at,id").all(now) as { id: number; placement: HomepagePlacement }[];
-    const publish = db.prepare("UPDATE articles SET status='published',workflow_state='published',published_at=COALESCE(published_at,scheduled_at,?),edit_version=edit_version+1,updated_at=? WHERE id=?");
+    const publish = db.prepare("UPDATE articles SET status='published',workflow_state='published',published_at=COALESCE(published_at,scheduled_at,?),edit_version=edit_version+1,updated_at=? WHERE id=? AND status='scheduled'");
     for (const article of due) {
-      publish.run(now, now, article.id);
+      const result = publish.run(now, now, article.id);
+      if (!result.changes) continue;
+      recordPublishedEdit(db, null, article.id, now, "Zamanlanmış yayın");
       if (article.placement === "latest") recordHomepageLatestEntries(db, [article.id], now);
       else promoteHomepageArticle(db, article.id, article.placement);
       normalizeHomepagePlacementLimits(db, now);
@@ -344,8 +350,8 @@ export function listRecentPublishedNewsSitemapEntries() {
 }
 export function listPublishedArticleSitemapEntries() {
   publishDueArticles();
-  return (getDb().prepare("SELECT slug,updated_at,is_featured FROM articles WHERE status='published' ORDER BY published_at DESC,id DESC").all() as { slug: string; updated_at: number; is_featured: number }[])
-    .map((row) => ({ slug: row.slug, updatedAt: Number(row.updated_at), isFeatured: Number(row.is_featured) === 1 }));
+  return (getDb().prepare("SELECT slug,COALESCE(content_modified_at,published_at) AS updated_at,is_featured FROM articles WHERE status='published' ORDER BY published_at DESC,id DESC").all() as { slug: string; updated_at: number | null; is_featured: number }[])
+    .map((row) => ({ slug: row.slug, updatedAt: row.updated_at == null ? null : Number(row.updated_at), isFeatured: Number(row.is_featured) === 1 }));
 }
 export function listHomepageArticles(placement: HomepagePlacement, limit = 10) {
   publishDueArticles();
@@ -441,6 +447,33 @@ function allocateArticleSlug(db: InstanceType<typeof Database>, title: string, a
   throw new Error("ARTICLE_SLUG_UNAVAILABLE");
 }
 
+// Called inside the write transaction. Serialize editorial comparisons with other writers on PostgreSQL.
+function articleBeforeEdit(db: InstanceType<typeof Database>, id: number) {
+  const lock = process.env.KOZA_DATABASE_URL ? " FOR UPDATE" : "";
+  const row = db.prepare("SELECT * FROM articles WHERE id=?" + lock).get(id) as Record<string, unknown> | undefined;
+  return row ? mapArticle(row) : null;
+}
+
+function recordPublishedEdit(db: InstanceType<typeof Database>, before: ArticleRecord | null, id: number, now: number, actor: string) {
+  const row = db.prepare("SELECT * FROM articles WHERE id=?").get(id) as Record<string, unknown>;
+  const article = mapArticle(row);
+  const previousHash = before?.status === "published" ? publishedContentHash(before) : row.published_content_hash;
+  if (!previousHash) return article;
+  if (article.status !== "published") {
+    if (before?.status === "published") db.prepare("UPDATE articles SET published_content_hash=? WHERE id=?").run(previousHash, id);
+    return article;
+  }
+  if (previousHash !== publishedContentHash(article)) {
+    now = Math.max(now, article.contentModifiedAt ?? 0);
+    db.prepare("UPDATE articles SET content_modified_at=?,published_content_hash=NULL WHERE id=?").run(now, id);
+    db.prepare("INSERT INTO audit_logs(entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,'content_update',?,'',?)").run(id, actor, now);
+    article.contentModifiedAt = now;
+  } else if (row.published_content_hash) {
+    db.prepare("UPDATE articles SET published_content_hash=NULL WHERE id=?").run(id);
+  }
+  return article;
+}
+
 export function saveArticle(input: ArticleInput, actor: AdminUser | string = "Yayın Yönetmeni") {
   const db = getDb(); const now = Date.now(); const actorName = typeof actor === "string" ? actor : actor.fullName; const actorId = typeof actor === "string" ? null : actor.id; const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt).getTime() : null; const publishedAt = input.status === "published" ? (input.publishedAt ? new Date(input.publishedAt).getTime() : now) : null;
   const blocks = Array.isArray(input.blocks) && input.blocks.length
@@ -448,7 +481,7 @@ export function saveArticle(input: ArticleInput, actor: AdminUser | string = "Ya
     : plainBodyToBlocks(input.body, () => randomBytes(6).toString("hex")) as ContentBlock[];
   const agencySourceId = Number.isInteger(Number(input.agencySourceId)) && Number(input.agencySourceId) > 0 ? Number(input.agencySourceId) : null;
   if (agencySourceId && !getNewsSource(agencySourceId)) throw new Error("AGENCY_SOURCE_NOT_FOUND");
-  const existingWorkflow = input.id ? db.prepare("SELECT workflow_state AS workflowState,status,homepage_placement AS homepagePlacement,slug,published_at AS publishedAt FROM articles WHERE id=?").get(input.id) as { workflowState: WorkflowState; status: ArticleStatus; homepagePlacement: HomepagePlacement; slug: string; publishedAt: number | null } | undefined : undefined;
+  const existingWorkflow = input.id ? db.prepare("SELECT workflow_state AS workflowState,status,homepage_placement AS homepagePlacement,slug,author,published_at AS publishedAt FROM articles WHERE id=?").get(input.id) as { workflowState: WorkflowState; status: ArticleStatus; homepagePlacement: HomepagePlacement; slug: string; author: string; publishedAt: number | null } | undefined : undefined;
   const slug = allocateArticleSlug(db, input.title, input.id, existingWorkflow?.slug);
   const currentWorkflowState = existingWorkflow?.workflowState ?? "reporter_draft";
   const isAdmin = typeof actor !== "string" && actor.role === "admin";
@@ -456,13 +489,15 @@ export function saveArticle(input: ArticleInput, actor: AdminUser | string = "Ya
   const workflowState: WorkflowState = input.status === "published" ? "published" : input.status === "scheduled" ? "approved" : input.status === "review" && ["reporter_draft", "changes_requested", "rejected"].includes(currentWorkflowState) ? "editor_review" : currentWorkflowState;
   const homepagePlacement = mapHomepagePlacement(input.homepagePlacement, input.isFeatured);
   const entersHomepage = homepagePlacement !== "latest" && isVisibleHomepageStatus(input.status) && (!existingWorkflow || !isVisibleHomepageStatus(existingWorkflow.status) || existingWorkflow.homepagePlacement !== homepagePlacement);
-  const values = { ...input, slug, scheduledAt, publishedAt, workflowState, actorName, bodyHtml: normalizeArticleHtml(input.bodyHtml), contentBlocks: JSON.stringify(blocks), heroImage: input.heroImage || "/news/gundem.jpg", imageAlt: input.imageAlt || input.title, videoUrl: input.videoUrl || "", author: input.author || "Koza TV Haber Merkezi", sourceName: input.sourceName == null ? "Koza TV" : String(input.sourceName).trim().slice(0, 160), sourceUrl: input.sourceUrl || "", seoTitle: input.seoTitle || input.title, seoDescription: input.seoDescription || input.spot, isBreaking: input.isBreaking ? 1 : 0, isFeatured: homepagePlacement === "slider" ? 1 : 0, isHomepageGallery: input.isHomepageGallery ? 1 : 0, homepageOrder: entersHomepage ? 1 : Math.min(Math.max(Number(input.homepageOrder ?? 100), 1), 999), homepagePlacement, headlinePosition: mapHeadlinePosition(input.headlinePosition), assignedTo: Number.isInteger(Number(input.assignedTo)) && Number(input.assignedTo) > 0 ? Number(input.assignedTo) : null, agencySourceId, agencyExternalId: String(input.agencyExternalId || "").trim().slice(0, 300), agencyCredit: String(input.agencyCredit || "").trim().slice(0, 300), agencyEditorialLock: input.agencyEditorialLock ? 1 : 0, now };
+  const author = (input.author === undefined ? existingWorkflow?.author : input.author)?.trim() ?? "";
+  const values = { ...input, slug, scheduledAt, publishedAt, workflowState, actorName, bodyHtml: normalizeArticleHtml(input.bodyHtml), contentBlocks: JSON.stringify(blocks), heroImage: input.heroImage || "/news/gundem.jpg", imageAlt: input.imageAlt || input.title, videoUrl: input.videoUrl || "", author, sourceName: input.sourceName == null ? "Koza TV" : String(input.sourceName).trim().slice(0, 160), sourceUrl: input.sourceUrl || "", seoTitle: input.seoTitle || input.title, seoDescription: input.seoDescription || input.spot, isBreaking: input.isBreaking ? 1 : 0, isFeatured: homepagePlacement === "slider" ? 1 : 0, isHomepageGallery: input.isHomepageGallery ? 1 : 0, homepageOrder: entersHomepage ? 1 : Math.min(Math.max(Number(input.homepageOrder ?? 100), 1), 999), homepagePlacement, headlinePosition: mapHeadlinePosition(input.headlinePosition), assignedTo: Number.isInteger(Number(input.assignedTo)) && Number(input.assignedTo) > 0 ? Number(input.assignedTo) : null, agencySourceId, agencyExternalId: String(input.agencyExternalId || "").trim().slice(0, 300), agencyCredit: String(input.agencyCredit || "").trim().slice(0, 300), agencyEditorialLock: input.agencyEditorialLock ? 1 : 0, now };
   const transaction = db.transaction(() => {
     let id = input.id;
+    const previousArticle = id ? articleBeforeEdit(db, id) : null;
     if (id) {
       if (entersHomepage) promoteHomepageArticle(db, id, homepagePlacement);
       const expectedVersion = Number(input.editVersion || 1);
-      const result = db.prepare(`UPDATE articles SET slug=@slug,title=@title,spot=@spot,body=@body,body_html=@bodyHtml,content_blocks=@contentBlocks,category=@category,status=@status,workflow_state=@workflowState,assigned_to=@assignedTo,hero_image=@heroImage,image_alt=@imageAlt,video_url=@videoUrl,author=@author,source_name=@sourceName,source_url=@sourceUrl,seo_title=@seoTitle,seo_description=@seoDescription,is_breaking=@isBreaking,is_featured=@isFeatured,is_homepage_gallery=@isHomepageGallery,homepage_order=@homepageOrder,homepage_placement=@homepagePlacement,headline_position=@headlinePosition,published_at=@publishedAt,scheduled_at=@scheduledAt,agency_source_id=@agencySourceId,agency_external_id=@agencyExternalId,agency_credit=@agencyCredit,agency_received_at=CASE WHEN CAST(@agencySourceId AS INTEGER) IS NULL THEN NULL WHEN agency_source_id=@agencySourceId THEN agency_received_at ELSE CAST(@now AS BIGINT) END,agency_editorial_lock=@agencyEditorialLock,updated_by=@actorName,edit_version=edit_version+1,updated_at=@now WHERE id=@id AND edit_version=@expectedVersion`).run({ ...values, expectedVersion });
+      const result = db.prepare(`UPDATE articles SET slug=@slug,title=@title,spot=@spot,body=@body,body_html=@bodyHtml,content_blocks=@contentBlocks,category=@category,status=@status,workflow_state=@workflowState,assigned_to=@assignedTo,hero_image=@heroImage,image_alt=@imageAlt,video_url=@videoUrl,author=@author,source_name=@sourceName,source_url=@sourceUrl,seo_title=@seoTitle,seo_description=@seoDescription,is_breaking=@isBreaking,is_featured=@isFeatured,is_homepage_gallery=@isHomepageGallery,homepage_order=@homepageOrder,homepage_placement=@homepagePlacement,headline_position=@headlinePosition,published_at=COALESCE(published_at,@publishedAt),scheduled_at=@scheduledAt,agency_source_id=@agencySourceId,agency_external_id=@agencyExternalId,agency_credit=@agencyCredit,agency_received_at=CASE WHEN CAST(@agencySourceId AS INTEGER) IS NULL THEN NULL WHEN agency_source_id=@agencySourceId THEN agency_received_at ELSE CAST(@now AS BIGINT) END,agency_editorial_lock=@agencyEditorialLock,updated_by=@actorName,edit_version=edit_version+1,updated_at=@now WHERE id=@id AND edit_version=@expectedVersion`).run({ ...values, expectedVersion });
       if (!result.changes) throw new Error("EDIT_CONFLICT");
     } else {
       const result = db.prepare(`INSERT INTO articles (slug,title,spot,body,body_html,content_blocks,created_by,updated_by,category,status,workflow_state,assigned_to,hero_image,image_alt,video_url,author,source_name,source_url,seo_title,seo_description,is_breaking,is_featured,is_homepage_gallery,homepage_order,homepage_placement,headline_position,published_at,scheduled_at,agency_source_id,agency_external_id,agency_credit,agency_received_at,agency_editorial_lock,created_at,updated_at) VALUES (@slug,@title,@spot,@body,@bodyHtml,@contentBlocks,@actorName,@actorName,@category,@status,@workflowState,@assignedTo,@heroImage,@imageAlt,@videoUrl,@author,@sourceName,@sourceUrl,@seoTitle,@seoDescription,@isBreaking,@isFeatured,@isHomepageGallery,@homepageOrder,@homepagePlacement,@headlinePosition,@publishedAt,@scheduledAt,@agencySourceId,@agencyExternalId,@agencyCredit,CASE WHEN CAST(@agencySourceId AS INTEGER) IS NULL THEN NULL ELSE CAST(@now AS BIGINT) END,@agencyEditorialLock,@now,@now)`).run(values);
@@ -485,7 +520,7 @@ export function saveArticle(input: ArticleInput, actor: AdminUser | string = "Ya
       }
     }
 
-    const article = mapArticle(db.prepare("SELECT * FROM articles WHERE id=?").get(id) as Record<string, unknown>);
+    const article = recordPublishedEdit(db, previousArticle, id!, now, actorName);
     if (actorId && workflowState !== currentWorkflowState) {
       const workflowAction = input.status === "published" ? "publish" : input.status === "scheduled" ? "schedule" : "submit_review";
       const workflowNote = input.status === "published" ? "Yönetici doğrudan yayına aldı." : input.status === "scheduled" ? "Yönetici yayını planladı." : "Haber editör incelemesine gönderildi.";
@@ -511,12 +546,14 @@ function publicationChecklist(article: ArticleRecord) { const missing: string[] 
 export function applyWorkflowAction(articleId: number, action: string, note: string, actor: AdminUser, assigneeId?: number | null) {
   const db = getDb();
   return db.transaction(() => {
-    const now = Date.now(); const row = db.prepare("SELECT * FROM articles WHERE id=?").get(articleId) as Record<string, unknown> | undefined; if (!row) throw new Error("ARTICLE_NOT_FOUND"); const article = mapArticle(row);
+    const article = articleBeforeEdit(db, articleId);
+    if (!article) throw new Error("ARTICLE_NOT_FOUND");
+    const now = Date.now();
     const transitions: Record<string, WorkflowState> = { submit_review: "editor_review", request_changes: "changes_requested", approve: "approved", reject: "rejected", publish: "published", withdraw: "withdrawn", reopen: "reporter_draft" };
     if (action === "assign") { db.prepare("UPDATE articles SET assigned_to=?,updated_by=?,updated_at=? WHERE id=?").run(assigneeId ?? null, actor.fullName, now, articleId); }
     else if (action === "correction") { if (article.workflowState !== "published") throw new Error("INVALID_TRANSITION"); db.prepare("UPDATE articles SET correction_note=?,updated_by=?,edit_version=edit_version+1,updated_at=? WHERE id=?").run(note.trim().slice(0, 1000), actor.fullName, now, articleId); db.prepare("INSERT INTO workflow_events (article_id,action,from_state,to_state,actor_id,actor_name,note,created_at) VALUES (?,?,?,?,?,?,?,?)").run(articleId, action, article.workflowState, article.workflowState, actor.id, actor.fullName, note.trim().slice(0, 1000), now); }
     else { const next = transitions[action]; if (!next) throw new Error("INVALID_ACTION"); const allowedFrom: Record<string, WorkflowState[]> = { submit_review: ["reporter_draft", "changes_requested", "rejected"], request_changes: ["editor_review"], approve: ["editor_review"], reject: ["editor_review", "approved"], publish: ["approved"], withdraw: ["published"], reopen: ["rejected", "withdrawn"] }; if (!allowedFrom[action]?.includes(article.workflowState)) throw new Error("INVALID_TRANSITION"); if (["approve", "publish"].includes(action)) publicationChecklist(article); const status: ArticleStatus = next === "published" ? "published" : next === "editor_review" ? "review" : "draft"; if (next === "published" && article.homepagePlacement !== "latest") promoteHomepageArticle(db, articleId, article.homepagePlacement); db.prepare("UPDATE articles SET workflow_state=?,status=?,correction_note=CASE WHEN ?='withdrawn' THEN ? ELSE correction_note END,withdrawn_at=CASE WHEN ?='withdrawn' THEN CAST(? AS BIGINT) ELSE NULL END,published_at=CASE WHEN ?='published' THEN COALESCE(published_at,CAST(? AS BIGINT)) ELSE published_at END,updated_by=?,edit_version=edit_version+1,updated_at=? WHERE id=?").run(next, status, next, note.trim(), next, now, next, now, actor.fullName, now, articleId); if (next === "published" && article.homepagePlacement === "latest") recordHomepageLatestEntries(db, [articleId], now); normalizeHomepagePlacementLimits(db, now); db.prepare("INSERT INTO workflow_events (article_id,action,from_state,to_state,actor_id,actor_name,note,created_at) VALUES (?,?,?,?,?,?,?,?)").run(articleId, action, article.workflowState, next, actor.id, actor.fullName, note.trim().slice(0, 1000), now); }
-    db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,?,?,?,?)").run(articleId, action, actor.fullName, JSON.stringify({ note, assigneeId }), now); return mapArticle(db.prepare("SELECT * FROM articles WHERE id=?").get(articleId) as Record<string, unknown>);
+    db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,?,?,?,?)").run(articleId, action, actor.fullName, JSON.stringify({ note, assigneeId }), now); return recordPublishedEdit(db, article, articleId, now, actor.fullName);
   })();
 }
 
@@ -542,11 +579,12 @@ export function upsertAgencyArticle(source: NewsSource, input: AgencyArticleInpu
   if (existingItem && agencyUpdateDecision({ payloadHash: existingItem.payload_hash, pendingHash: existingItem.pending_hash }, input.payloadHash, false) === "unchanged") return { action: "unchanged" as const, articleId: existingItem.article_id == null ? null : Number(existingItem.article_id) };
   return db.transaction(() => {
     const articleId = existingItem?.article_id == null ? null : Number(existingItem.article_id);
-    const linkedArticle = articleId ? getAdminArticle(articleId) : null;
+    const linkedArticle = articleId ? articleBeforeEdit(db, articleId) : null;
     if (existingItem && agencyUpdateDecision({ payloadHash: existingItem.payload_hash, pendingHash: existingItem.pending_hash }, input.payloadHash, Boolean(linkedArticle?.agencyEditorialLock)) === "pending") return { action: "pending" as const, articleId };
     if (input.status === "withdrawn") {
       if (articleId) {
         db.prepare("UPDATE articles SET status='draft',workflow_state='withdrawn',withdrawn_at=?,edit_version=edit_version+1,updated_at=? WHERE id=?").run(now, now, articleId);
+        recordPublishedEdit(db, linkedArticle, articleId, now, source.name);
         db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,'agency_withdraw',?,?,?)").run(articleId, `${source.name} otomasyonu`, JSON.stringify({ externalId: input.externalId }), now);
       }
       db.prepare(`INSERT INTO agency_items (source_id,external_id,article_id,status,payload_hash,pending_hash,raw_payload,source_published_at,source_updated_at,received_at,processed_at) VALUES (?,?,?,?,?,'',?,?,?,?,?) ON CONFLICT(source_id,external_id) DO UPDATE SET status=excluded.status,payload_hash=excluded.payload_hash,pending_hash='',raw_payload=excluded.raw_payload,source_updated_at=excluded.source_updated_at,received_at=excluded.received_at,processed_at=excluded.processed_at`).run(source.id, input.externalId, articleId, input.status, input.payloadHash, JSON.stringify(input.raw), input.publishedAt, input.updatedAt, now, now);
@@ -573,6 +611,7 @@ export function upsertAgencyArticle(source: NewsSource, input: AgencyArticleInpu
     } else id = Number(db.prepare(`INSERT INTO articles (slug,title,spot,body,body_html,content_blocks,created_by,updated_by,category,status,workflow_state,hero_image,image_alt,video_url,author,source_name,source_url,seo_title,seo_description,is_breaking,is_featured,homepage_order,published_at,scheduled_at,agency_source_id,agency_external_id,agency_credit,agency_received_at,agency_editorial_lock,created_at,updated_at) VALUES (@slug,@title,@spot,@body,@bodyHtml,@contentBlocks,@actorName,@actorName,@category,@status,@workflowState,@heroImage,@imageAlt,@videoUrl,@author,@sourceName,@sourceUrl,@title,@spot,0,0,500,@publishedAt,NULL,${source.id},@externalId,@agencyCredit,@now,${source.publishMode === "review" ? 1 : 0},@now,@now)`).run(values).lastInsertRowid);
     db.prepare(`INSERT INTO agency_items (source_id,external_id,article_id,status,payload_hash,pending_hash,raw_payload,source_published_at,source_updated_at,received_at,processed_at) VALUES (?,?,?,?,?,'',?,?,?,?,?) ON CONFLICT(source_id,external_id) DO UPDATE SET article_id=excluded.article_id,status=excluded.status,payload_hash=excluded.payload_hash,pending_hash='',raw_payload=excluded.raw_payload,source_published_at=excluded.source_published_at,source_updated_at=excluded.source_updated_at,received_at=excluded.received_at,processed_at=excluded.processed_at`).run(source.id, input.externalId, id, input.status, input.payloadHash, JSON.stringify(input.raw), input.publishedAt, input.updatedAt, now, now);
     db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,?,?,?,?)").run(id, articleId ? "agency_update" : "agency_import", `${source.name} otomasyonu`, JSON.stringify({ externalId: input.externalId, publishMode: source.publishMode }), now);
+    if (articleId) recordPublishedEdit(db, linkedArticle, articleId, now, source.name);
     return { action: articleId ? "updated" as const : "created" as const, articleId: id };
   })();
 }
@@ -931,17 +970,20 @@ export function importLegacyArticle(input: { slug: string; title: string; spot: 
     sourceName: "kozatv.com.tr",
     now,
   };
-  const existing = db.prepare("SELECT id FROM articles WHERE source_url=? OR slug=?").get(input.sourceUrl, input.slug) as { id: number } | undefined;
-  let id: number;
-  if (existing) {
-    db.prepare(`UPDATE articles SET title=@title,spot=@spot,body=@body,content_blocks=@contentBlocks,category=@category,status=@status,workflow_state=@workflowState,hero_image=@heroImage,image_alt=@imageAlt,author=@author,source_name=@sourceName,source_url=@sourceUrl,seo_title=@seoTitle,seo_description=@seoDescription,published_at=@publishedAt,edit_version=edit_version+1,updated_at=@now WHERE id=@id`).run({ ...values, id: existing.id });
-    id = existing.id;
-  } else {
-    const result = db.prepare(`INSERT INTO articles (slug,title,spot,body,content_blocks,category,status,workflow_state,hero_image,image_alt,video_url,author,source_name,source_url,seo_title,seo_description,is_breaking,is_featured,homepage_order,published_at,scheduled_at,created_at,updated_at) VALUES (@slug,@title,@spot,@body,@contentBlocks,@category,@status,@workflowState,@heroImage,@imageAlt,'',@author,@sourceName,@sourceUrl,@seoTitle,@seoDescription,0,0,500,@publishedAt,NULL,@now,@now)`).run(values);
-    id = Number(result.lastInsertRowid);
-  }
-  db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,'import',?,?,?)").run(id, actor, JSON.stringify({ sourceUrl: input.sourceUrl, status: input.status }), now);
-  return mapArticle(db.prepare("SELECT * FROM articles WHERE id=?").get(id) as Record<string, unknown>);
+  return db.transaction(() => {
+    const existing = db.prepare("SELECT id FROM articles WHERE source_url=? OR slug=?").get(input.sourceUrl, input.slug) as { id: number } | undefined;
+    const previousArticle = existing ? articleBeforeEdit(db, existing.id) : null;
+    let id: number;
+    if (existing) {
+      db.prepare(`UPDATE articles SET title=@title,spot=@spot,body=@body,content_blocks=@contentBlocks,category=@category,status=@status,workflow_state=@workflowState,hero_image=@heroImage,image_alt=@imageAlt,author=@author,source_name=@sourceName,source_url=@sourceUrl,seo_title=@seoTitle,seo_description=@seoDescription,published_at=COALESCE(published_at,@publishedAt),edit_version=edit_version+1,updated_at=@now WHERE id=@id`).run({ ...values, id: existing.id });
+      id = existing.id;
+    } else {
+      const result = db.prepare(`INSERT INTO articles (slug,title,spot,body,content_blocks,category,status,workflow_state,hero_image,image_alt,video_url,author,source_name,source_url,seo_title,seo_description,is_breaking,is_featured,homepage_order,published_at,scheduled_at,created_at,updated_at) VALUES (@slug,@title,@spot,@body,@contentBlocks,@category,@status,@workflowState,@heroImage,@imageAlt,'',@author,@sourceName,@sourceUrl,@seoTitle,@seoDescription,0,0,500,@publishedAt,NULL,@now,@now)`).run(values);
+      id = Number(result.lastInsertRowid);
+    }
+    db.prepare("INSERT INTO audit_logs (entity_type,entity_id,action,actor,detail,created_at) VALUES ('article',?,'import',?,?,?)").run(id, actor, JSON.stringify({ sourceUrl: input.sourceUrl, status: input.status }), now);
+    return recordPublishedEdit(db, previousArticle, id, now, actor);
+  })();
 }
 
 /* Aktarılan kategori sitede yoksa menüde gizli olarak açılır; yönetici sonradan görünür yapar. */

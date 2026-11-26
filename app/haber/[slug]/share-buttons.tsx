@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SocialIcon } from "../../social-icon";
 
 /* Haber paylaşım kontrolleri: gerçek paylaşım adresleri ve bağlantı kopyalama. */
 export function ShareButtons({ url, title, variant = "rail" }: { url: string; title: string; variant?: "rail" | "inline" }) {
@@ -8,9 +9,9 @@ export function ShareButtons({ url, title, variant = "rail" }: { url: string; ti
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(title);
   const targets = [
-    { label: "Facebook'ta paylaş", short: "f", href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}` },
-    { label: "X'te paylaş", short: "𝕏", href: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}` },
-    { label: "WhatsApp'ta paylaş", short: "◎", href: `https://api.whatsapp.com/send?text=${encodedTitle}%20${encodedUrl}` },
+    { platform: "Facebook", label: "Facebook'ta paylaş", href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}` },
+    { platform: "X", label: "X'te paylaş", href: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}` },
+    { platform: "WhatsApp", label: "WhatsApp'ta paylaş", href: `https://api.whatsapp.com/send?text=${encodedTitle}%20${encodedUrl}` },
   ];
 
   async function copyLink() {
@@ -27,7 +28,9 @@ export function ShareButtons({ url, title, variant = "rail" }: { url: string; ti
     <div className={variant === "rail" ? "article-share" : "share-buttons"}>
       {variant === "rail" && <span>PAYLAŞ</span>}
       {targets.map((target) => (
-        <a href={target.href} key={target.label} target="_blank" rel="noreferrer" aria-label={target.label}>{target.short}</a>
+        <a href={target.href} key={target.platform} data-share={target.platform} target="_blank" rel="noreferrer" aria-label={target.label}>
+          <SocialIcon label={target.platform} />
+        </a>
       ))}
       <button type="button" onClick={copyLink} aria-label="Haber bağlantısını kopyala">{copied ? "✓" : "↗"}</button>
     </div>
